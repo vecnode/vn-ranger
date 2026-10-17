@@ -69,9 +69,68 @@ fn holder(path: &std::path::Path) -> Option<u32> {
         .and_then(|text| text.trim().parse().ok())
 }
 
+/// Ask the running window to come forward.
+///
+/// A second launch takes the instance lock, fails, and leaves this file behind; the running
+/// window sees it on its next frame, raises itself and removes it. Nothing is sent to a
+/// process, and nothing needs a protocol.
+pub fn wake() -> Result<(), String> {
+    let path = crate::paths::wake_path();
+    if let Some(parent) = path.parent() {
+        crate::paths::ensure_dir(parent)
+            .map_err(|error| format!("Could not prepare {}: {error}", parent.display()))?;
+    }
+    touch(&path).map_err(|error| format!("Could not write {}: {error}", path.display()))
+}
+
+/// Clear a wake file left by a crash, without raising anything.
+pub fn clear_stale_wake() {
+    let _ = std::fs::remove_file(crate::paths::wake_path());
+}
+
+fn touch(path: &std::path::Path) -> std::io::Result<()> {
+    std::fs::write(path, b"1")
+}
+
+/// Take the wake file if there is one, which is the same question as "raise the window".
+#[must_use]
+pub fn take_wake(path: &std::path::Path) -> bool {
+    std::fs::remove_file(path).is_ok()
+}
+
 fn is_running(pid: u32) -> bool {
     let mut system = System::new();
     let pid = Pid::from_u32(pid);
     system.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
     system.process(pid).is_some()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_wake_file_is_taken_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("wake");
+        assert!(!take_wake(&path), "nothing was asked for");
+        touch(&path).unwrap();
+        assert!(take_wake(&path), "the first frame raises the window");
+        assert!(
+            !take_wake(&path),
+            "and the second frame does not, because the file is gone"
+        );
+    }
+
+    #[test]
+    fn a_stale_wake_file_is_cleared_without_a_window_to_raise() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("wake");
+        touch(&path).unwrap();
+        assert!(path.exists());
+        // The clear works on the real data directory, so this asserts the primitive the
+        // clear is made of rather than the path.
+        assert!(take_wake(&path));
+        assert!(!path.exists());
+    }
 }

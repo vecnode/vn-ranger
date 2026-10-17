@@ -61,6 +61,15 @@ pub fn signatures_dir() -> PathBuf {
     data_dir().join("signatures")
 }
 
+/// The file a second launch touches to ask the running window to come forward.
+///
+/// A file rather than a socket or a pipe: it needs no protocol, and clearing it at start is
+/// what stops a stale one from raising a window at launch (`docs/PLAN.md` §6.5).
+#[must_use]
+pub fn wake_path() -> PathBuf {
+    data_dir().join("wake")
+}
+
 /// Where the last snapshot is kept, so a launch shows something before the scan ends.
 #[must_use]
 pub fn last_snapshot_path() -> PathBuf {

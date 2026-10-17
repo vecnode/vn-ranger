@@ -1,4 +1,4 @@
-# The plan — vn-ranger
+﻿# The plan â€” vn-ranger
 
 **Status:** v0.1.5 ships the interface layer on top of the rules: a command palette with
 global search, keyboard navigation, filters and sorting, saved preferences, a
@@ -17,16 +17,16 @@ trust this program with a machine.
 **What this document is:** the research behind ranger, the scope it will and will not
 take, the architecture that keeps it honest, and the order in which it gets built.
 
-The short version is §1. Everything after it exists to justify that version.
+The short version is Â§1. Everything after it exists to justify that version.
 
-**Contents:** [1. The short version](#1-the-short-version) ·
-[2. Why ranger exists](#2-why-ranger-exists) · [3. Prior art](#3-prior-art) ·
-[4. Principles](#4-principles) · [5. The product model](#5-the-product-model) ·
-[6. Architecture](#6-architecture) · [7. Platform matrix](#7-platform-matrix) ·
-[8. The mark and the suite](#8-the-mark-and-the-suite) · [9. Roadmap](#9-roadmap) ·
-[10. Distribution](#10-distribution) · [11. Budgets](#11-budgets) ·
-[12. Verification](#12-verification) · [13. Privacy and data](#13-privacy-and-data) ·
-[14. Risks and open questions](#14-risks-and-open-questions) ·
+**Contents:** [1. The short version](#1-the-short-version) Â·
+[2. Why ranger exists](#2-why-ranger-exists) Â· [3. Prior art](#3-prior-art) Â·
+[4. Principles](#4-principles) Â· [5. The product model](#5-the-product-model) Â·
+[6. Architecture](#6-architecture) Â· [7. Platform matrix](#7-platform-matrix) Â·
+[8. The mark and the suite](#8-the-mark-and-the-suite) Â· [9. Roadmap](#9-roadmap) Â·
+[10. Distribution](#10-distribution) Â· [11. Budgets](#11-budgets) Â·
+[12. Verification](#12-verification) Â· [13. Privacy and data](#13-privacy-and-data) Â·
+[14. Risks and open questions](#14-risks-and-open-questions) Â·
 [15. References](#15-references)
 
 ---
@@ -36,24 +36,24 @@ The short version is §1. Everything after it exists to justify that version.
 vn-ranger is a resident, local-only system ranger for Windows, macOS and Linux. It
 answers four questions, in this order:
 
-1. **See** — what is running, what starts on its own, what is listening, what is
+1. **See** â€” what is running, what starts on its own, what is listening, what is
    installed, and which autonomous agents are among them.
-2. **Explain** — for anything unusual, what was observed, which rule fired, and what
+2. **Explain** â€” for anything unusual, what was observed, which rule fired, and what
    the finding does *not* mean.
-3. **Remember** — a baseline of the machine on a good day, so later checks report a
+3. **Remember** â€” a baseline of the machine on a good day, so later checks report a
    diff rather than a verdict.
-4. **Act** — quarantine and cleanup, previewed, journalled and reversible.
+4. **Act** â€” quarantine and cleanup, previewed, journalled and reversible.
 
 It is a Rust and egui application, distributed as a small archive through GitHub
 releases, installed and updated by
 [vn-launcher](https://github.com/vecnode/vn-launcher). It has no model, no runtime, no
-service, no account and — in the v0.x line — no network code at all. It is MIT and
+service, no account and â€” in the v0.x line â€” no network code at all. It is MIT and
 free forever.
 
 The first release, **v0.1.0**, is read-only. It collects and displays inventory,
 matches binary hashes against a local ClamAV-format database, and can ask the operating
 system for one administrator scan. It does not delete, quarantine or "fix" anything.
-Every later capability has to earn its place (§9).
+Every later capability has to earn its place (Â§9).
 
 ---
 
@@ -88,12 +88,12 @@ change?"
 
 Ranger's answer is an **agent inventory**: a plain, local list of the autonomous
 processes on the machine, with provenance and reach, and a diff against the last time
-the machine looked normal. No judgement of intent — just the facts a person needs to
+the machine looked normal. No judgement of intent â€” just the facts a person needs to
 make one.
 
 ### 2.3 Ablated models and the intent problem
 
-The uncomfortable version of §2.2 is that capability and alignment are separable.
+The uncomfortable version of Â§2.2 is that capability and alignment are separable.
 Research on safety ablation treats the removal of refusal behaviour as a utility-risk
 frontier, not an "uncensoring recipe": refusal can be reduced while capability
 remains, and unsafe compliance rises as a measurable cost
@@ -111,7 +111,7 @@ evidence; the behaviour is.**
 This is also why ranger itself contains no model. A detector that depends on a model
 inherits the model's failure modes, its update cadence, its licence and its supply
 chain. Deterministic rules can be read, tested and argued with. Model-assisted triage is
-a possible later feature (§9, "deferred"), never a dependency.
+a possible later feature (Â§9, "deferred"), never a dependency.
 
 ### 2.4 The gap
 
@@ -142,7 +142,7 @@ as reported by each repository in October 2026.
 | [ClamAV](https://github.com/Cisco-Talos/clamav) | GPL-2.0 | Signature antivirus engine | The idea that signatures are a separate, optional layer; signature-update discipline | The engine: copyleft, C, and far larger than this app |
 | [YARA-X](https://github.com/VirusTotal/yara-x) | BSD-3-Clause | Rust pattern-matching rules for files | A linkable rule engine **if** it earns its place (v0.1.6, optional feature, no rules bundled) | A default dependency; rules are a supply-chain surface |
 | [Sigma](https://github.com/SigmaHQ/sigma) | DRL 1.1 (rules) | A portable detection-rule format | The idea of a reviewable rule document with a rationale | The rules themselves: DRL is not an OSI licence, so import-only and user-supplied |
-| [Czkawka / Krokiet](https://github.com/qarmin/czkawka) | MIT (code), CC BY 4.0 (assets) | Fast cross-platform duplicate and junk finder | Preview → select → act; honest scope; no telemetry | Its scanning domain and its Slint interface |
+| [Czkawka / Krokiet](https://github.com/qarmin/czkawka) | MIT (code), CC BY 4.0 (assets) | Fast cross-platform duplicate and junk finder | Preview â†’ select â†’ act; honest scope; no telemetry | Its scanning domain and its Slint interface |
 | [BleachBit](https://github.com/bleachbit/bleachbit) | GPL-3.0 | Cleaner with per-application rules | The "cleaner list" concept, and the caution it demands | Code (copyleft), GTK, registry cleaning |
 | [Lynis](https://github.com/CISOfy/lynis) | GPL-3.0 | Host hardening audit | Check IDs, "what was checked" reporting, remediation text | The shell implementation and copyleft code |
 | [Loki](https://github.com/Neo23x0/Loki) | GPL-3.0 | Indicator-of-compromise scanner | The indicator model and match reporting | Python, copyleft, and network-fed IOC lists |
@@ -152,7 +152,7 @@ as reported by each repository in October 2026.
 | [Velociraptor](https://github.com/Velocidex/velociraptor) | AGPL-3.0 | DFIR collection at fleet scale | The discipline of evidence and collection scope | Server architecture; AGPL |
 | [zeroclaw](https://github.com/zeroclaw-labs/zeroclaw) | Apache-2.0 | Small autonomous assistant infrastructure | One binary, no runtime service, "deploy anywhere" packaging discipline | Its agent runtime and model plumbing: ranger has no model |
 | [agent-bom](https://github.com/agent-bom/agent-bom) | Apache-2.0 | Scans agentic infrastructure (agents, MCP servers) | The agent/MCP inventory as a first-class object | Its Python/control-plane scope |
-| [Microsoft Defender for AI agents](https://learn.microsoft.com/en-us/defender-xdr/security-for-ai/ai-agent-detection-protection) | Proprietary (preview) | Commercial agent discovery and protection | Nothing reusable — it confirms the category is real | Everything else |
+| [Microsoft Defender for AI agents](https://learn.microsoft.com/en-us/defender-xdr/security-for-ai/ai-agent-detection-protection) | Proprietary (preview) | Commercial agent discovery and protection | Nothing reusable â€” it confirms the category is real | Everything else |
 
 ### 3.1 What the research changed
 
@@ -200,7 +200,7 @@ v0.1.0 ships the first layer of a stack whose layers are deliberately separate:
 | Cleanup patterns | v0.1.6 | File walking, preview and cancellation discipline learned from Czkawka. | Czkawka is MIT; if code is copied, attribution travels with it. |
 
 **Why not port ClamAV itself.** ClamAV is GPL-2.0. Translating its code to Rust creates
-a derivative work, so the translated engine — and the combined application — would have
+a derivative work, so the translated engine â€” and the combined application â€” would have
 to be GPL-2.0. That is a legitimate choice, but it is not the MIT choice this
 repository made. The compatible path is the one taken: read the documented signature
 formats, implement the matching, and say "ClamAV-compatible database" rather than
@@ -238,7 +238,7 @@ useful it looks.
    It documents where it stores data and how to remove it. A security tool that hides
    is indistinguishable from the thing it hunts.
 2. **Local.** No telemetry, no analytics, no account, no cloud, no network in v0.x.
-   The promise is enforced by the dependency graph, not by a paragraph (§6.6).
+   The promise is enforced by the dependency graph, not by a paragraph (Â§6.6).
 3. **Honest.** A finding names its evidence and its limits. "I do not know" is a valid
    answer. "Your PC is clean" is not a sentence ranger says.
 4. **Reversible.** Quarantine before delete. Preview before action. A journal entry for
@@ -258,7 +258,7 @@ useful it looks.
 
 | Asset | Threat | Mitigation |
 |---|---|---|
-| The user's files | A bug or a malicious rule causes deletion | Read-only default; quarantine; the §6.10 allowlist; a type that cannot name a destination path; two-person review; tests for traversal, links and TOCTOU |
+| The user's files | A bug or a malicious rule causes deletion | Read-only default; quarantine; the Â§6.10 allowlist; a type that cannot name a destination path; two-person review; tests for traversal, links and TOCTOU |
 | The user's privacy | Inventory is exfiltrated or over-collected | No network; no file contents, except an opt-in content scan that stores none; no secrets; local storage; export only on request |
 | Trust in findings | False positives train the user to ignore the app | Evidence on every finding; a named benign explanation; expiring suppressions; no "urgent" without strong evidence |
 | The release | A compromised maintainer or asset | SHA256SUMS; signed releases when certificates exist; branch protection; no asset replacement |
@@ -306,8 +306,8 @@ Finding {
 }
 ```
 
-- **observed** — the fact itself is certain; the interpretation may not be.
-- **likely / possible** — inference from a pattern, with the pattern named.
+- **observed** â€” the fact itself is certain; the interpretation may not be.
+- **likely / possible** â€” inference from a pattern, with the pattern named.
 - **Severity is about consequence, not confidence.** A certain fact can be `info`; an
   uncertain one is never `urgent`.
 - **`urgent` is rare by design.** It requires an active, observed harm (for example, a
@@ -371,7 +371,7 @@ Empty states say what was checked, not that the machine is safe.
 
 - **Quarantine** moves a user-selected file into app-managed storage, with its hash,
   original path and reason recorded. Restore is one click, and is verified.
-- **Cleanup** removes files only under the roots in the allowlist table (§6.10), with a
+- **Cleanup** removes files only under the roots in the allowlist table (Â§6.10), with a
   size preview and per-item selection. User documents are excluded by construction, not
   by a clever heuristic: no entry in that table is a place a person keeps work.
 - **Permanent delete** exists only inside the quarantine, only for an id, and only
@@ -422,10 +422,10 @@ The rules are the same rules:
 ### 6.2 Data flow
 
 ```text
-  collectors (worker thread) ──▶ Facts ──▶ vnr-core (diff, rules) ──▶ Findings
-        ▲                                                              │
-        │ Request                                                      ▼
-  apps/vn-ranger ◀──────────── Action ◀──────────── vnr-ui::show ◀── World
+  collectors (worker thread) â”€â”€â–¶ Facts â”€â”€â–¶ vnr-core (diff, rules) â”€â”€â–¶ Findings
+        â–²                                                              â”‚
+        â”‚ Request                                                      â–¼
+  apps/vn-ranger â—€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Action â—€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ vnr-ui::show â—€â”€â”€ World
 ```
 
 The worker exists for the same reason as in vn-launcher: an inventory can take
@@ -465,7 +465,7 @@ packs/keys/            public keys you chose to trust; the local signing key
 packs/active.json      which pack version is active, and its hash
 reports/               exported JSON and Markdown
 logs/                  local, rotated, no secrets
-wake                   an activation request from a second launch (§6.5)
+wake                   an activation request from a second launch (Â§6.5)
 ```
 
 `VN_RANGER_DATA_DIR`, when it holds an absolute path, replaces the platform directory.
@@ -478,7 +478,7 @@ No database engine. JSON and NDJSON are inspectable with a text editor, survive 
 decade, and add no C dependency. Writes are atomic: a temporary file, then a rename
 (`tempfile::NamedTempFile::persist`, which is correct on Windows too). A crash leaves
 the previous file intact. The journal is the one file that is appended rather than
-replaced, and §6.10 is the protocol that makes an append safe to interrupt.
+replaced, and Â§6.10 is the protocol that makes an append safe to interrupt.
 
 On Unix the data directory is created `0700`. On Windows it inherits the user's
 profile ACL. Nothing in it is secret, but paths contain usernames, so exports carry a
@@ -487,15 +487,15 @@ profile ACL. Nothing in it is secret, but paths contain usernames, so exports ca
 ### 6.5 Scheduling and residency
 
 - **Start:** a quick inventory (processes, autoruns, listeners) within a few seconds.
-- **Resident:** every six hours, with ±10% jitter. Paused for an hour from the tray or
+- **Resident:** every six hours, with Â±10% jitter. Paused for an hour from the tray or
   Settings. A full inventory is skipped while the machine is on battery if the person
   asked for that, and while an action dialog is open.
 - **Wake from sleep:** detected from a gap in the two-second tick. A gap of three
   intervals or more means the machine slept; one scan runs on resume, and a backwards
-  clock jump does not start a loop (§9, wave 3).
+  clock jump does not start a loop (Â§9, wave 3).
 - **Heavy work:** user-initiated. There is no full-disk scan.
 - **Budget:** idle CPU under 0.5% of one core and a working set under 200 MB, measured
-  and published (§11).
+  and published (Â§11).
 - **Close to tray** is a choice, and it is **off** by default: a security tool that
   hides when you close it is indistinguishable from the thing it hunts. With it on, the
   first close says where the window went. **Quit** ends the process from the window and
@@ -523,7 +523,7 @@ something the baseline does not explain.
 quit. One crate holds it on all three platforms: `tray-icon` (MIT OR Apache-2.0), built
 with `default-features = false, features = ["ksni"]`, so Linux compiles the
 StatusNotifierItem backend instead of the GTK3 and `libappindicator` one. The decision and
-its licences are in §14.2. A desktop with no status-notifier host (GNOME without the
+its licences are in Â§14.2. A desktop with no status-notifier host (GNOME without the
 extension, a bare window manager) is a supported configuration: there is no icon, the
 setting says so, and closing the window quits. The tray is never the only way to reach a
 feature.
@@ -590,7 +590,7 @@ binary, started for one named operation:
 
 1. A person chooses **Run an administrator scan**.
 2. The interface explains what the elevated copy can read, and what it will not do.
-3. The operating system asks for consent — UAC on Windows. Nothing is bypassed.
+3. The operating system asks for consent â€” UAC on Windows. Nothing is bypassed.
 4. A second copy runs `vn-ranger --elevated-scan <file>`: the same `scan()` code, one
    snapshot written to the data directory, then exit.
 5. The unelevated window reads the snapshot and marks it `elevated: true`.
@@ -610,7 +610,7 @@ task running as SYSTEM, or a helper that stays alive after its report is written
 ### 6.10 The action path
 
 This is the only code in ranger that can destroy something, so it is written as if the
-filesystem were hostile — because between two syscalls, it is.
+filesystem were hostile â€” because between two syscalls, it is.
 
 **Nothing takes a path.** A destructive act is named by two values:
 
@@ -621,7 +621,7 @@ EntryId([u8; 8])                            which entry, as 16 lowercase hex dig
 
 `EntryId` is not a file name and not a path. The only strings the action layer ever hands
 the filesystem are `<id>`, `<id>/manifest.json` and `<id>/payload`, each built from a
-sixteen-character hex alphabet — so there is no user string on that path at all, and no
+sixteen-character hex alphabet â€” so there is no user string on that path at all, and no
 amount of `..`, `%2e%2e`, UNC prefix or Unicode trickery can produce one. The root is
 opened once as a `cap_std::fs::Dir`, which resolves relative to the handle and does not
 accept an absolute path or `..`; a test asserts that, because a guarantee nobody tested
@@ -642,15 +642,15 @@ It is never used to compute a destination.
 | A changed file | the entry's identity is taken before the open and after the hash, and compared once more immediately before the rename | a deterministic seam: `ActionIo` is a trait and the test double swaps the file at the Nth identity check |
 
 The link rule is about the acted entry, not about its ancestors. A person's own path may
-cross one legitimately — on macOS `$TMPDIR` resolves through `/var`, which is a link to
-`/private/var` — so re-litigating every ancestor would refuse the temporary directory on
+cross one legitimately â€” on macOS `$TMPDIR` resolves through `/var`, which is a link to
+`/private/var` â€” so re-litigating every ancestor would refuse the temporary directory on
 one of the three platforms while adding nothing: the destination is a capability, and no
 ancestor can move it. The walk is stricter, because there an ancestor *is* the next step:
 a directory that is a link is never entered, so a surface cannot be left through one.
 
 Windows cannot report a link count or a file number without a standard-library feature
 that is still unstable, so on that platform the identity check uses size, write time and
-creation time, and a second hard link is **not** refused. That is a named gap in §7, not a
+creation time, and a second hard link is **not** refused. That is a named gap in Â§7, not a
 claim: the alternate name survives the move, and the journal records what was moved so it
 can be found.
 
@@ -662,7 +662,7 @@ test that has to win a race to fail is a test that passes in CI.
 1. Resolve, validate and record the file's identity (device, file id, size, mtime, hash).
 2. Append an `intent` line and `sync_data` it. Nothing has happened yet.
 3. Act.
-4. Append a `result` line — `ok`, `refused` or `failed` — and sync it.
+4. Append a `result` line â€” `ok`, `refused` or `failed` â€” and sync it.
 5. The interface shows the outcome.
 
 If step 3 fails, the partial state is removed and a `failed` result is written with the
@@ -676,7 +676,7 @@ together and says what probably happened. It never guesses silently:
 | present | present | copied, source not unlinked; verify, then finish the move |
 | absent | absent | both gone; named as unexplained, with the manifest's expectation |
 
-A torn final line — a crash in the middle of an append — is ignored and counted, so at
+A torn final line â€” a crash in the middle of an append â€” is ignored and counted, so at
 most one line is lost and the file stays readable. The reader parses line by line, keeps
 whole entries, and never panics. The test truncates the file at every byte offset and
 asserts both properties.
@@ -685,7 +685,7 @@ asserts both properties.
 refuses an occupied destination, and moves without clobbering: `hard_link` then `unlink`
 is the portable no-replace primitive, because `link` fails when the target exists. On
 Linux, `renameat2(RENAME_NOREPLACE)` is used where the kernel has it. A cross-device
-restore is copy → `sync_all` → verify → unlink, and a failure at any step leaves the
+restore is copy â†’ `sync_all` â†’ verify â†’ unlink, and a failure at any step leaves the
 quarantine entry intact.
 
 **The allowlist.** Cleanup is a table, not a heuristic. Each row is a `Surface` with a
@@ -700,7 +700,7 @@ root, an age threshold and a shape, and the walk only ever descends one of them.
 | Windows | `win.pkgcache` | `%LOCALAPPDATA%\pip\Cache`, `npm-cache`, `Yarn\Cache`, `NuGet\v3-cache` | `node_modules`, `target`, a package's installed files |
 | macOS | `mac.caches` | children of `~/Library/Caches` not named `com.apple.*`, older than 24 h | `~/Library/Application Support`, keychains |
 | macOS | `mac.temp` | children of `$TMPDIR`, older than 24 h | `/tmp`, `/private/var/tmp` |
-| macOS | `mac.logs` | children of `~/Library/Logs` older than 7 days — opt-in, off by default | system logs |
+| macOS | `mac.logs` | children of `~/Library/Logs` older than 7 days â€” opt-in, off by default | system logs |
 | Linux | `linux.cache` | children of `$XDG_CACHE_HOME` (`~/.cache`), files then empty directories, older than 24 h | `~/.config`, `~/.local/share` |
 | Linux | `linux.temp` | children of `$TMPDIR`, older than 24 h | a recursive walk of `/tmp` |
 | Linux | `linux.tmpfiles` | files directly in `/tmp` owned by the current uid, older than 24 h | another user's files, any directory, any file with a second link |
@@ -711,7 +711,7 @@ keychains, browser profiles, `.git`, a trash or recycle bin, any path that is no
 child of a surface root, and any directory that still holds an ineligible entry.
 
 The walk never follows a link, never enters another filesystem (Unix; Windows cannot read
-a volume serial from stable `std`, see §7), stops at depth 8, skips anything modified
+a volume serial from stable `std`, see Â§7), stops at depth 8, skips anything modified
 inside the age threshold, removes files before pruning empty directories bottom-up, and
 cancels between two items. The preview and the act walk the same roots, and the act
 re-stats every item before removing it: a file that changed since the preview is skipped
@@ -727,7 +727,7 @@ and counted, not deleted.
 | Permanent delete | type `DELETE` | `confirmed: typed` |
 
 Two reviewers read every change to this path, and the second one writes the traversal
-table from this specification without reading the first one's tests. §12 says how that
+table from this specification without reading the first one's tests. Â§12 says how that
 is recorded.
 
 ### 6.11 Rule packs and content scanning
@@ -773,7 +773,7 @@ The matcher is a **closed vocabulary**, evaluated by `vnr-core` as data:
   the machine do unbounded work, and it cannot read a document.
 
 Four promises a pack cannot break: it holds no code, reads no file content, opens no
-socket, and cannot produce `urgent` — the ceiling is `attention`, because only an
+socket, and cannot produce `urgent` â€” the ceiling is `attention`, because only an
 observed harm earns more, and an observation is not a pack's to make. A rule without a
 `benign` explanation is rejected, exactly as a built-in would be.
 
@@ -790,7 +790,7 @@ machine.
 
 **Activation and rollback.** `packs/active.json` names the active id, version, SHA-256,
 key fingerprint and time. Activation is a journal entry. The previous verified version
-stays on disk, and rollback flips `active.json` back to it — it touches no fact, no
+stays on disk, and rollback flips `active.json` back to it â€” it touches no fact, no
 baseline, no quarantine entry and no journal line. A pack that fails validation at load
 is not fatal: it is deactivated with a named reason, the built-ins keep working, and a
 banner says which pack and why.
@@ -805,8 +805,8 @@ files, and they are data like everything else here.
 
 **Sigma is a producer, not a loader.** `core/src/sigma/` converts a user-supplied subset
 onto the fact vocabulary and writes a pack candidate. Only rules whose `logsource` maps
-onto something ranger observes are converted — `process_creation` and `registry_event`
-on Windows, `file_event` on watched folders, `network_connection` on listeners — and
+onto something ranger observes are converted â€” `process_creation` and `registry_event`
+on Windows, `file_event` on watched folders, `network_connection` on listeners â€” and
 everything else is counted by reason in the import report. The output must then be
 signed, with the local key, before it can be active; so importing untrusted rules cannot
 skip the signature step.
@@ -815,38 +815,38 @@ skip the signature step.
 
 ## 7. Platform matrix
 
-`●` shipped in the current release (v0.1.5), `◐` partial, `○` planned or unavailable. A
-`○` in this table is a named gap, not a silent one. The `v0.1.6` rows are what the next
-release turns into `●`; this table is rewritten at that tag, not before it.
+`â—` shipped in the current release (v0.1.5), `â—` partial, `â—‹` planned or unavailable. A
+`â—‹` in this table is a named gap, not a silent one. The `v0.1.6` rows are what the next
+release turns into `â—`; this table is rewritten at that tag, not before it.
 
 | Capability | Windows | macOS | Linux |
 |---|---|---|---|
-| Processes, parent, command line | ● `sysinfo` | ● `sysinfo` | ● `sysinfo` |
-| Binary hash | ● SHA-256 | ● SHA-256 | ● SHA-256 |
-| Signature / provenance | ○ v0.2 (WinVerifyTrust, cache-only) | ○ v0.2 (`codesign` / Security framework) | ◐ package owner, later |
-| Autoruns | ◐ HKCU/HKLM Run, Startup, services; tasks, WMI, IFEO, COM not yet | ◐ LaunchAgents/Daemons; login items, periodic and cron not yet | ◐ systemd units, system cron, XDG; user crontabs, rc files, `ld.so.preload` not yet |
-| Listeners → process | ● IP helper via `netstat2` | ○ no safe, C-free path yet | ● `/proc/net` + fd inode |
-| Installed packages | ◐ registry uninstall keys; MSIX not yet | ◐ Applications, Homebrew; receipts not yet | ◐ dpkg, pacman; Snap/Flatpak not yet |
-| File-change watch | ● ReadDirectoryChangesW | ● kqueue | ● inotify |
-| Journal and crash recovery | ○ v0.1.6 | ○ v0.1.6 | ○ v0.1.6 |
-| Quarantine and verified restore | ○ v0.1.6 | ○ v0.1.6 | ○ v0.1.6 |
-| Allowlisted cleaning | ○ v0.1.6 | ○ v0.1.6 | ○ v0.1.6 |
-| Tray | ◐ v0.1.6 (`tray-icon`) | ◐ v0.1.6 (`tray-icon`) | ◐ v0.1.6 (`tray-icon` + its `ksni` backend; no icon without a host) |
-| Opt-in autostart | ○ v0.1.6 (HKCU `Run`) | ○ v0.1.6 (LaunchAgent) | ○ v0.1.6 (`~/.config/autostart`) |
-| Signed rule packs | ○ v0.1.6 | ○ v0.1.6 | ○ v0.1.6 |
-| Content scan (YARA-X) | ○ v0.1.6, build feature | ○ v0.1.6, build feature | ○ v0.1.6, build feature |
-| Runtime file access | ○ ETW (user-mode) later | ○ EndpointSecurity (entitlement) later | ○ eBPF/auditd (root) later |
-| Kernel / rootkit | ○ | ○ | ○ |
-| Memory scanning | ○ | ○ | ○ |
+| Processes, parent, command line | â— `sysinfo` | â— `sysinfo` | â— `sysinfo` |
+| Binary hash | â— SHA-256 | â— SHA-256 | â— SHA-256 |
+| Signature / provenance | â—‹ v0.2 (WinVerifyTrust, cache-only) | â—‹ v0.2 (`codesign` / Security framework) | â— package owner, later |
+| Autoruns | â— HKCU/HKLM Run, Startup, services; tasks, WMI, IFEO, COM not yet | â— LaunchAgents/Daemons; login items, periodic and cron not yet | â— systemd units, system cron, XDG; user crontabs, rc files, `ld.so.preload` not yet |
+| Listeners â†’ process | â— IP helper via `netstat2` | â—‹ no safe, C-free path yet | â— `/proc/net` + fd inode |
+| Installed packages | â— registry uninstall keys; MSIX not yet | â— Applications, Homebrew; receipts not yet | â— dpkg, pacman; Snap/Flatpak not yet |
+| File-change watch | â— ReadDirectoryChangesW | â— kqueue | â— inotify |
+| Journal and crash recovery | â—‹ v0.1.6 | â—‹ v0.1.6 | â—‹ v0.1.6 |
+| Quarantine and verified restore | â—‹ v0.1.6 | â—‹ v0.1.6 | â—‹ v0.1.6 |
+| Allowlisted cleaning | â—‹ v0.1.6 | â—‹ v0.1.6 | â—‹ v0.1.6 |
+| Tray | â— v0.1.6 (`tray-icon`) | â— v0.1.6 (`tray-icon`) | â— v0.1.6 (`tray-icon` + its `ksni` backend; no icon without a host) |
+| Opt-in autostart | â—‹ v0.1.6 (HKCU `Run`) | â—‹ v0.1.6 (LaunchAgent) | â—‹ v0.1.6 (`~/.config/autostart`) |
+| Signed rule packs | â—‹ v0.1.6 | â—‹ v0.1.6 | â—‹ v0.1.6 |
+| Content scan (YARA-X) | â—‹ v0.1.6, build feature | â—‹ v0.1.6, build feature | â—‹ v0.1.6, build feature |
+| Runtime file access | â—‹ ETW (user-mode) later | â—‹ EndpointSecurity (entitlement) later | â—‹ eBPF/auditd (root) later |
+| Kernel / rootkit | â—‹ | â—‹ | â—‹ |
+| Memory scanning | â—‹ | â—‹ | â—‹ |
 
 What v0.1.5 ships: processes, startup items, listeners (Windows and Linux), installed
 packages, SHA-256 hashes of startup binaries, the hash-signature engine, fifteen rules,
 the accepted baseline, the watch, and the one-shot administrator scan. Everything marked
-`○` is honest work for a later release.
+`â—‹` is honest work for a later release.
 
 0.1.6 changes the shape of that table more than any release since 0.1.0: five rows move
-from `○` to `●`, and the autoruns `◐` becomes considerably less partial (§9, wave 5).
-What stays `○` after it matters as much — kernel, memory, runtime file access — and the
+from `â—‹` to `â—`, and the autoruns `â—` becomes considerably less partial (Â§9, wave 5).
+What stays `â—‹` after it matters as much â€” kernel, memory, runtime file access â€” and the
 interface says so.
 
 Notes that matter more than the ticks:
@@ -877,20 +877,20 @@ Notes that matter more than the ticks:
   produce `urgent`, and the default build contains no YARA-X. Content scanning is a
   build feature and a named operation with its own consent screen.
 - **Elevation:** 0.1.6 adds nothing to the elevated copy. It still scans, writes one
-  snapshot and exits, and it cannot quarantine, clean or change a setting (§6.9).
+  snapshot and exits, and it cannot quarantine, clean or change a setting (Â§6.9).
 
 ---
 
 ## 8. The mark and the suite
 
 The crystal is shared with vn-launcher: the same 24-unit grid, the same 2.914-unit
-stroke, the same six facets. What changes per application is the **inlay** — the colour
+stroke, the same six facets. What changes per application is the **inlay** â€” the colour
 inside the crystal:
 
 | Application | Inlay |
 |---|---|
 | vn-launcher | none (transparent) |
-| vn-ranger | ember: `#F26A21`, gradient `#FFA45E → #F26A21 → #D14A0C` |
+| vn-ranger | ember: `#F26A21`, gradient `#FFA45E â†’ #F26A21 â†’ #D14A0C` |
 
 The suite rule is simple: **same crystal, one colour per app, no other variants.** The
 application icon is the mark on the suite's black tile, with white ridges so it holds
@@ -909,14 +909,14 @@ icon agree.
 Each milestone has an exit criterion. A milestone is not "done" because the code
 compiles; it is done when the criterion is met and written down.
 
-### M0 — Identity — **shipped** `5a4aa68`
+### M0 â€” Identity â€” **shipped** `5a4aa68`
 
 - README, LICENSE, this plan, SECURITY, AGENTS, the release contract.
 - The mark in every size, including the application tile and the raw RGBA.
 - **Exit:** a reader can say what ranger is, what it refuses, and how it ships. No
   application code. **Met.**
 
-### M1 — v0.1.0, Inventory — **shipped** `ab1d8d4`
+### M1 â€” v0.1.0, Inventory â€” **shipped** `ab1d8d4`
 
 - Workspace, three crates, app shell, CI, release workflow.
 - Collectors: processes and ancestry, startup items, listeners (Windows and Linux),
@@ -925,7 +925,7 @@ compiles; it is done when the criterion is met and written down.
   reports; JSON and Markdown export; the application mark in the title bar and rail.
 - A clean-room ClamAV `.hdb` / `.hsb` hash engine, the built-in EICAR self-test, and
   hash matching for every startup binary.
-- A one-shot administrator scan on Windows (§6.9).
+- A one-shot administrator scan on Windows (Â§6.9).
 - **Exit:** runs on Windows, macOS and Linux; no panic on malformed or missing data;
   every collector names its gaps; tests for the parsers and the signature engine; a
   release that follows the contract and is parsed correctly by vn-launcher, with
@@ -933,9 +933,9 @@ compiles; it is done when the criterion is met and written down.
 
 **Named gaps in v0.1.0:** signature verification (WinVerifyTrust, `codesign`), scheduled
 tasks, macOS login items and listeners, MSIX/Snap/Flatpak packages, the real-time
-watcher, rules, cleaning. Each is a row in §7 or a milestone below, not a surprise.
+watcher, rules, cleaning. Each is a row in Â§7 or a milestone below, not a surprise.
 
-### M1.1 — v0.1.1, interface pass — **shipped (UI scope)**
+### M1.1 â€” v0.1.1, interface pass â€” **shipped (UI scope)**
 
 The first release a person can leave open all day without the interface getting in the
 way. Detection work belongs to M2.
@@ -946,7 +946,7 @@ way. Detection work belongs to M2.
 - **Layout:** compact top bar and rail, full-width cards, responsive statistic and
   preview columns, tables that fill their tab with sticky headers and a pinned
   full-width detail footer, and a visible page scrollbar. The minimum window is
-  920 × 600 logical points; the layout is checked at 920, 1380 and 1600.
+  920 Ã— 600 logical points; the layout is checked at 920, 1380 and 1600.
 - **Behaviour shipped:** scroll position per view and whole-row selection.
 - **Still open, and not claimed by this tag:** window size/position and theme
   remembered, keyboard navigation for the rail, tables and dialog, visible focus,
@@ -962,11 +962,11 @@ way. Detection work belongs to M2.
 The typography, responsive layout and full-tab tables shipped in v0.1.1. The open items
 above are the next interface pass, not part of this release.
 
-### M2 — v0.1.2, Watch — **shipped**
+### M2 â€” v0.1.2, Watch â€” **shipped**
 
 The machine stops being a snapshot and becomes a series with a diff. Nothing is judged:
 no rules, no findings, no deletion, no journal and no tray. The release answers one
-question — *what changed since the last time this machine looked normal?*
+question â€” *what changed since the last time this machine looked normal?*
 
 | # | Work | Where | Done when |
 |---|---|---|---|
@@ -978,10 +978,10 @@ question — *what changed since the last time this machine looked normal?*
 | 6 | Budgets, and a switch for each background task | `apps/vn-ranger/src/app.rs`, Settings | Idle CPU under 0.5% and working set under 200 MB over 30 minutes, published in `docs/BENCHMARKS.md`; the poll and the watcher can each be turned off. |
 
 **The watcher decision (taken).** `notify` 8.2 is **CC0-1.0**, a public-domain
-dedication with no attribution or copyleft burden, and it joins the §8 allowlist for
+dedication with no attribution or copyleft burden, and it joins the Â§8 allowlist for
 this crate alone. Default features are off and the macOS build selects `macos_kqueue`,
 so no `fsevent-sys` is linked. The alternative was per-platform watchers, which is more
-code and more platform risk for the same result. The decision is recorded in §14.2.
+code and more platform risk for the same result. The decision is recorded in Â§14.2.
 
 **The journal stays in v0.1.6.** The 0.1.2 timeline lives in memory for the session,
 so nothing is written that looks like a journal without its guarantees.
@@ -992,12 +992,12 @@ collector was unavailable; the idle budgets hold over 30 minutes and are publish
 `cargo xtask ci` is green on three operating systems.
 
 The poll and the watcher are in the tree, their unit tests pass, and the 30-minute idle
-soak measured 0.387% of one core and a 173 MB working set with the window visible — both
-inside the budgets in §11. The 300-process poll cost is the one measurement still owed:
+soak measured 0.387% of one core and a 173 MB working set with the window visible â€” both
+inside the budgets in Â§11. The 300-process poll cost is the one measurement still owed:
 this environment exposes 32 processes, so it cannot answer that row. It stays named in
 `docs/BENCHMARKS.md` rather than being assumed.
 
-### M2.1 — v0.1.3, process identity — **shipped**
+### M2.1 â€” v0.1.3, process identity â€” **shipped**
 
 The three-OS matrix caught this the day 0.1.2 was cut: `started_at_unix` was derived as
 `now - run_time`, which moves by a second between polls on Linux and macOS. The poll's
@@ -1007,7 +1007,7 @@ every poll. It now uses the start time sysinfo stores when the process is first 
 - **Exit:** the two-poll identity test passes on all three platforms. The v0.1.2 matrix
   failed it on Linux and macOS; the Windows build was never affected.
 
-### M3 — v0.1.4, Explain — **shipped**
+### M3 â€” v0.1.4, Explain â€” **shipped**
 
 Fifteen built-in rules over the facts the collectors already produce. Each declares a
 severity, a confidence, the evidence it fired on, why it matters and a named benign
@@ -1026,15 +1026,15 @@ expiry.
   session timeline.
 - **Suppressions:** scoped to one rule and one subject, carrying a reason and expiring
   after 30 days, saved in `suppressions.json`. Clearing them is one button in Settings.
-- **Not in this release:** signature verification — the tree has no §8-safe wrapper, so
-  it waits for 0.2.0 rather than breaking `unsafe_code = "forbid"` — and the collector
-  gaps named in §7 (scheduled tasks, login items, MSIX, Snap/Flatpak) remain open and
+- **Not in this release:** signature verification â€” the tree has no Â§8-safe wrapper, so
+  it waits for 0.2.0 rather than breaking `unsafe_code = "forbid"` â€” and the collector
+  gaps named in Â§7 (scheduled tasks, login items, MSIX, Snap/Flatpak) remain open and
   named rather than silently assumed.
 - **Exit:** every rule has a positive and a negative fixture; no finding exists without
-  evidence; the language audit in §5.5 passes. Met by reading every rule's text against
+  evidence; the language audit in Â§5.5 passes. Met by reading every rule's text against
   that table by hand.
 
-### M4 — v0.1.5, Interface — **shipped**
+### M4 â€” v0.1.5, Interface â€” **shipped**
 
 The 0.1.5 line is the interface release: a command palette with global search (Ctrl+K),
 keyboard navigation (j/k, arrows, Enter, Esc), sort and quick filters on the process
@@ -1044,20 +1044,20 @@ baseline card on the overview, extra watched folders, cancellation between colle
 findings in the Markdown report, findings as JSON, saved preferences, a single-instance
 guard and a top-right error toast.
 
-### M5 — v0.1.6, Act, Resident and Packs
+### M5 â€” v0.1.6, Act, Resident and Packs
 
 **Built so far** (on `main`, with its tests; the waves below are the whole release, not the
 part that exists):
 
 | Wave | In the tree | Still to do |
 |---|---|---|
-| 1 Ledger | journal records, reader, rotation, crash-recovery verdicts, the typed action path with its four refusals, the `ActionIo` seam | — |
+| 1 Ledger | journal records, reader, rotation, crash-recovery verdicts, the typed action path with its four refusals, the `ActionIo` seam | â€” |
 | 2 Quarantine and cleaning | quarantine with a manifest, verified restore, irreversible purge, all four acts journaled, the allowlist walk with preview and removal, the clean preview (a dry run, per-surface totals, per-item selection, one confirmation naming them), the language audit as a check, the Actions view, the quarantine entry point, the typed-`DELETE` dialog | the data-directory size in Settings; the second reviewer on every deletion path, which is a process row and not code |
-| 3 Resident | the schedule (six hours ±10 %, seeded jitter), resume detection, a scan on resume, the tray and its menu (open, scan now, pause an hour, quit), "no tray" as a state with a reason, the pause it offers in Settings, close-to-tray off by default with a quit that still quits, opt-in autostart (one `HKCU\...\Run` value, one LaunchAgent plist, one desktop file; written idempotently, removed by name only, shown with its path, a missing entry a success) and `--background` for the login launch | activation through the `wake` file, the soak recorder, the battery preference |
-| 4 Packs | — | everything |
-| 5 Coverage | — | everything |
+| 3 Resident | the schedule (six hours Â±10 %, seeded jitter), resume detection, a scan on resume, the tray and its menu (open, scan now, pause an hour, quit), "no tray" as a state with a reason, the pause it offers in Settings, close-to-tray off by default with a quit that still quits, opt-in autostart (one `HKCU\...\Run` value, one LaunchAgent plist, one desktop file; written idempotently, removed by name only, shown with its path, a missing entry a success) activation through the `wake` file (a second launch raises the running window and exits; a stale file is cleared at start) and `--background` for the login launch | the soak recorder, the battery preference |
+| 4 Packs | â€” | everything |
+| 5 Coverage | â€” | everything |
 
-Two deviations from what was written below are recorded in §6.10 and §7 rather than
+Two deviations from what was written below are recorded in Â§6.10 and Â§7 rather than
 silently taken: the link rule is about the acted entry and not its ancestors (macOS
 resolves `$TMPDIR` through `/var`), and Windows cannot read a link count or a volume serial
 from stable `std`, so a second hard link and a nested filesystem are not refused there.
@@ -1066,13 +1066,13 @@ The interface layer closed in 0.1.5. 0.1.6 is the release that stops being read-
 and it is deliberately large: the action layer, the resident shell and signed rule packs
 ship together, because a ranger that can act but must be restarted to notice, or that
 stays open but needs a rebuild before it knows a new technique, is not the product
-described in §1.
+described in Â§1.
 
 The owner chose bigger releases over a chain of small ones, and that is the owner's
 scheduling decision to make. The order inside the release is not a scheduling decision:
 
 ```text
-journal ──▶ typed action ──▶ quarantine ──▶ cleaning ──▶ resident ──▶ packs ──▶ coverage
+journal â”€â”€â–¶ typed action â”€â”€â–¶ quarantine â”€â”€â–¶ cleaning â”€â”€â–¶ resident â”€â”€â–¶ packs â”€â”€â–¶ coverage
 ```
 
 Each step is a precondition for the next, and none of them moves to protect a date. A
@@ -1081,7 +1081,7 @@ release may take longer than planned. It may not take the shortcut.
 Five waves and one gate. The tag is cut when all five wave exits hold; the changelog
 names whatever a wave had to leave behind, and the plan is amended in the same commit.
 
-#### Wave 1 — Ledger
+#### Wave 1 â€” Ledger
 
 The journal and the typed action API. Nothing acts in this wave: this is the wave that
 makes acting safe to write.
@@ -1090,60 +1090,60 @@ makes acting safe to write.
 |---|---|---|---|
 | 1 | The journal: append-only NDJSON, one line flushed and `sync_data`d **before** the act, carrying seq, time, kind, action, id, subject, path, hash, size, result and reason | `core/src/journal.rs` (records and reader, pure), `native/src/journal.rs` (writer) | Every field has a meaning and a test; seq is monotone across a rotation; a write costs < 1 ms at the median; a full disk refuses the act instead of performing it unrecorded |
 | 2 | A reader that tolerates a torn tail | `core/src/journal.rs` | Truncating the file at every byte offset yields whole entries only, never a panic, and never loses a complete line |
-| 3 | Crash recovery: an `intent` without a `result` becomes a named state with a verdict and one suggested next step | `core/src/recovery.rs` (new) | All four on-disk states in §6.10 have a fixture; startup shows the verdict instead of guessing |
+| 3 | Crash recovery: an `intent` without a `result` becomes a named state with a verdict and one suggested next step | `core/src/recovery.rs` (new) | All four on-disk states in Â§6.10 have a fixture; startup shows the verdict instead of guessing |
 | 4 | The typed action API: `RootId` + `EntryId`, resolved through `cap_std::fs::Dir`; no function takes a destination path | `native/src/action.rs` (new) | A path outside the root cannot be expressed; no `unwrap`, no `unsafe`, no `PathBuf` in a destructive signature |
 | 5 | The four refusals: outside the root, a link, a hard link, a changed file | `native/src/action.rs` | Traversal, symlink, junction, hard-link and TOCTOU fixtures all pass, on all three platforms |
 | 6 | A deterministic TOCTOU seam | `native/src/action/io.rs` | The test double swaps the file between the stat and the rename; deleting the identity check makes the test fail |
 | 7 | Interrupted actions in the interface | `crates/ui/src/views.rs` | An interrupted action is visible in the journal, with the file, the reason and the one next step |
 
-**Wave 1 exit:** the protocol in §6.10 is implemented, not described; a process killed
+**Wave 1 exit:** the protocol in Â§6.10 is implemented, not described; a process killed
 between the intent and the result leaves a journal a person can read and act on.
 
-#### Wave 2 — Quarantine and cleaning
+#### Wave 2 â€” Quarantine and cleaning
 
 The destructive half. Everything here is reversible except a permanent delete that a
 person typed.
 
 | # | Work | Where | Done when |
 |---|---|---|---|
-| 1 | Quarantine: `<data>/quarantine/<id>/` holds the payload and `manifest.json` (original path, hash, size, mode, reason, time, identity) | `native/src/quarantine.rs` (new) | A same-volume move is one rename; a cross-volume move is copy → `sync_all` → verify → unlink, and a failure removes the partial |
-| 2 | Verified restore | `native/src/quarantine.rs` | Quarantine → restore returns byte-identical content; a hash mismatch is refused and journalled; an occupied destination is refused, never clobbered |
+| 1 | Quarantine: `<data>/quarantine/<id>/` holds the payload and `manifest.json` (original path, hash, size, mode, reason, time, identity) | `native/src/quarantine.rs` (new) | A same-volume move is one rename; a cross-volume move is copy â†’ `sync_all` â†’ verify â†’ unlink, and a failure removes the partial |
+| 2 | Verified restore | `native/src/quarantine.rs` | Quarantine â†’ restore returns byte-identical content; a hash mismatch is refused and journalled; an occupied destination is refused, never clobbered |
 | 3 | Permanent delete, only of a quarantine entry, only by id, only after `DELETE` is typed | `native/src/action.rs`, UI | Not reachable for any path outside the quarantine root; the journal records `confirmed: typed` |
-| 4 | The allowlist as data: a `Surface` table per OS (§6.10), age thresholds and shapes | `core/src/clean.rs` (policy, pure), `native/src/clean.rs` (walk) | A test enumerates adversarial inputs — `..`, absolute, UNC, drive-relative, junction, another user's file, the home directory — and every one is refused by construction |
+| 4 | The allowlist as data: a `Surface` table per OS (Â§6.10), age thresholds and shapes | `core/src/clean.rs` (policy, pure), `native/src/clean.rs` (walk) | A test enumerates adversarial inputs â€” `..`, absolute, UNC, drive-relative, junction, another user's file, the home directory â€” and every one is refused by construction |
 | 5 | A cancellable preview and a dry run that touches nothing | `native/src/clean.rs` | 10,000 entries preview in under 2 s; cancellation lands within 100 ms; a dry run writes no journal and removes nothing; a file changed since the preview is skipped and counted |
-| 6 | Confirmation proportional to the act (§6.10) | `crates/ui/src/views.rs` | A permanent action cannot be confirmed with one click; the journal says which confirmation was used |
+| 6 | Confirmation proportional to the act (Â§6.10) | `crates/ui/src/views.rs` | A permanent action cannot be confirmed with one click; the journal says which confirmation was used |
 | 7 | The Act surfaces: quarantine candidates with preview, the quarantine list with restore and purge, the clean preview, the journal newest first, and the data-directory size in Settings | `crates/ui/src/views.rs`, `icons.rs` | Every empty state says what was checked; every failure names the file and the OS error |
 | 8 | `cargo xtask language`, part of `ci` | `xtask/src/main.rs` | It fails on "fix", "infected", "threat score" and "your PC is clean" in user-facing strings, and on an empty state that does not name what was checked |
-| 9 | Two reviewers on every deletion path | process | Both reviewers and the commit are recorded; the second writes the traversal table from §6.10 without reading the first's tests |
+| 9 | Two reviewers on every deletion path | process | Both reviewers and the commit are recorded; the second writes the traversal table from Â§6.10 without reading the first's tests |
 
-**Wave 2 exit:** the owner's criterion for everything that can destroy data — two
+**Wave 2 exit:** the owner's criterion for everything that can destroy data â€” two
 reviewers, traversal, symlink, hard-link and TOCTOU tests, no reachable path outside the
 allowlist, a crash-consistent journal, and a verified restore.
 
-#### Wave 3 — Resident
+#### Wave 3 â€” Resident
 
 The shell a person leaves open. It stays a window with an icon, never a service.
 
 | # | Work | Where | Done when |
 |---|---|---|---|
 | 1 | Tray: `tray-icon` on Windows and macOS, `ksni` on Linux; menu is open, scan now, pause an hour, quit; no icon is a supported state | `native/src/tray/` (new), `apps/vn-ranger/src/app.rs` | The icon appears on all three where a host exists; where none does, the setting says so and closing quits; the tray can do nothing the window cannot |
-| 2 | Opt-in autostart, per OS (§6.5), removable in one click | `native/src/autostart/` (new) | Idempotent write; removal deletes only ranger's entry and succeeds when the file is already gone; the exact key, plist or desktop path is shown |
-| 3 | The scheduler: every six hours ±10%, pause, battery preference | `apps/vn-ranger/src/worker.rs`, `core/src/schedule.rs` (new, pure) | Jitter is a pure function with a fixture; a paused scheduler runs nothing; a scan never starts while an action dialog is open |
+| 2 | Opt-in autostart, per OS (Â§6.5), removable in one click | `native/src/autostart/` (new) | Idempotent write; removal deletes only ranger's entry and succeeds when the file is already gone; the exact key, plist or desktop path is shown |
+| 3 | The scheduler: every six hours Â±10%, pause, battery preference | `apps/vn-ranger/src/worker.rs`, `core/src/schedule.rs` (new, pure) | Jitter is a pure function with a fixture; a paused scheduler runs nothing; a scan never starts while an action dialog is open |
 | 4 | Wake handling from a tick gap | `core/src/schedule.rs` | A gap of three intervals is one scan on resume; a backwards clock jump does not loop; tested with a fake clock |
 | 5 | Activation of a second launch through the `wake` file | `native/src/instance.rs`, `apps/vn-ranger/src/app.rs` | The running window is raised; a stale `wake` file is cleared at start and never raises the window |
 | 6 | Close-to-tray, off by default | Settings | Closing quits when the setting is off; when on, the first close says where the window went |
-| 7 | A soak harness and a 24-hour run | `apps/vn-ranger/src/main.rs` (`--soak`), `docs/BENCHMARKS.md` | The app samples itself every 60 s into NDJSON — CPU, working set, private bytes, handles, polls, events, journal writes — on the release candidate, with the configuration a person actually leaves open |
+| 7 | A soak harness and a 24-hour run | `apps/vn-ranger/src/main.rs` (`--soak`), `docs/BENCHMARKS.md` | The app samples itself every 60 s into NDJSON â€” CPU, working set, private bytes, handles, polls, events, journal writes â€” on the release candidate, with the configuration a person actually leaves open |
 
-**Wave 3 exit:** the budgets in §11 hold over 24 hours, and the numbers are published
+**Wave 3 exit:** the budgets in Â§11 hold over 24 hours, and the numbers are published
 with the configuration and the build they were taken on.
 
-#### Wave 4 — Packs
+#### Wave 4 â€” Packs
 
 Detections become data with an author, and the author is verifiable offline.
 
 | # | Work | Where | Done when |
 |---|---|---|---|
-| 1 | The pack schema and its validator: closed vocabulary, no unknown fields, no unknown operator, `benign` required, severity at most `attention`, the limits in §6.11 | `core/src/pack/` (new) | Every rejection names the rule and the line; a test per limit; a pack that fails to load cannot stop the built-ins |
+| 1 | The pack schema and its validator: closed vocabulary, no unknown fields, no unknown operator, `benign` required, severity at most `attention`, the limits in Â§6.11 | `core/src/pack/` (new) | Every rejection names the rule and the line; a test per limit; a pack that fails to load cannot stop the built-ins |
 | 2 | The field vocabulary, versioned and documented | `core/src/fields.rs` (new), `docs/RULES.md` | Stable names; an unknown field is a load error, not a rule that never fires; the vocabulary is tested against the fact model |
 | 3 | Signature verification: minisign, detached, before parsing | `native/src/pack/signature.rs` (new) | Flipping any single byte of a valid pack is refused; a pack from an unknown key is refused and its fingerprint shown |
 | 4 | The trust store and the local signing key | `native/src/pack/keys.rs` (new) | Adding a key needs the fingerprint typed; the local key is `0600`; a key's removal unloads its packs |
@@ -1157,7 +1157,7 @@ Detections become data with an author, and the author is verifiable offline.
 default build contains no YARA-X; and rolling a bad pack back leaves every other file
 byte-identical.
 
-#### Wave 5 — Coverage
+#### Wave 5 â€” Coverage
 
 The wave that decides whether the release is worth installing. Every rule names the
 technique it covers or says why it cannot, so a gap is a row in a table rather than a
@@ -1176,8 +1176,8 @@ surprise.
 | 9 | The language audit of every new string | `cargo xtask language` | The release notes can say "quarantine", "remove the startup entry" and "open the folder", and cannot say "fix" |
 
 **Wave 5 exit:** the pack covers the techniques in the coverage table, every rule has
-both fixtures, and the release notes restate what is still not seen — kernel, memory,
-runtime file access, macOS login items (§7).
+both fixtures, and the release notes restate what is still not seen â€” kernel, memory,
+runtime file access, macOS login items (Â§7).
 
 **What is not claimed by wave 5:** macOS login items need an `objc2` wrapper and wait;
 `/tmp` is never walked recursively; browser profiles are never cleaned; a running
@@ -1188,15 +1188,15 @@ rather than pretending the move failed for no reason.
 
 1. `0.1.6-rc.1` is tagged when all five waves are code-complete. It is published as a
    pre-release, so the soak runs on a binary a person can download, not on a local build.
-2. The 24-hour soak and the manual matrix (§12) run on that binary. Findings are fixed in
+2. The 24-hour soak and the manual matrix (Â§12) run on that binary. Findings are fixed in
    `0.1.6-rc.2`; a release candidate takes fixes, not features.
 3. `v0.1.6` is cut from the last candidate that passed everything. `Cargo.toml`, this
    plan and the changelog move to the version in the same commit.
-4. If a wave cannot reach its exit, it is named in the release notes and in §7, and the
-   version still ships — because what shipped is true. What does not happen is a wave
+4. If a wave cannot reach its exit, it is named in the release notes and in Â§7, and the
+   version still ships â€” because what shipped is true. What does not happen is a wave
    shipping with its tests written after its apology.
 
-**Exit for 0.1.6** — the owner's criterion, unchanged:
+**Exit for 0.1.6** â€” the owner's criterion, unchanged:
 
 > every deletion path has two reviewers and traversal, symlink, hard-link and TOCTOU
 > tests; no path outside the allowlist is reachable; a crash mid-action leaves the
@@ -1205,7 +1205,7 @@ rather than pretending the move failed for no reason.
 
 Added by this plan, because a five-wave release needs its own proof:
 
-- Wave 3: the §11 budgets hold over a 24-hour soak on the release candidate, published in
+- Wave 3: the Â§11 budgets hold over a 24-hour soak on the release candidate, published in
   `docs/BENCHMARKS.md` with the configuration and the build.
 - Wave 4: unsigned packs are refused; signature verification has tests; the default build
   contains no YARA-X; a bad pack rolls back without touching data.
@@ -1213,26 +1213,26 @@ Added by this plan, because a five-wave release needs its own proof:
   a written reason for none.
 - `cargo xtask language` is part of `ci`, so the language audit is a check rather than a
   reading.
-- The manual matrix (§12) is run on the candidate binary, not on a developer build.
+- The manual matrix (Â§12) is run on the candidate binary, not on a developer build.
 
-**Deliberately not in 0.1.6** — the owner's list, unchanged:
+**Deliberately not in 0.1.6** â€” the owner's list, unchanged:
 
 > registry cleaning, "junk" scoring, secure-delete claims, a service, and any elevated
 > deletion. The elevated copy stays a one-shot scan.
 
 And, added here because a bigger release attracts them: browser-profile caches and
 history, the Recycle Bin and the Trash, `/tmp` walked recursively, cleaning anything not
-in the §6.10 table, deleting a file the running system holds mapped, automatic purge of
+in the Â§6.10 table, deleting a file the running system holds mapped, automatic purge of
 quarantine, macOS login items (needs a new Objective-C wrapper), a network lookup, a
 model, and self-update.
 
-### M6 — v0.2.0, Distribution (minor)
+### M6 â€” v0.2.0, Distribution (minor)
 
 This is deliberately a minor release, not another 0.1.x. It is held until the 0.1.x line
 has settled; it is not part of that line.
 
 - Signed Windows binaries (Authenticode), Developer ID and notarisation on macOS, and a
-  detached `minisign` signature over the archives on Linux — the same primitive the rule
+  detached `minisign` signature over the archives on Linux â€” the same primitive the rule
   packs already use, which is why the packs ship it first.
 - Launcher catalogue integration, install and removal verification, reproducible-build
   notes, and release notes that state exactly what is signed.
@@ -1240,7 +1240,7 @@ has settled; it is not part of that line.
   the application; no unsigned asset is published; the keys and the release process are
   documented.
 
-### M7 — v1.0.0, Deep and done
+### M7 â€” v1.0.0, Deep and done
 
 - External security audit, reproducible builds, accessibility pass, benchmarks, and
   complete documentation.
@@ -1257,12 +1257,12 @@ has settled; it is not part of that line.
 - Self-update.
 - Mobile, web, server, and fleet management.
 - macOS login items through an Objective-C wrapper, and a Linux tray that does not need
-  a status-notifier host. Both are named gaps in §7, not accidents.
+  a status-notifier host. Both are named gaps in Â§7, not accidents.
 
 The gates are order, not dates:
 
 1. No cleaning before quarantine and the journal.
-2. No external rules before signing — which is why 0.1.6 ships the signature before the
+2. No external rules before signing â€” which is why 0.1.6 ships the signature before the
    catalogue that needs it, in that order, inside one release.
 3. No YARA-X in the default build, and no content reading without its own consent
    screen.
@@ -1335,25 +1335,25 @@ the target is revised with a reason.
 
 | Budget | Target | Why |
 |---|---|---|
-| Cold start to window | ≤ 500 ms (measured 30–116 ms; first frame not measured) | a resident app is opened often |
+| Cold start to window | â‰¤ 500 ms (measured 30â€“116 ms; first frame not measured) | a resident app is opened often |
 | Idle CPU, resident, no scan | < 0.5% of one core | "always open" must not cost a laptop |
-| Idle working set | ≤ 200 MB in v0.1.x; 120 MB is the v1.0 goal | 166 MB was measured with the wgpu backend; glow is the next experiment |
-| Release archive | ≤ 12 MB | measured 6.83 MB Windows, 8.77 MB Linux, 5.69 MB macOS |
-| Installed footprint | ≤ 40 MB | no models, no runtime, no database; the Windows binary measured 15.64 MB |
-| Inventory scan | ≤ 3 s typical | longer is allowed with progress; measured 1.2–1.8 s |
-| Hashing | ≥ 200 MB/s single-thread SHA-256 on NVMe | bounded, visible work; not yet measured |
-| Journal write | < 1 ms median, < 10 ms at p99, including `sync_data` | no UI stalls, and the record exists before the act (§6.10) |
+| Idle working set | â‰¤ 200 MB in v0.1.x; 120 MB is the v1.0 goal | 166 MB was measured with the wgpu backend; glow is the next experiment |
+| Release archive | â‰¤ 12 MB | measured 6.83 MB Windows, 8.77 MB Linux, 5.69 MB macOS |
+| Installed footprint | â‰¤ 40 MB | no models, no runtime, no database; the Windows binary measured 15.64 MB |
+| Inventory scan | â‰¤ 3 s typical | longer is allowed with progress; measured 1.2â€“1.8 s |
+| Hashing | â‰¥ 200 MB/s single-thread SHA-256 on NVMe | bounded, visible work; not yet measured |
+| Journal write | < 1 ms median, < 10 ms at p99, including `sync_data` | no UI stalls, and the record exists before the act (Â§6.10) |
 | Quarantine move, same volume | < 10 ms for a 1 GB file | one rename; the number is about directory work, not bytes |
-| Quarantine move, cross volume | bounded by 200 MB/s, verified, cancellable | copy → sync → verify → unlink |
-| Clean preview | 10,000 entries in ≤ 2 s; cancel within 100 ms | the walk is visible work a person can stop |
-| Rule pack load | ≤ 30 ms for 512 rules | startup must not wait on a pack |
-| Rule evaluation | ≤ 20 ms for 512 rules over 1,000 facts | a pack cannot make the interface feel broken |
-| Tray overhead | 0% idle CPU, ≤ 8 MB working set | an icon is not a runtime |
-| 24-hour soak, tray and poll running | CPU < 0.5%, working set ≤ 200 MB, growth ≤ +10 MB, zero errors | the configuration a person actually leaves open |
+| Quarantine move, cross volume | bounded by 200 MB/s, verified, cancellable | copy â†’ sync â†’ verify â†’ unlink |
+| Clean preview | 10,000 entries in â‰¤ 2 s; cancel within 100 ms | the walk is visible work a person can stop |
+| Rule pack load | â‰¤ 30 ms for 512 rules | startup must not wait on a pack |
+| Rule evaluation | â‰¤ 20 ms for 512 rules over 1,000 facts | a pack cannot make the interface feel broken |
+| Tray overhead | 0% idle CPU, â‰¤ 8 MB working set | an icon is not a runtime |
+| 24-hour soak, tray and poll running | CPU < 0.5%, working set â‰¤ 200 MB, growth â‰¤ +10 MB, zero errors | the configuration a person actually leaves open |
 
-Measured on the development Windows machine: 287–291 processes, 131 startup items,
-95–102 listeners, 128 packages, a 1.2–1.8 s scan, 166 MB idle working set, 0% idle CPU,
-a 15.64 MB release binary, a window in 30–116 ms, and 6.83/8.77/5.69 MB archives for
+Measured on the development Windows machine: 287â€“291 processes, 131 startup items,
+95â€“102 listeners, 128 packages, a 1.2â€“1.8 s scan, 166 MB idle working set, 0% idle CPU,
+a 15.64 MB release binary, a window in 30â€“116 ms, and 6.83/8.77/5.69 MB archives for
 Windows, Linux and macOS. `docs/BENCHMARKS.md` has the method and the numbers that are
 still owed.
 
@@ -1382,13 +1382,13 @@ external service, nothing to install beside it.
   | Links | a file symlink, a directory symlink, a dangling link, a link chain, a Windows junction, a reparse point, a link swapped after the preview |
   | Hard links | a second link to the same inode, a link created between the preview and the act |
   | TOCTOU | the file replaced between stat and rename, replaced between hash and rename, and truncated mid-hash, each through the `ActionIo` seam |
-  | Crash | the process killed between the intent and the result, at every phase; the reader must produce a verdict from the four states in §6.10 |
+  | Crash | the process killed between the intent and the result, at every phase; the reader must produce a verdict from the four states in Â§6.10 |
   | Restore | a hash mismatch, an occupied destination, a cross-device move, a full disk, a quarantined entry that was edited |
 
   Every row is a test that fails when its refusal is deleted. That is the whole point of
   the row.
 - **Two reviewers.** A change to `native/src/action.rs`, `quarantine.rs`, `clean.rs`,
-  `journal.rs` or the §6.10 protocol needs two people. The second reviewer writes the
+  `journal.rs` or the Â§6.10 protocol needs two people. The second reviewer writes the
   traversal table from the specification, without reading the first reviewer's tests, and
   both names go in the pull request. A tool cannot enforce that; a reviewer can, and the
   checklist is the artifact.
@@ -1397,7 +1397,7 @@ external service, nothing to install beside it.
   a built-in, an oversized pack, a truncated JSON document, and a rule whose field does
   not belong to its subject. Each is a named rejection.
 - **Golden reports:** a fixed fixture set produces a byte-stable JSON report.
-- **No-network test:** `cargo deny` bans plus a `Cargo.lock` grep, as in §6.6. From
+- **No-network test:** `cargo deny` bans plus a `Cargo.lock` grep, as in Â§6.6. From
   v0.1.6 it also asserts that no file in this tree opens a socket: the tray's one
   session-bus connection lives in the `ksni` crate, not in ours, so the check can stay a
   grep over our own sources rather than a claim about a dependency.
@@ -1405,10 +1405,10 @@ external service, nothing to install beside it.
   `yara-x`, and that the feature builds it in when asked.
 - **Language:** `cargo xtask language` fails on "fix", "infected", "threat score" and
   "your PC is clean" in the string literals a person sees. It cannot see whether an empty
-  state names what was checked, so that half of §5.5 is a review rule rather than a check.
+  state names what was checked, so that half of Â§5.5 is a review rule rather than a check.
 - **Cross-target clippy:** a developer step before a `#[cfg]` push, not a check of its own:
   a Windows machine can install a Linux target and may stop inside a dependency, which is
-  why the three-OS matrix — Monday, a pull request, and every release — is the real
+  why the three-OS matrix â€” Monday, a pull request, and every release â€” is the real
   cross-platform check.
 - **Fuzzing:** the pack JSON, the journal reader, the plist/registry parsers and the
   restricted Sigma YAML reader, as each parser lands.
@@ -1478,7 +1478,7 @@ and that is the launcher's, not ranger's.
 | Risk | Impact | Mitigation |
 |---|---|---|
 | False positives erode trust | High | Evidence, a benign explanation, expiring suppressions, no `urgent` without observed harm |
-| Scope creep into AV/EDR | High | The constitution (§4) and the milestone gates |
+| Scope creep into AV/EDR | High | The constitution (Â§4) and the milestone gates |
 | A deletion bug | Severe | Quarantine first, allowlists, two-person review, traversal and TOCTOU tests, and a type that cannot name a path |
 | A five-wave release hides a regression | High | Five wave exits, a release candidate, a 24-hour soak on the candidate, and a changelog that names what slipped |
 | Permission gaps look like bugs | Medium | Capability banners and "not visible" states |
@@ -1496,15 +1496,15 @@ and that is the launcher's, not ranger's.
 **Taken**
 
 1. **Licence:** MIT only, matching vn-launcher. ClamAV code is not copied; the app reads
-   ClamAV's documented hash formats instead (§3.3). If the owner wants the actual
+   ClamAV's documented hash formats instead (Â§3.3). If the owner wants the actual
    ClamAV engine, the licence changes to GPL-2.0 first.
 2. **Elevation:** yes, as one named operation. The unelevated window asks; the operating
    system prompts; a one-shot copy scans and writes one report; nothing stays elevated
-   (§6.9). Windows ships this in v0.1.0; macOS and Linux say "not yet".
+   (Â§6.9). Windows ships this in v0.1.0; macOS and Linux say "not yet".
 3. **Binary name:** `vn-ranger`, never `ranger`, which would collide with the terminal
    file manager.
 4. **Cleaning:** quarantine and the allowlisted cleanup in v0.1.6, with the table in
-   §6.10 as the whole of the allowlist. Registry cleaning, "junk" scoring and RAM
+   Â§6.10 as the whole of the allowlist. Registry cleaning, "junk" scoring and RAM
    boosting are never. Browser profiles and trash containers are never a surface.
 5. **YARA-X:** an optional feature in v0.1.6, never the default dependency. It is pure
    Rust and BSD-3-Clause; rules are the supply-chain risk, not the crate, which is why
@@ -1519,7 +1519,7 @@ and that is the launcher's, not ranger's.
 9. **Model:** none in the application. Model-assisted triage is a possible post-1.0
    feature, local and optional, never a dependency.
 10. **Watcher:** `notify` 8.2 with `default-features = false` and `macos_kqueue` on
-    macOS. CC0-1.0 is a public-domain dedication, added to the §8 allowlist for this
+    macOS. CC0-1.0 is a public-domain dedication, added to the Â§8 allowlist for this
     crate alone. It is the only way to read a file event without writing `unsafe` or a
     watcher per operating system, and the kqueue backend keeps the macOS build free of
     `fsevent-sys`.
@@ -1533,18 +1533,18 @@ and that is the launcher's, not ranger's.
     story for both, and no crypto dependency tree to audit.
 13. **The tray:** `tray-icon` (MIT OR Apache-2.0) on all three platforms, with its `ksni`
     feature so that Linux compiles the StatusNotifierItem backend. That backend is `ksni`,
-    which is **Unlicense** — a public-domain dedication with no attribution or
+    which is **Unlicense** â€” a public-domain dedication with no attribution or
     copyleft burden, the same class as the CC0-1.0 admitted for `notify`, and admitted
     here for this crate alone. The reason for the feature rather than the default is in
     the same place: `tray-icon`'s default Linux backend needs GTK3 and `libappindicator`
-    at build time, which §8 forbids in the default build. `ksni` reaches the session bus
+    at build time, which Â§8 forbids in the default build. `ksni` reaches the session bus
     through the pure-Rust `zbus`, so the socket lives in a dependency rather than in this
     tree, and no file of ours opens one.
 14. **One file per pack:** a pack is JSON plus a detached signature, never an archive.
     Refusing to extract anything removes zip-slip, permission bits and symlink entries
     from the attack surface by construction.
 15. **Close-to-tray is off by default.** A resident security tool that hides on close is
-    the behaviour §4 exists to reject. The tray is an icon for a window that is still
+    the behaviour Â§4 exists to reject. The tray is an icon for a window that is still
     there, not a replacement for it.
 16. **The first-party catalogue ships inside the binary** as `packs/ranger.core.json`,
     validated by the same validator an imported pack meets. It is the catalogue, not a
@@ -1572,49 +1572,49 @@ and that is the launcher's, not ranger's.
 
 ## 15. References
 
-- vn-launcher — <https://github.com/vecnode/vn-launcher>
-- vn-launcher release convention —
+- vn-launcher â€” <https://github.com/vecnode/vn-launcher>
+- vn-launcher release convention â€”
   <https://github.com/vecnode/vn-launcher/blob/main/docs/RELEASES.md>
-- osquery — <https://github.com/osquery/osquery>
-- ClamAV — <https://github.com/Cisco-Talos/clamav>
-- ClamAV hash-signature formats —
+- osquery â€” <https://github.com/osquery/osquery>
+- ClamAV â€” <https://github.com/Cisco-Talos/clamav>
+- ClamAV hash-signature formats â€”
   <https://docs.clamav.net/manual/Signatures/HashSignatures.html>
-- YARA-X — <https://github.com/VirusTotal/yara-x>
-- Sigma — <https://github.com/SigmaHQ/sigma>
-- Sigma Detection Rule License 1.1 —
+- YARA-X â€” <https://github.com/VirusTotal/yara-x>
+- Sigma â€” <https://github.com/SigmaHQ/sigma>
+- Sigma Detection Rule License 1.1 â€”
   <https://github.com/SigmaHQ/Detection-Rule-License>
-- Czkawka — <https://github.com/qarmin/czkawka>
-- BleachBit — <https://github.com/bleachbit/bleachbit>
-- Lynis — <https://github.com/CISOfy/lynis>
-- Loki — <https://github.com/Neo23x0/Loki>
-- KnockKnock — <https://github.com/objective-see/KnockKnock>
-- Sysinternals Autoruns — <https://learn.microsoft.com/sysinternals/downloads/autoruns>
-- Wazuh — <https://github.com/wazuh/wazuh>
-- Velociraptor — <https://github.com/Velocidex/velociraptor>
-- zeroclaw — <https://github.com/zeroclaw-labs/zeroclaw>
-- agent-bom — <https://github.com/agent-bom/agent-bom>
-- Microsoft Defender for AI agents —
+- Czkawka â€” <https://github.com/qarmin/czkawka>
+- BleachBit â€” <https://github.com/bleachbit/bleachbit>
+- Lynis â€” <https://github.com/CISOfy/lynis>
+- Loki â€” <https://github.com/Neo23x0/Loki>
+- KnockKnock â€” <https://github.com/objective-see/KnockKnock>
+- Sysinternals Autoruns â€” <https://learn.microsoft.com/sysinternals/downloads/autoruns>
+- Wazuh â€” <https://github.com/wazuh/wazuh>
+- Velociraptor â€” <https://github.com/Velocidex/velociraptor>
+- zeroclaw â€” <https://github.com/zeroclaw-labs/zeroclaw>
+- agent-bom â€” <https://github.com/agent-bom/agent-bom>
+- Microsoft Defender for AI agents â€”
   <https://learn.microsoft.com/en-us/defender-xdr/security-for-ai/ai-agent-detection-protection>
 - David, I. & Gervais, A. (2026). *Ablating Safety: Mechanisms for Removing Alignment
-  in Language Models for Security Applications.* arXiv:2605.17413 —
+  in Language Models for Security Applications.* arXiv:2605.17413 â€”
   <https://arxiv.org/abs/2605.17413>
-- egui — <https://github.com/emilk/egui>
-- sysinfo — <https://github.com/GuillaumeGomez/sysinfo>
-- netstat2 — <https://github.com/ohadravid/netstat2-rs>
-- winreg — <https://crates.io/crates/winreg>
-- runas — <https://crates.io/crates/runas>
-- is_elevated — <https://crates.io/crates/is_elevated>
-- notify — <https://github.com/notify-rs/notify>
-- YARA-X crate — <https://crates.io/crates/yara-x>
-- tray-icon — <https://crates.io/crates/tray-icon>
-- ksni — <https://github.com/iovxw/ksni>
-- StatusNotifierItem — <https://www.freedesktop.org/wiki/Specifications/StatusNotifierItem/>
-- cap-std — <https://github.com/bytecodealliance/cap-std>
-- minisign — <https://jedisct1.github.io/minisign/>
-- minisign-verify — <https://github.com/jedisct1/rust-minisign-verify>
-- MITRE ATT&CK — <https://attack.mitre.org/>
-- ATT&CK on boot or logon autostart — <https://attack.mitre.org/tactics/TA0003/>
-- systemd unit and timer semantics — <https://www.freedesktop.org/software/systemd/man/latest/systemd.unit.html>
-- launchd.plist — <https://www.manpagez.com/man/5/launchd.plist/>
-- Task Scheduler schema — <https://learn.microsoft.com/en-us/windows/win32/taskschd/task-scheduler-schema>
-- single-instance — <https://crates.io/crates/single-instance>
+- egui â€” <https://github.com/emilk/egui>
+- sysinfo â€” <https://github.com/GuillaumeGomez/sysinfo>
+- netstat2 â€” <https://github.com/ohadravid/netstat2-rs>
+- winreg â€” <https://crates.io/crates/winreg>
+- runas â€” <https://crates.io/crates/runas>
+- is_elevated â€” <https://crates.io/crates/is_elevated>
+- notify â€” <https://github.com/notify-rs/notify>
+- YARA-X crate â€” <https://crates.io/crates/yara-x>
+- tray-icon â€” <https://crates.io/crates/tray-icon>
+- ksni â€” <https://github.com/iovxw/ksni>
+- StatusNotifierItem â€” <https://www.freedesktop.org/wiki/Specifications/StatusNotifierItem/>
+- cap-std â€” <https://github.com/bytecodealliance/cap-std>
+- minisign â€” <https://jedisct1.github.io/minisign/>
+- minisign-verify â€” <https://github.com/jedisct1/rust-minisign-verify>
+- MITRE ATT&CK â€” <https://attack.mitre.org/>
+- ATT&CK on boot or logon autostart â€” <https://attack.mitre.org/tactics/TA0003/>
+- systemd unit and timer semantics â€” <https://www.freedesktop.org/software/systemd/man/latest/systemd.unit.html>
+- launchd.plist â€” <https://www.manpagez.com/man/5/launchd.plist/>
+- Task Scheduler schema â€” <https://learn.microsoft.com/en-us/windows/win32/taskschd/task-scheduler-schema>
+- single-instance â€” <https://crates.io/crates/single-instance>

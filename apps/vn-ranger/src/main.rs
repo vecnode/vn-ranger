@@ -45,6 +45,21 @@ fn main() -> eframe::Result<()> {
         return Ok(());
     }
 
+    // One window per data directory. A second launch does not open a second window: it asks
+    // the running one to come forward and exits.
+    let instance = match vnr_native::instance::acquire() {
+        Ok(guard) => guard,
+        Err(message) => {
+            eprintln!("vn-ranger: {message}");
+            if vnr_native::instance::wake().is_ok() {
+                eprintln!("vn-ranger: the running window has been asked to come forward");
+            }
+            return Ok(());
+        }
+    };
+    // A wake file from a crash must not raise a window nobody asked for.
+    vnr_native::instance::clear_stale_wake();
+
     // A login launch carries `--background`: the window belongs in the status area rather
     // than on top of whatever the person just opened.
     let background = std::env::args_os().any(|argument| argument.to_string_lossy() == "--background");
@@ -66,7 +81,7 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "vn-ranger",
         options,
-        Box::new(move |cc| Ok(Box::new(app::App::new(cc, background)))),
+        Box::new(move |cc| Ok(Box::new(app::App::new(cc, background, instance)))),
     )
 }
 

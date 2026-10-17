@@ -21,7 +21,7 @@ pub struct App {
     instance: Option<vnr_native::instance::InstanceGuard>,
     cancel: Option<Arc<AtomicBool>>,
     /// The one writer of `journal.ndjson`. Observations are written as they arrive;
-    /// an intent or a result is synced (Ã‚Â§6.10).
+    /// an intent or a result is synced (Ãƒâ€šÃ‚Â§6.10).
     journal: vnr_native::journal::Journal,
     /// Set once the journal has failed, so one broken disk is one message rather than a
     /// notice per event.
@@ -56,12 +56,12 @@ pub struct App {
 impl App {
     /// Build the world from the last snapshot and start the first scan if there is
     /// nothing to show.
-    pub fn new(cc: &eframe::CreationContext<'_>, background: bool) -> Self {
+    pub fn new(
+        cc: &eframe::CreationContext<'_>,
+        background: bool,
+        instance: vnr_native::instance::InstanceGuard,
+    ) -> Self {
         let settings = vnr_native::store::load_ui_settings();
-        let (instance, instance_error) = match vnr_native::instance::acquire() {
-            Ok(guard) => (Some(guard), None),
-            Err(message) => (None, Some(message)),
-        };
         let snapshot = vnr_native::store::load_last();
         let (baseline, baseline_error) = match vnr_native::store::read_baseline() {
             vnr_native::store::BaselineLoad::Present(snapshot) => (Some(*snapshot), None),
@@ -78,7 +78,7 @@ impl App {
         let mut world = World {
             snapshot,
             scan: ScanState::Idle,
-            error: instance_error,
+            error: None,
             notice: None,
             elevated: vnr_native::elevation::is_elevated(),
             can_elevate: vnr_native::elevation::can_elevate(),
@@ -132,7 +132,7 @@ impl App {
         };
         if world.error.is_none() {
             let _ = journal.record(Draft::event("session started").with_reason(&format!(
-                "vn-ranger {} Ã‚Â· journal schema {}",
+                "vn-ranger {} Ãƒâ€šÃ‚Â· journal schema {}",
                 env!("CARGO_PKG_VERSION"),
                 vnr_core::journal::ENTRY_SCHEMA
             )));
@@ -149,7 +149,7 @@ impl App {
             receiver: None,
             watch,
             settings,
-            instance,
+            instance: Some(instance),
             cancel: None,
             journal,
             journal_reported,
@@ -273,7 +273,7 @@ impl App {
 
     /// Walk every allowlisted surface and put what a clean would remove into the world.
     ///
-    /// This is the dry run: it reads names, sizes and times and writes nothing Ã¢â‚¬â€ no journal
+    /// This is the dry run: it reads names, sizes and times and writes nothing ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â no journal
     /// line, no removal, no file of its own. The walk's items stay here rather than in the
     /// world, because the world is what the interface draws and this is the only list the
     /// action path may remove from.
@@ -356,6 +356,20 @@ impl App {
         }
     }
 
+    /// Raise the window when a second launch asked it to.
+    ///
+    /// The file is taken rather than read: one launch is one raise, and a file that stays
+    /// behind would raise the window on every frame.
+    fn answer_wake(&mut self, ctx: &egui::Context) {
+        if !vnr_native::instance::take_wake(&vnr_native::paths::wake_path()) {
+            return;
+        }
+        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+        self.note(
+            Draft::event("window raised").with_reason("a second launch asked this window to come forward"),
+        );
+    }
     /// Turn a close request into a hide, when that is what was asked for.
     /// The window is only ever hidden when there is a tray to bring it back, and the journal
     /// says so at the moment it happens: a person who closed a window and finds a process
@@ -433,7 +447,7 @@ impl App {
                 ScanMessage::Done(snapshot) => {
                     let snapshot = *snapshot;
                     self.note(Draft::event("scan").with_reason(&format!(
-                        "{} processes Ã‚Â· {} startup items Ã‚Â· {} listeners Ã‚Â· {} packages",
+                        "{} processes Ãƒâ€šÃ‚Â· {} startup items Ãƒâ€šÃ‚Â· {} listeners Ãƒâ€šÃ‚Â· {} packages",
                         snapshot.processes.len(),
                         snapshot.autoruns.len(),
                         snapshot.listeners.len(),
@@ -498,7 +512,7 @@ impl App {
                 worker::WatchMessage::Events(events) => {
                     for event in events {
                         self.note(Draft::event(&event.subject).with_reason(&format!(
-                            "{} Ã‚Â· {} Ã‚Â· {}",
+                            "{} Ãƒâ€šÃ‚Â· {} Ãƒâ€šÃ‚Â· {}",
                             event.kind.label(),
                             event.source,
                             event.detail
@@ -533,7 +547,7 @@ impl App {
                     EventKind::BaselineAccepted,
                     "This scan",
                     format!(
-                        "{} processes Ã‚Â· {} startup items",
+                        "{} processes Ãƒâ€šÃ‚Â· {} startup items",
                         snapshot.processes.len(),
                         snapshot.autoruns.len()
                     ),
@@ -615,7 +629,7 @@ impl App {
             }
             for (rule, subject, severity) in raised {
                 self.note(Draft::finding(&rule).with_reason(&format!(
-                    "{severity} Ã‚Â· {subject} Ã‚Â· raised from the rules engine"
+                    "{severity} Ãƒâ€šÃ‚Â· {subject} Ãƒâ€šÃ‚Â· raised from the rules engine"
                 )));
             }
         }
@@ -628,7 +642,8 @@ impl App {
             Action::CancelScan => {
                 if let Some(token) = &self.cancel {
                     token.store(true, Ordering::Relaxed);
-                    self.world.notice = Some("Stopping after the current collectorÃ¢â‚¬Â¦".to_owned());
+                    self.world.notice =
+                        Some("Stopping after the current collectorÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦".to_owned());
                 }
             }
             Action::ScanElevated => self.start_scan(ctx, true),
@@ -1097,6 +1112,7 @@ impl eframe::App for App {
                 );
             }
         }
+        self.answer_wake(&ctx);
         self.close_or_hide(&ctx);
         self.drain();
         self.drain_watch(&ctx);
