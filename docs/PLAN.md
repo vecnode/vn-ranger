@@ -656,6 +656,32 @@ compiles; it is done when the criterion is met and written down.
 tasks, macOS login items and listeners, MSIX/Snap/Flatpak packages, the real-time
 watcher, rules, cleaning. Each is a row in §7 or a milestone below, not a surprise.
 
+### M1.1 — v0.1.1, Professional interface
+
+The first release a person can leave open all day without the interface getting in the
+way. Detection work belongs to M2.
+
+- **Type:** Inter Regular and SemiBold plus JetBrains Mono, embedded in the binary;
+  13 px body, 21 px page title, 22 px largest display number, no system-font lookup.
+  The type scale lives in `theme.rs`, the fonts in `assets/fonts/`.
+- **Layout:** compact top bar and rail, full-width cards, responsive statistic and
+  preview columns, tables that scroll horizontally rather than paint over their
+  neighbour, and a visible page scrollbar. The minimum window is 920 × 600 logical
+  points; the layout is checked at 920, 1280 and 1600.
+- **Behaviour:** scroll position per view, window size/position and theme remembered,
+  keyboard navigation for the rail, tables and dialog, visible focus, accessible
+  labels, Escape closes a dialog, and the first-run and empty states say what was
+  checked rather than "clean".
+- **Feedback:** a scan progress line that names the current stage, an export action
+  that says where the file went, and a copy-path action beside every path.
+- **Exit:** screenshots at 1280 × 800 and 920 × 600 with no overlapping rectangles;
+  the dense table views scroll at both sizes; `cargo xtask ci` is green on three
+  operating systems; the release archive stays below 10 MB; first painted frame is
+  measured rather than inferred.
+
+The typography and responsive layout are in the repository now. The rest of M1.1 is
+open, and each item gets its own commit.
+
 ### M2 — v0.2.0, Watch and explain
 
 - **Real time:** a two-second process poll and `notify` watchers on Downloads, Desktop,

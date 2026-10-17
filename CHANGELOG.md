@@ -6,6 +6,14 @@ All notable changes to vn-ranger are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The interface now uses embedded Inter and JetBrains Mono, a compact 13 px body with a
+  21 px page title and a 22 px maximum display number, full-width cards and tighter
+  spacing. The statistic and preview columns respond to the window width, so rectangles
+  do not overlap on a small window; dense tables scroll horizontally and the page has a
+  visible scrollbar. Each view keeps its own scroll position.
+
 ## [0.1.0] - 2026-10-17
 
 ### Added

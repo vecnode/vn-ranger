@@ -29,6 +29,11 @@ The release archives contain one top-level directory, `vn-ranger-0.1.0/`, with t
 binary, `README.md` and `LICENSE`. That is the layout vn-launcher expects, and the
 published Windows binary was extracted and run headless before this file was written.
 
+The 0.1.1 interface embeds Inter and JetBrains Mono. A local 0.1.1 release build with
+them measures 15.64 MB for the Windows binary and a 6.37 MB zip, still below the 10 MB
+target. The published figures above remain the 0.1.0 release numbers until 0.1.1 ships
+and the three platform archives are measured again.
+
 ## How each number was taken
 
 - **Scan:** `vn-ranger --report <file>` on the same tree, taking `duration_ms` from the

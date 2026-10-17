@@ -2,6 +2,8 @@
 
 use egui::{Color32, Context, FontFamily, FontId, Stroke, TextStyle, Visuals};
 
+pub use crate::fonts::semibold;
+
 /// The suite's ember, the colour inside ranger's crystal.
 pub const EMBER: Color32 = Color32::from_rgb(242, 106, 33);
 /// A lighter ember for text and links on dark surfaces.
@@ -36,10 +38,10 @@ pub fn apply(ctx: &Context, dark: bool) {
         visuals.error_fg_color = BAD;
         visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, Color32::from_rgb(38, 44, 53));
         visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0, Color32::from_rgb(154, 161, 172));
-        visuals.widgets.inactive.bg_fill = Color32::from_rgb(22, 27, 34);
+        visuals.widgets.inactive.bg_fill = Color32::from_rgb(42, 48, 56);
         visuals.widgets.inactive.fg_stroke = Stroke::new(1.0, Color32::from_rgb(214, 218, 224));
-        visuals.widgets.hovered.bg_fill = Color32::from_rgb(32, 38, 48);
-        visuals.widgets.active.bg_fill = Color32::from_rgb(42, 49, 60);
+        visuals.widgets.hovered.bg_fill = Color32::from_rgb(52, 59, 70);
+        visuals.widgets.active.bg_fill = Color32::from_rgb(62, 70, 82);
     } else {
         visuals.panel_fill = Color32::from_rgb(247, 248, 250);
         visuals.window_fill = Color32::WHITE;
@@ -62,15 +64,23 @@ pub fn apply(ctx: &Context, dark: bool) {
     ctx.set_visuals(visuals);
 
     ctx.all_styles_mut(|style| {
-        style.spacing.item_spacing = egui::vec2(8.0, 8.0);
-        style.spacing.button_padding = egui::vec2(12.0, 7.0);
-        style.spacing.interact_size.y = 26.0;
+        style.spacing.item_spacing = egui::vec2(6.0, 6.0);
+        style.spacing.button_padding = egui::vec2(10.0, 6.0);
+        style.spacing.interact_size.y = 24.0;
+        style.spacing.scroll = egui::style::ScrollStyle {
+            floating: false,
+            foreground_color: false,
+            bar_width: 6.0,
+            bar_inner_margin: 4.0,
+            bar_outer_margin: 0.0,
+            ..Default::default()
+        };
         style.text_styles = [
-            (TextStyle::Heading, FontId::new(24.0, FontFamily::Proportional)),
-            (TextStyle::Body, FontId::new(14.0, FontFamily::Proportional)),
-            (TextStyle::Button, FontId::new(14.0, FontFamily::Proportional)),
-            (TextStyle::Small, FontId::new(12.0, FontFamily::Proportional)),
-            (TextStyle::Monospace, FontId::new(12.0, FontFamily::Monospace)),
+            (TextStyle::Heading, FontId::new(21.0, semibold())),
+            (TextStyle::Body, FontId::new(13.0, FontFamily::Proportional)),
+            (TextStyle::Button, FontId::new(12.5, semibold())),
+            (TextStyle::Small, FontId::new(11.0, FontFamily::Proportional)),
+            (TextStyle::Monospace, FontId::new(11.5, FontFamily::Monospace)),
         ]
         .into();
     });

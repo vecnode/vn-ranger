@@ -10,9 +10,12 @@ pub fn card<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
     egui::Frame::new()
         .fill(theme::surface(ui))
         .stroke(Stroke::new(1.0, theme::border(ui)))
-        .corner_radius(CornerRadius::same(12))
-        .inner_margin(Margin::same(16))
-        .show(ui, add)
+        .corner_radius(CornerRadius::same(10))
+        .inner_margin(Margin::same(14))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            add(ui)
+        })
         .inner
 }
 
@@ -20,11 +23,11 @@ pub fn card<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
 pub fn badge(ui: &mut egui::Ui, text: &str, color: Color32) {
     let galley = ui
         .painter()
-        .layout_no_wrap(text.to_owned(), FontId::proportional(11.0), color);
-    let padding = vec2(7.0, 3.0);
+        .layout_no_wrap(text.to_owned(), FontId::proportional(10.0), color);
+    let padding = vec2(6.0, 2.5);
     let (rect, _) = ui.allocate_exact_size(galley.size() + padding * 2.0, Sense::hover());
     ui.painter()
-        .rect_filled(rect, CornerRadius::same(6), color.gamma_multiply(0.16));
+        .rect_filled(rect, CornerRadius::same(5), color.gamma_multiply(0.16));
     ui.painter().galley(rect.min + padding, galley, color);
 }
 
@@ -41,16 +44,20 @@ pub fn health(ui: &mut egui::Ui, state: vnr_core::CollectorState) {
 /// A large number and its label.
 pub fn statistic(ui: &mut egui::Ui, value: usize, label: &str) {
     card(ui, |ui| {
-        ui.label(RichText::new(value.to_string()).size(28.0).strong());
-        ui.label(RichText::new(label).size(12.0).color(theme::muted(ui)));
+        ui.label(
+            RichText::new(value.to_string())
+                .size(22.0)
+                .family(theme::semibold()),
+        );
+        ui.label(RichText::new(label).size(11.0).color(theme::muted(ui)));
     });
 }
 
 /// A heading with a quiet subtitle.
 pub fn section(ui: &mut egui::Ui, title: &str, subtitle: &str) {
-    ui.label(RichText::new(title).size(16.0).strong());
+    ui.label(RichText::new(title).size(13.5).family(theme::semibold()));
     if !subtitle.is_empty() {
-        ui.label(RichText::new(subtitle).size(12.0).color(theme::muted(ui)));
+        ui.label(RichText::new(subtitle).size(11.0).color(theme::muted(ui)));
     }
 }
 
@@ -58,9 +65,9 @@ pub fn section(ui: &mut egui::Ui, title: &str, subtitle: &str) {
 pub fn empty(ui: &mut egui::Ui, title: &str, body: &str) {
     ui.vertical_centered(|ui| {
         ui.add_space(36.0);
-        ui.label(RichText::new(title).size(18.0).strong());
+        ui.label(RichText::new(title).size(16.0).family(theme::semibold()));
         ui.add_space(4.0);
-        ui.label(RichText::new(body).size(13.0).color(theme::muted(ui)));
+        ui.label(RichText::new(body).size(12.0).color(theme::muted(ui)));
         ui.add_space(24.0);
     });
 }
@@ -69,11 +76,11 @@ pub fn empty(ui: &mut egui::Ui, title: &str, body: &str) {
 pub fn key_value(ui: &mut egui::Ui, key: &str, value: &str) {
     ui.horizontal(|ui| {
         ui.add_sized(
-            [110.0, 18.0],
-            egui::Label::new(RichText::new(key).size(12.0).color(theme::muted(ui))),
+            [100.0, 16.0],
+            egui::Label::new(RichText::new(key).size(10.5).color(theme::muted(ui))),
         );
         ui.add(
-            egui::Label::new(RichText::new(value).size(12.0).monospace())
+            egui::Label::new(RichText::new(value).size(11.5).monospace())
                 .truncate()
                 .selectable(true),
         );
@@ -87,7 +94,7 @@ pub fn path(ui: &mut egui::Ui, value: &str) {
         return;
     }
     ui.add(
-        egui::Label::new(RichText::new(value).size(12.0).monospace())
+        egui::Label::new(RichText::new(value).size(11.5).monospace())
             .wrap()
             .selectable(true),
     );
@@ -108,6 +115,6 @@ pub fn dot_line(ui: &mut egui::Ui, color: Color32, text: &str) {
     ui.horizontal(|ui| {
         let (rect, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
         ui.painter().circle_filled(rect.center(), 4.0, color);
-        ui.label(RichText::new(text).size(12.0).color(theme::muted(ui)));
+        ui.label(RichText::new(text).size(11.5).color(theme::muted(ui)));
     });
 }

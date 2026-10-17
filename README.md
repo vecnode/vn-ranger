@@ -55,3 +55,6 @@ quarantine, clean or modify anything yet.
 ## Licence
 
 MIT — see [LICENSE](LICENSE). The mark is original vecnode work.
+
+The bundled typefaces are Inter and JetBrains Mono, both under the SIL Open Font
+License 1.1; their licence texts and sources are in [assets/fonts](assets/fonts).

@@ -5,10 +5,10 @@ machine, explains what is unusual, remembers a baseline, and — later, and care
 quarantines and cleans. It is written in **Rust only**: a native egui/eframe
 application, with **no Tauri, Electron, webview or JavaScript build step**.
 
-**Status:** v0.1.0 is in the repository. The read-only inventory, the local hash
-signature engine and the one-shot administrator scan work. Rules, cleaning, the
-real-time watcher and the tray are still ahead. This file is the contract for all of
-it, written before the features that will need it.
+**Status:** v0.1.0 is released; v0.1.1 interface work is in the repository. The
+read-only inventory, the local hash signature engine and the one-shot administrator
+scan work. Rules, cleaning, the real-time watcher and the tray are still ahead. This
+file is the contract for all of it, written before the features that will need it.
 
 `docs/PLAN.md` explains the research, the scope and the architecture.
 `docs/RELEASES.md` is the distribution contract. `SECURITY.md` is the promise to the
@@ -23,13 +23,14 @@ crates/
   native    vnr-native   the only crate that touches the world:
                          collect/{processes,autoruns,listeners,packages},
                          hash, signatures, elevation, paths, store, scan
-  ui        vnr-ui       egui: theme, icons, widgets, the six views, World/Action
+  ui        vnr-ui       egui: theme, fonts, icons, widgets, the six views, World/Action
 apps/
   vn-ranger              the eframe shell: owns the World, runs the worker,
                          carries out actions, and the headless report mode
 xtask/                   cargo xtask ci | fmt-fix | lint | test | check | version
 assets/
   logo/                  the mark, BRAND.md, MANIFEST.toml, contact sheet
+  fonts/                 Inter and JetBrains Mono, OFL texts, type notes
   screenshots/           the picture the README uses
 docs/                    PLAN, RELEASES, BENCHMARKS
 ```
@@ -281,6 +282,7 @@ A change is done when:
 | The worker | `apps/vn-ranger/src/app.rs` | A worker that sends `Done` and then closes is normal; a channel that closes without a terminal message is a failure. |
 | egui 0.37 | `crates/ui/src/lib.rs` | Panels are built from the root `Ui`, not the `Context`; `Context::style` is per-theme now. |
 | The mark | `assets/logo/BRAND.md` | The geometry is a suite identifier; only the inlay changes. |
+| Type | `crates/ui/src/fonts.rs`, `assets/fonts/` | Fonts are embedded with `include_bytes!` and installed before the first frame; Semibold is a real family, not synthesised. |
 
 ## 12. If in doubt
 

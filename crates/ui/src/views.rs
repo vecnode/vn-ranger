@@ -28,12 +28,33 @@ impl Ui {
             return;
         };
         let counts = snapshot.counts();
-        ui.columns(4, |columns| {
-            widgets::statistic(&mut columns[0], counts.processes, "Processes");
-            widgets::statistic(&mut columns[1], counts.autoruns, "Startup items");
-            widgets::statistic(&mut columns[2], counts.listeners, "Listeners");
-            widgets::statistic(&mut columns[3], counts.packages, "Packages");
-        });
+        let width = ui.available_width();
+        if width >= 720.0 {
+            ui.columns(4, |columns| {
+                widgets::statistic(&mut columns[0], counts.processes, "Processes");
+                widgets::statistic(&mut columns[1], counts.autoruns, "Startup items");
+                widgets::statistic(&mut columns[2], counts.listeners, "Listeners");
+                widgets::statistic(&mut columns[3], counts.packages, "Packages");
+            });
+        } else if width >= 560.0 {
+            ui.columns(2, |columns| {
+                widgets::statistic(&mut columns[0], counts.processes, "Processes");
+                widgets::statistic(&mut columns[1], counts.autoruns, "Startup items");
+            });
+            ui.add_space(6.0);
+            ui.columns(2, |columns| {
+                widgets::statistic(&mut columns[0], counts.listeners, "Listeners");
+                widgets::statistic(&mut columns[1], counts.packages, "Packages");
+            });
+        } else {
+            widgets::statistic(ui, counts.processes, "Processes");
+            ui.add_space(6.0);
+            widgets::statistic(ui, counts.autoruns, "Startup items");
+            ui.add_space(6.0);
+            widgets::statistic(ui, counts.listeners, "Listeners");
+            ui.add_space(6.0);
+            widgets::statistic(ui, counts.packages, "Packages");
+        }
         ui.add_space(10.0);
 
         if snapshot.has_matches() {
@@ -43,10 +64,16 @@ impl Ui {
         }
         ui.add_space(10.0);
 
-        ui.columns(2, |columns| {
-            startup_preview(&mut columns[0], snapshot);
-            listener_preview(&mut columns[1], snapshot);
-        });
+        if width >= 720.0 {
+            ui.columns(2, |columns| {
+                startup_preview(&mut columns[0], snapshot);
+                listener_preview(&mut columns[1], snapshot);
+            });
+        } else {
+            startup_preview(ui, snapshot);
+            ui.add_space(8.0);
+            listener_preview(ui, snapshot);
+        }
         ui.add_space(10.0);
         collectors_card(ui, snapshot);
         ui.add_space(10.0);
@@ -79,8 +106,9 @@ impl Ui {
             .color(theme::muted(ui)),
         );
         let mut clicked = None;
-        egui::ScrollArea::vertical()
+        egui::ScrollArea::both()
             .auto_shrink([false, false])
+            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
             .max_height(380.0)
             .show(ui, |ui| {
                 egui::Grid::new("process-table")
@@ -103,7 +131,7 @@ impl Ui {
                             }
                             ui.label(
                                 RichText::new(process.user.as_deref().unwrap_or("—"))
-                                    .size(12.0)
+                                    .size(11.5)
                                     .color(theme::muted(ui)),
                             );
                             ui.label(
@@ -111,7 +139,7 @@ impl Ui {
                                     || "—".to_owned(),
                                     |then| describe_age(world.now_unix, then),
                                 ))
-                                .size(12.0)
+                                .size(11.5)
                                 .color(theme::muted(ui)),
                             );
                             ui.end_row();
@@ -156,8 +184,9 @@ impl Ui {
             .color(theme::muted(ui)),
         );
         let mut clicked = None;
-        egui::ScrollArea::vertical()
+        egui::ScrollArea::both()
             .auto_shrink([false, false])
+            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
             .max_height(420.0)
             .show(ui, |ui| {
                 egui::Grid::new("startup-table")
@@ -177,7 +206,7 @@ impl Ui {
                             }
                             ui.label(
                                 RichText::new(autorun.kind.label())
-                                    .size(12.0)
+                                    .size(11.5)
                                     .color(theme::muted(ui)),
                             );
                             widgets::badge(ui, autorun.scope.label(), scope_color(autorun.scope));
@@ -198,7 +227,11 @@ impl Ui {
             let mut open_path = None;
             widgets::card(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(autorun.name.as_str()).size(16.0).strong());
+                    ui.label(
+                        RichText::new(autorun.name.as_str())
+                            .size(14.0)
+                            .family(theme::semibold()),
+                    );
                     widgets::badge(ui, autorun.kind.label(), theme::EMBER);
                     if snapshot
                         .signatures
@@ -253,8 +286,9 @@ impl Ui {
                 .color(theme::muted(ui)),
         );
         let mut clicked_pid = None;
-        egui::ScrollArea::vertical()
+        egui::ScrollArea::both()
             .auto_shrink([false, false])
+            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
             .max_height(480.0)
             .show(ui, |ui| {
                 egui::Grid::new("listener-table")
@@ -270,14 +304,18 @@ impl Ui {
                         header(ui, "State");
                         ui.end_row();
                         for listener in &rows {
-                            ui.label(RichText::new(listener.protocol.label()).size(12.0).strong());
+                            ui.label(
+                                RichText::new(listener.protocol.label())
+                                    .size(11.5)
+                                    .family(theme::semibold()),
+                            );
                             ui.horizontal(|ui| {
                                 if listener.public {
                                     widgets::badge(ui, "PUBLIC", theme::ATTENTION);
                                 }
-                                ui.label(RichText::new(listener.address.as_str()).size(12.0).monospace());
+                                ui.label(RichText::new(listener.address.as_str()).size(11.5).monospace());
                             });
-                            ui.label(RichText::new(listener.port.to_string()).size(12.0).monospace());
+                            ui.label(RichText::new(listener.port.to_string()).size(11.5).monospace());
                             if ui
                                 .selectable_label(false, listener.process.as_deref().unwrap_or("unknown"))
                                 .clicked()
@@ -288,7 +326,7 @@ impl Ui {
                                 RichText::new(
                                     listener.pid.map_or_else(|| "—".to_owned(), |pid| pid.to_string()),
                                 )
-                                .size(12.0)
+                                .size(11.5)
                                 .color(theme::muted(ui)),
                             );
                             ui.label(
@@ -314,13 +352,13 @@ impl Ui {
             return;
         };
         widgets::card(ui, |ui| {
-            ui.label(RichText::new("Export").strong());
+            ui.label(RichText::new("Export").family(theme::semibold()));
             ui.add_space(4.0);
             ui.label(
                 RichText::new(
                     "JSON is the complete snapshot. Markdown is the same report a person can read.",
                 )
-                .size(12.0)
+                .size(11.5)
                 .color(theme::muted(ui)),
             );
             ui.horizontal(|ui| {
@@ -337,7 +375,7 @@ impl Ui {
         });
         ui.add_space(10.0);
         widgets::card(ui, |ui| {
-            ui.label(RichText::new("This scan").strong());
+            ui.label(RichText::new("This scan").family(theme::semibold()));
             ui.add_space(4.0);
             widgets::key_value(ui, "Generated", &format_utc(snapshot.taken_at_unix));
             widgets::key_value(ui, "Duration", &format!("{} ms", snapshot.duration_ms));
@@ -351,13 +389,13 @@ impl Ui {
         });
         ui.add_space(10.0);
         widgets::card(ui, |ui| {
-            ui.label(RichText::new("What this report is not").strong());
+            ui.label(RichText::new("What this report is not").family(theme::semibold()));
             ui.add_space(4.0);
             ui.label(
                 RichText::new(
                     "It is an inventory, not a verdict. A fact that is absent does not mean it was not there. No numeric threat score exists, and no data left this machine.",
                 )
-                .size(12.0)
+                .size(11.5)
                 .color(theme::muted(ui)),
             );
         });
@@ -366,7 +404,7 @@ impl Ui {
     /// Preferences, elevation and privacy.
     pub(crate) fn settings(&mut self, ui: &mut egui::Ui, world: &crate::World, actions: &mut Vec<Action>) {
         widgets::card(ui, |ui| {
-            ui.label(RichText::new("Appearance").strong());
+            ui.label(RichText::new("Appearance").family(theme::semibold()));
             ui.checkbox(&mut self.dark, "Dark theme");
             ui.label(
                 RichText::new("The interface follows the suite's palette. A light theme is included.")
@@ -376,7 +414,7 @@ impl Ui {
         });
         ui.add_space(10.0);
         widgets::card(ui, |ui| {
-            ui.label(RichText::new("Elevation").strong());
+            ui.label(RichText::new("Elevation").family(theme::semibold()));
             ui.add_space(4.0);
             if world.elevated {
                 widgets::dot_line(ui, theme::OK, "This window is running with administrator rights.");
@@ -391,7 +429,7 @@ impl Ui {
                 RichText::new(
                     "An administrator scan can read services, other users' startup items and sockets that a standard account cannot. Windows asks for consent; the elevated copy writes one report and exits. It does not stay open and it does not delete anything.",
                 )
-                .size(12.0)
+                .size(11.5)
                 .color(theme::muted(ui)),
             );
             let response = ui.add_enabled(
@@ -412,7 +450,7 @@ impl Ui {
         });
         ui.add_space(10.0);
         widgets::card(ui, |ui| {
-            ui.label(RichText::new("Signatures").strong());
+            ui.label(RichText::new("Signatures").family(theme::semibold()));
             ui.add_space(4.0);
             let (loaded, algorithms) = world.snapshot().map_or((0, Vec::new()), |snapshot| {
                 (snapshot.signatures.loaded, snapshot.signatures.algorithms.clone())
@@ -427,7 +465,7 @@ impl Ui {
                         format!(" ({})", algorithms.join(", "))
                     }
                 ))
-                .size(12.0)
+                .size(11.5)
                 .color(theme::muted(ui)),
             );
             ui.label(
@@ -448,7 +486,7 @@ impl Ui {
         });
         ui.add_space(10.0);
         widgets::card(ui, |ui| {
-            ui.label(RichText::new("Privacy").strong());
+            ui.label(RichText::new("Privacy").family(theme::semibold()));
             ui.add_space(4.0);
             widgets::dot_line(ui, theme::OK, "No network. No telemetry. No account.");
             widgets::key_value(ui, "Data folder", &world.data_dir.display().to_string());
@@ -459,13 +497,13 @@ impl Ui {
         });
         ui.add_space(10.0);
         widgets::card(ui, |ui| {
-            ui.label(RichText::new("About").strong());
+            ui.label(RichText::new("About").family(theme::semibold()));
             ui.label(
                 RichText::new(format!(
                     "vn-ranger {} · MIT · Rust and egui, no webview.",
                     world.version
                 ))
-                .size(12.0)
+                .size(11.5)
                 .color(theme::muted(ui)),
             );
             ui.label(
@@ -491,17 +529,18 @@ fn signature_matches_card(ui: &mut egui::Ui, snapshot: &Snapshot) {
                     "{} file(s) matched a local signature",
                     snapshot.signatures.matches.len()
                 ))
-                .strong(),
+                .size(12.5)
+                .family(theme::semibold()),
             );
         });
         ui.add_space(4.0);
         for hit in snapshot.signatures.matches.iter().take(5) {
-            ui.label(RichText::new(format!("{} · {}", hit.name, hit.path)).size(12.0));
+            ui.label(RichText::new(format!("{} · {}", hit.name, hit.path)).size(11.5));
         }
         if snapshot.signatures.matches.len() > 5 {
             ui.label(
                 RichText::new(format!("and {} more", snapshot.signatures.matches.len() - 5))
-                    .size(12.0)
+                    .size(11.5)
                     .color(theme::muted(ui)),
             );
         }
@@ -519,7 +558,7 @@ fn signature_matches_card(ui: &mut egui::Ui, snapshot: &Snapshot) {
 fn signature_card(ui: &mut egui::Ui, snapshot: &Snapshot, actions: &mut Vec<Action>) {
     widgets::card(ui, |ui| {
         ui.horizontal(|ui| {
-            ui.label(RichText::new("Local signature database").strong());
+            ui.label(RichText::new("Local signature database").family(theme::semibold()));
             widgets::badge(ui, &format!("{} LOADED", snapshot.signatures.loaded), theme::OK);
         });
         ui.label(
@@ -531,7 +570,7 @@ fn signature_card(ui: &mut egui::Ui, snapshot: &Snapshot, actions: &mut Vec<Acti
                     snapshot.signatures.algorithms.join(", ")
                 )
             })
-            .size(12.0)
+            .size(11.5)
             .color(theme::muted(ui)),
         );
         for note in snapshot.signatures.notes.iter().take(2) {
@@ -550,20 +589,15 @@ fn signature_card(ui: &mut egui::Ui, snapshot: &Snapshot, actions: &mut Vec<Acti
 
 fn startup_preview(ui: &mut egui::Ui, snapshot: &Snapshot) {
     widgets::card(ui, |ui| {
-        ui.label(RichText::new("Startup items").strong());
+        ui.label(RichText::new("Startup items").family(theme::semibold()));
         ui.add_space(4.0);
         if snapshot.autoruns.is_empty() {
-            ui.label(RichText::new("None visible.").size(12.0).color(theme::muted(ui)));
+            ui.label(RichText::new("None visible.").size(11.5).color(theme::muted(ui)));
         }
         for autorun in snapshot.autoruns.iter().take(6) {
             ui.horizontal(|ui| {
                 widgets::badge(ui, autorun.scope.label(), scope_color(autorun.scope));
-                ui.add(egui::Label::new(RichText::new(autorun.name.as_str()).size(12.0)).truncate());
-                ui.label(
-                    RichText::new(autorun.kind.label())
-                        .size(11.0)
-                        .color(theme::muted(ui)),
-                );
+                ui.add(egui::Label::new(RichText::new(autorun.name.as_str()).size(11.5)).truncate());
             });
         }
     });
@@ -571,7 +605,7 @@ fn startup_preview(ui: &mut egui::Ui, snapshot: &Snapshot) {
 
 fn listener_preview(ui: &mut egui::Ui, snapshot: &Snapshot) {
     widgets::card(ui, |ui| {
-        ui.label(RichText::new("Listening on all interfaces").strong());
+        ui.label(RichText::new("Listening on all interfaces").family(theme::semibold()));
         ui.add_space(4.0);
         let public: Vec<_> = snapshot
             .listeners
@@ -581,22 +615,25 @@ fn listener_preview(ui: &mut egui::Ui, snapshot: &Snapshot) {
         if public.is_empty() {
             ui.label(
                 RichText::new("Nothing is bound to a public interface.")
-                    .size(12.0)
+                    .size(11.5)
                     .color(theme::muted(ui)),
             );
         }
         for listener in public.iter().take(6) {
             ui.horizontal(|ui| {
                 widgets::badge(ui, listener.protocol.label(), theme::ATTENTION);
-                ui.label(
-                    RichText::new(format!("{}:{}", listener.address, listener.port))
-                        .size(12.0)
-                        .monospace(),
-                );
-                ui.label(
-                    RichText::new(listener.process.as_deref().unwrap_or("unknown process"))
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(format!(
+                            "{}:{} · {}",
+                            listener.address,
+                            listener.port,
+                            listener.process.as_deref().unwrap_or("unknown")
+                        ))
                         .size(11.0)
-                        .color(theme::muted(ui)),
+                        .monospace(),
+                    )
+                    .truncate(),
                 );
             });
         }
@@ -605,14 +642,14 @@ fn listener_preview(ui: &mut egui::Ui, snapshot: &Snapshot) {
 
 fn collectors_card(ui: &mut egui::Ui, snapshot: &Snapshot) {
     widgets::card(ui, |ui| {
-        ui.label(RichText::new("What was checked").strong());
+        ui.label(RichText::new("What was checked").family(theme::semibold()));
         ui.add_space(4.0);
         for status in &snapshot.collectors {
             ui.horizontal(|ui| {
                 widgets::health(ui, status.state);
                 ui.add_sized(
                     [180.0, 18.0],
-                    egui::Label::new(RichText::new(status.label.as_str()).size(12.0)),
+                    egui::Label::new(RichText::new(status.label.as_str()).size(11.5)),
                 );
                 ui.label(
                     RichText::new(status.items.to_string())
@@ -630,7 +667,11 @@ fn collectors_card(ui: &mut egui::Ui, snapshot: &Snapshot) {
 fn process_detail(ui: &mut egui::Ui, process: &ProcessFact, now: u64) {
     widgets::card(ui, |ui| {
         ui.horizontal(|ui| {
-            ui.label(RichText::new(process.name.as_str()).size(16.0).strong());
+            ui.label(
+                RichText::new(process.name.as_str())
+                    .size(14.0)
+                    .family(theme::semibold()),
+            );
             widgets::badge(ui, &format!("PID {}", process.pid), theme::EMBER);
         });
         ui.add_space(4.0);
@@ -660,7 +701,12 @@ fn process_detail(ui: &mut egui::Ui, process: &ProcessFact, now: u64) {
 }
 
 fn header(ui: &mut egui::Ui, text: &str) {
-    ui.label(RichText::new(text).size(11.0).strong().color(theme::muted(ui)));
+    ui.label(
+        RichText::new(text)
+            .size(10.0)
+            .family(theme::semibold())
+            .color(theme::muted(ui)),
+    );
 }
 
 fn scope_color(scope: AutorunScope) -> Color32 {
