@@ -48,7 +48,7 @@ assets/
   fonts/                 Inter and JetBrains Mono, OFL texts, type notes
   screenshots/           the picture the README uses
 packs/                   the first-party rule pack, signed like any other (from 0.1.6)
-docs/                    PLAN, RELEASES, BENCHMARKS, and RULES (from 0.1.6)
+docs/                    PLAN, RELEASES, BENCHMARKS and RULES
 ```
 
 **Layering is a rule, not a suggestion.**
