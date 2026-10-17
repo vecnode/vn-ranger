@@ -13,6 +13,8 @@
 //! Signature verification happens before this file is reached: a pack that was not signed by
 //! a trusted key is refused, and its bytes are never parsed.
 
+pub mod active;
+
 use std::fmt;
 
 use serde::Deserialize;
