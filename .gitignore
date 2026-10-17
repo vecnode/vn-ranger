@@ -14,3 +14,7 @@ desktop.ini
 # Local scratch: a developer's own notes or rule packs, never committed
 /scratch/
 *.local.toml
+
+# Release asset verification downloads
+/.release-check/
+/.ci-*.log
