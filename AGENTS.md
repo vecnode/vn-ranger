@@ -5,10 +5,11 @@ machine, explains what is unusual, remembers a baseline, and — later, and care
 quarantines and cleans. It is written in **Rust only**: a native egui/eframe
 application, with **no Tauri, Electron, webview or JavaScript build step**.
 
-**Status:** v0.1.1 is released; 0.1.2 adds the watcher and the baseline. The
-read-only inventory, the local hash signature engine and the one-shot administrator
-scan work. Rules, findings, cleaning and the tray are still ahead. This file is the
-contract for all of it, written before the features that will need it.
+**Status:** v0.1.2 is released; 0.1.3 is the next line. The read-only inventory, the
+local hash signature engine, the one-shot administrator scan, the two-second process
+poll, the file watchers and the accepted baseline work. Rules, findings, cleaning and
+the tray are still ahead. This file is the contract for all of it, written before the
+features that will need it.
 
 `docs/PLAN.md` explains the research, the scope and the architecture.
 `docs/RELEASES.md` is the distribution contract. `SECURITY.md` is the promise to the
@@ -80,7 +81,7 @@ act on — never a panic.
 
 ### Never delete
 
-- Read-only is the default. There is no deletion API in v0.1.1, on purpose.
+- Read-only is the default. There is no deletion API in v0.1.2, on purpose.
 - When quarantine arrives in v0.1.4: quarantine before delete, preview before action,
   and an allowlist of cache, temporary and log locations. User documents are excluded
   by construction, not by a heuristic.

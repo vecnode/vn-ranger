@@ -1,11 +1,11 @@
 # The plan — vn-ranger
 
-**Status:** v0.1.1 ships the interface pass, the full-tab tables and the row footers;
-0.1.2 builds the watcher, the timeline and the baseline, with its idle-budget soak
-still owed. The read-only inventory, the local hash-signature engine and the one-shot
-administrator scan are in the repository.
-The sections below that describe rules, cleaning, residency and deeper platform access
-are the plan for what follows.
+**Status:** v0.1.2 ships the process poll, the file watchers, the session timeline and the
+accepted baseline; its 30-minute idle soak passed and is published in
+[`docs/BENCHMARKS.md`](BENCHMARKS.md). The read-only inventory, the local hash-signature
+engine and the one-shot administrator scan remain in the repository. The sections below
+that describe rules, cleaning, residency and deeper platform access are the plan for what
+follows.
 **Audience:** the maintainer, future contributors, and anyone deciding whether to
 trust this program with a machine.
 **What this document is:** the research behind ranger, the scope it will and will not
@@ -686,7 +686,7 @@ way. Detection work belongs to M2.
 The typography, responsive layout and full-tab tables shipped in v0.1.1. The open items
 above are the next interface pass, not part of this release.
 
-### M2 — v0.1.2, Watch — **built; budgets owed**
+### M2 — v0.1.2, Watch — **shipped**
 
 The machine stops being a snapshot and becomes a series with a diff. Nothing is judged:
 no rules, no findings, no deletion, no journal and no tray. The release answers one
@@ -715,9 +715,11 @@ fixtures; a new file yields exactly one scan; no view says "nothing changed" whe
 collector was unavailable; the idle budgets hold over 30 minutes and are published;
 `cargo xtask ci` is green on three operating systems.
 
-The code for every item is in the tree and its unit tests pass. The 30-minute idle
-soak and its published numbers are still owed, so the milestone is built rather than
-done.
+The poll and the watcher are in the tree, their unit tests pass, and the 30-minute idle
+soak measured 0.387% of one core and a 173 MB working set with the window visible — both
+inside the budgets in §11. The 300-process poll cost is the one measurement still owed:
+this environment exposes 32 processes, so it cannot answer that row. It stays named in
+`docs/BENCHMARKS.md` rather than being assumed.
 
 ### M3 — v0.1.3, Explain
 

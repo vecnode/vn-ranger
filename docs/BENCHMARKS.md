@@ -64,14 +64,40 @@ The private-bytes figure (367 MB) is larger than the working set because wgpu re
 address space it may never touch. Working set is the number a person feels in Task
 Manager, so it is the one the budget tracks.
 
-## 0.1.2, still owed
+## v0.1.2 — watch
 
-The poll and the watcher are built; their cost is not yet published:
+Measured on 2026-10-17 on the same Windows 11 machine, from the release build, with the
+window visible and the process poll and file watcher running for 30 minutes. Sixty
+samples, 30 s apart; the CPU figure is the delta between the first and last sample, so
+window creation and the first scan are excluded.
 
-- The poll's refresh at 300 processes (target: under 10 ms).
-- Idle CPU and working set with the poll and the watcher running for 30 minutes.
+| Measure | Result | Target | Verdict |
+|---|---:|---:|---|
+| Idle CPU, one core | 0.387% | < 0.5% | met |
+| Idle working set | 171.6–173.0 MB | ≤ 200 MB | met |
+| Idle private bytes | 374.4 → 373.8 MB | — | flat over the run |
+| Poll cadence | 2 s (904 polls; one 3 s gap) | 2 s | met |
+| Errors in 30 minutes | 0 | 0 | met |
+| Working-set growth | +0.7 MB over 29.5 min | — | no leak signal at this length |
+
+A two-minute check of the final build, after the About window was added, measured
+0.286% CPU; the difference from the 30-minute run is window state and noise, not
+behaviour.
+
+The application saw **32 processes** here. That is the one number the soak cannot speak
+for: the poll cost at the 300-process case needs a full desktop and is still owed, so
+the figure above is an idle-behaviour measurement, not a promise about a busy machine.
+
+The window was left visible for the whole run. A minimized window has its working set
+trimmed by the operating system, which would have made the memory figure meaningless.
+
+## Still owed
+
+- The poll's refresh at 300 processes (target: under 10 ms). This environment exposes 32,
+  so the run above cannot answer it.
 - The delay from a file being written to its hash appearing in the timeline.
-- The debounce under a burst: one editor save must produce one event, not four.
+- The debounce under a burst, measured rather than tested: one editor save must produce
+  one event, not four. The behaviour is covered by unit tests; the timing is not.
 
 When these exist they belong in the table above, not in a promise.
 

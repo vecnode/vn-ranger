@@ -6,6 +6,8 @@ All notable changes to vn-ranger are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-17
+
 ### Added
 
 - A two-second process poll. New, gone and replaced processes are recorded; a reused pid
@@ -17,6 +19,11 @@ All notable changes to vn-ranger are recorded here. The format follows
 - A Changes view: the session timeline and the baseline diff, with empty states that
   name what was checked.
 - Switches for the poll and the watcher in Settings. They last for the session.
+- A live poll indicator in the top bar that steps as each poll arrives; Settings can
+  hide it.
+- An About window from the circle in the top bar, showing the project page as selectable
+  text. Ranger does not open a browser and fetches nothing.
+- The interface, the window title and the About line report 0.1.2.
 
 ### Changed
 
@@ -26,6 +33,8 @@ All notable changes to vn-ranger are recorded here. The format follows
 - The roadmap is one theme per release: 0.1.2 watch, 0.1.3 explain, 0.1.4 act, 0.1.5
   resident, 0.1.6 rule packs, 0.2.0 distribution. `docs/PLAN.md` and `AGENTS.md` now
   agree on where signature verification and quarantine land.
+- The dependency allowlist admits CC0-1.0 for `notify` alone, with the macOS build using
+  kqueue rather than `fsevent-sys`.
 
 ## [0.1.1] - 2026-10-17
 
@@ -75,6 +84,7 @@ All notable changes to vn-ranger are recorded here. The format follows
 - vn-launcher cannot install the release until its own install path ships; ranger is
   built to the contract now.
 
-[Unreleased]: https://github.com/vecnode/vn-ranger/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/vecnode/vn-ranger/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/vecnode/vn-ranger/releases/tag/v0.1.2
 [0.1.1]: https://github.com/vecnode/vn-ranger/releases/tag/v0.1.1
 [0.1.0]: https://github.com/vecnode/vn-ranger/releases/tag/v0.1.0
