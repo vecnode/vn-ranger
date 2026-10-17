@@ -30,6 +30,9 @@ struct Open {
     seq: u64,
     lines: u64,
     first_seq: u64,
+    /// How many lines this process has written, across rotations. The soak reads it, so it
+    /// is a fact about the writer rather than an estimate from the file's size.
+    written: u64,
 }
 
 impl Journal {
@@ -70,6 +73,7 @@ impl Journal {
                 seq,
                 lines,
                 first_seq,
+                written: 0,
             }),
             blocked: None,
         })
@@ -107,6 +111,16 @@ impl Journal {
         self.append(draft, true)
     }
 
+    /// How many lines this process has written, across rotations.
+    ///
+    /// A fact about the writer rather than an estimate from the file: the soak publishes it
+    /// next to the CPU it cost, and a number guessed from a file's size would be a lie that
+    /// looks like a measurement.
+    #[must_use]
+    pub fn writes(&self) -> u64 {
+        self.inner.as_ref().map_or(0, |open| open.written)
+    }
+
     fn append(&mut self, draft: Draft, synced: bool) -> io::Result<JournalEntry> {
         let seq = match self.inner.as_ref() {
             Some(open) => open.seq.saturating_add(1),
@@ -132,6 +146,7 @@ impl Journal {
                 if result.is_ok() {
                     open.seq = entry.seq;
                     open.lines = open.lines.saturating_add(1);
+                    open.written = open.written.saturating_add(1);
                     if open.first_seq == 0 {
                         open.first_seq = entry.seq;
                     }
@@ -158,8 +173,8 @@ impl Journal {
     /// The new file starts at the next sequence number, so the journal's order survives
     /// the split and a reader sorts the files by the number in their name.
     pub fn rotate_if_needed(&mut self) -> io::Result<bool> {
-        let (lines, first_seq, seq) = match self.inner.as_ref() {
-            Some(open) => (open.lines, open.first_seq, open.seq),
+        let (lines, first_seq, seq, written) = match self.inner.as_ref() {
+            Some(open) => (open.lines, open.first_seq, open.seq, open.written),
             None => return Ok(false),
         };
         if lines < ENTRIES_PER_FILE || first_seq == 0 {
@@ -174,6 +189,7 @@ impl Journal {
             seq,
             lines: 0,
             first_seq: 0,
+            written,
         });
         Ok(true)
     }

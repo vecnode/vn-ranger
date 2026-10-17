@@ -63,6 +63,9 @@ fn main() -> eframe::Result<()> {
     // A login launch carries `--background`: the window belongs in the status area rather
     // than on top of whatever the person just opened.
     let background = std::env::args_os().any(|argument| argument.to_string_lossy() == "--background");
+    // One line a minute for a resident run: this is what the budgets in the plan are
+    // measured on, so it is a flag rather than something the product does unasked.
+    let soak = arg_value("--soak");
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -81,7 +84,7 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "vn-ranger",
         options,
-        Box::new(move |cc| Ok(Box::new(app::App::new(cc, background, instance)))),
+        Box::new(move |cc| Ok(Box::new(app::App::new(cc, background, instance, soak)))),
     )
 }
 

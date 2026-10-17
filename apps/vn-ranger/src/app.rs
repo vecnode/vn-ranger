@@ -11,6 +11,9 @@ use vnr_ui::{Action, Live, ScanState, Ui, WatchReport, World};
 
 use crate::worker::{self, ScanMessage};
 
+/// How often the soak recorder appends a sample.
+const SOAK_INTERVAL_SECONDS: u64 = 60;
+
 /// The eframe application.
 pub struct App {
     ui: Ui,
@@ -51,6 +54,12 @@ pub struct App {
     quitting: bool,
     /// Whether this launch came from the login entry, and so starts out of the way.
     background: bool,
+    /// The soak recorder, when `--soak` asked for one.
+    soak: Option<vnr_native::soak::Soak>,
+    /// What the shell has done since the last sample.
+    counters: vnr_native::soak::Counters,
+    /// When the last soak sample was taken.
+    last_soak_unix: u64,
 }
 
 impl App {
@@ -60,8 +69,17 @@ impl App {
         cc: &eframe::CreationContext<'_>,
         background: bool,
         instance: vnr_native::instance::InstanceGuard,
+        soak_path: Option<std::path::PathBuf>,
     ) -> Self {
         let settings = vnr_native::store::load_ui_settings();
+        let soak = match soak_path.as_deref().map(vnr_native::soak::Soak::open) {
+            None => None,
+            Some(Ok(soak)) => Some(soak),
+            Some(Err(reason)) => {
+                eprintln!("vn-ranger: {reason}");
+                None
+            }
+        };
         let snapshot = vnr_native::store::load_last();
         let (baseline, baseline_error) = match vnr_native::store::read_baseline() {
             vnr_native::store::BaselineLoad::Present(snapshot) => (Some(*snapshot), None),
@@ -164,6 +182,9 @@ impl App {
             paused: false,
             quitting: false,
             background,
+            soak,
+            counters: vnr_native::soak::Counters::default(),
+            last_soak_unix: 0,
         };
         if app.world.snapshot.is_none() {
             app.start_scan(&cc.egui_ctx, false);
@@ -356,6 +377,30 @@ impl App {
         }
     }
 
+    /// Append one soak sample a minute, when a soak was asked for.
+    ///
+    /// A minute is the interval the published budget is measured over, and the write is
+    /// small: one line, flushed. A failure is reported once and then stops, because a full
+    /// disk retried every frame is a second fault.
+    fn soak_sample(&mut self) {
+        let Some(soak) = self.soak.as_mut() else {
+            return;
+        };
+        let now = now_unix();
+        if now.saturating_sub(self.last_soak_unix) < SOAK_INTERVAL_SECONDS {
+            return;
+        }
+        self.last_soak_unix = now;
+        let counters = vnr_native::soak::Counters {
+            journal_writes: self.journal.writes(),
+            ..self.counters
+        };
+        if let Err(reason) = soak.sample(counters) {
+            self.world.error = Some(reason);
+            self.soak = None;
+        }
+    }
+
     /// Raise the window when a second launch asked it to.
     ///
     /// The file is taken rather than read: one launch is one raise, and a file that stays
@@ -507,9 +552,14 @@ impl App {
                         at_unix,
                         reason,
                     });
+                    self.counters.polls = self.counters.polls.saturating_add(1);
                     self.ui.note_poll(ctx);
                 }
                 worker::WatchMessage::Events(events) => {
+                    self.counters.events = self
+                        .counters
+                        .events
+                        .saturating_add(u64::try_from(events.len()).unwrap_or(u64::MAX));
                     for event in events {
                         self.note(Draft::event(&event.subject).with_reason(&format!(
                             "{} · {} · {}",
@@ -1135,6 +1185,7 @@ impl App {
     /// scan actually starts, so a slow scan cannot queue a second one behind itself.
     fn tick(&mut self, ctx: &egui::Context) {
         self.poll_tray(ctx);
+        self.soak_sample();
         if self.paused {
             // A postponed schedule means the clock has nothing to say; the poll and the
             // watcher still run, and a person can always scan by hand.
