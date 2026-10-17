@@ -16,6 +16,7 @@ pub mod model;
 pub mod recovery;
 pub mod report;
 pub mod rules;
+pub mod schedule;
 pub mod signature;
 pub mod time;
 pub mod timeline;

@@ -26,6 +26,14 @@ pub struct App {
     /// Set once the journal has failed, so one broken disk is one message rather than a
     /// notice per event.
     journal_reported: bool,
+    /// How often a resident ranger rescans, and how much the interval may drift.
+    plan: vnr_core::schedule::Plan,
+    /// Mixed into the jitter, so two machines opened together do not scan together.
+    schedule_seed: u64,
+    /// When the next scheduled scan is due.
+    next_scan_unix: u64,
+    /// The clock as the previous frame saw it, which is how a resume is noticed.
+    last_frame_unix: u64,
 }
 
 impl App {
@@ -110,6 +118,9 @@ impl App {
             // applied at every launch rather than on a timer nobody would notice.
             let _ = journal.prune(now_unix());
         }
+        let plan = vnr_core::schedule::Plan::DEFAULT;
+        let schedule_seed = u64::from(std::process::id()) ^ now_unix();
+        let next_scan_unix = vnr_core::schedule::next_at(now_unix(), plan, schedule_seed);
         let mut app = Self {
             ui,
             world,
@@ -120,6 +131,10 @@ impl App {
             cancel: None,
             journal,
             journal_reported,
+            plan,
+            schedule_seed,
+            next_scan_unix,
+            last_frame_unix: now_unix(),
         };
         if app.world.snapshot.is_none() {
             app.start_scan(&cc.egui_ctx, false);
@@ -722,12 +737,49 @@ impl eframe::App for App {
         self.world.now_unix = now_unix();
         self.drain();
         self.drain_watch(&ctx);
+        self.tick(&ctx);
         let actions = self.ui.show(ui, &self.world);
         for action in actions {
             self.apply(action, &ctx);
         }
         if self.world.busy() {
             ctx.request_repaint_after(Duration::from_millis(100));
+        }
+    }
+}
+
+impl App {
+    /// The two things the clock decides: a scheduled scan, and a scan after the machine
+    /// wakes up.
+    ///
+    /// Both are skipped while a scan is running, and the next due time moves only when a
+    /// scan actually starts, so a slow scan cannot queue a second one behind itself.
+    fn tick(&mut self, ctx: &egui::Context) {
+        let now = now_unix();
+        let gap = now.saturating_sub(self.last_frame_unix);
+        // The poll beats every two seconds; three missed beats is a lid that closed.
+        if vnr_core::schedule::resumed(self.last_frame_unix, now, 2)
+            && self.world.snapshot.is_some()
+            && !self.world.busy()
+        {
+            self.note(Draft::event("resumed after a gap").with_reason(&format!(
+                "{gap} seconds passed between two frames; the machine was probably asleep, so one scan runs now."
+            )));
+            self.start_scan(ctx, false);
+            self.next_scan_unix = vnr_core::schedule::next_at(now, self.plan, self.schedule_seed);
+        }
+        self.last_frame_unix = now;
+
+        if self.world.snapshot.is_some()
+            && !self.world.busy()
+            && vnr_core::schedule::is_due(now, self.next_scan_unix)
+        {
+            self.note(Draft::event("scheduled scan").with_reason(&format!(
+                "the {}-hour interval came round",
+                self.plan.every_secs / 3600
+            )));
+            self.start_scan(ctx, false);
+            self.next_scan_unix = vnr_core::schedule::next_at(now, self.plan, self.schedule_seed);
         }
     }
 }
