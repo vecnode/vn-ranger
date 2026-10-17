@@ -1,0 +1,3 @@
+7decddf00bfbfc279d5041ca0bfbde3d8fa40123cbf225fa35387ad3ebb162a6  ./vn-ranger-0.1.0-linux-x86_64.tar.gz
+21d264af62fdf6bafd3f06d864aeaf4595281b0af6e3b2c0ad205f3a443101dd  ./vn-ranger-0.1.0-macos-aarch64.tar.gz
+969c87aa6de846ddc032b87931fcaa4b8adc056f8d507902bddb58b41893e247  ./vn-ranger-0.1.0-windows-x86_64.zip

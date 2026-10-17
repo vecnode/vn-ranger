@@ -95,17 +95,18 @@ jobs:
           TAG="${{ github.event.inputs.tag || github.ref_name }}"
           VERSION="${TAG#v}"
           NAME="${STEM}-${VERSION}-${{ matrix.os_name }}-${{ matrix.arch }}"
-          mkdir -p "dist/${NAME}"
+          ROOT="${STEM}-${VERSION}"
+          mkdir -p "dist/${ROOT}"
           if [ "${{ matrix.os_name }}" = "windows" ]; then
-            cp "target/${{ matrix.target }}/release/vn-ranger.exe" "dist/${NAME}/"
-            cp README.md LICENSE "dist/${NAME}/"
+            cp "target/${{ matrix.target }}/release/vn-ranger.exe" "dist/${ROOT}/"
+            cp README.md LICENSE "dist/${ROOT}/"
             # bsdtar writes forward-slash entries; the GNU tar in Git Bash does not
             # make a zip at all, so the Windows bsdtar is called explicitly.
-            "/c/Windows/System32/tar.exe" -a -c -f "dist/${NAME}.zip" -C dist "${NAME}"
+            "/c/Windows/System32/tar.exe" -a -c -f "dist/${NAME}.zip" -C dist "${ROOT}"
           else
-            cp "target/${{ matrix.target }}/release/vn-ranger" "dist/${NAME}/"
-            cp README.md LICENSE "dist/${NAME}/"
-            (cd dist && tar -czf "${NAME}.tar.gz" "${NAME}")
+            cp "target/${{ matrix.target }}/release/vn-ranger" "dist/${ROOT}/"
+            cp README.md LICENSE "dist/${ROOT}/"
+            (cd dist && tar -czf "${NAME}.tar.gz" "${ROOT}")
           fi
           cp "dist/${NAME}.${{ matrix.ext }}" .
           echo "ASSET=${NAME}.${{ matrix.ext }}" >> "$GITHUB_ENV"
