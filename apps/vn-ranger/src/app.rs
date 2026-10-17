@@ -21,7 +21,7 @@ pub struct App {
     instance: Option<vnr_native::instance::InstanceGuard>,
     cancel: Option<Arc<AtomicBool>>,
     /// The one writer of `journal.ndjson`. Observations are written as they arrive;
-    /// an intent or a result is synced (Ãƒâ€šÃ‚Â§6.10).
+    /// an intent or a result is synced (§6.10).
     journal: vnr_native::journal::Journal,
     /// Set once the journal has failed, so one broken disk is one message rather than a
     /// notice per event.
@@ -132,7 +132,7 @@ impl App {
         };
         if world.error.is_none() {
             let _ = journal.record(Draft::event("session started").with_reason(&format!(
-                "vn-ranger {} Ãƒâ€šÃ‚Â· journal schema {}",
+                "vn-ranger {} · journal schema {}",
                 env!("CARGO_PKG_VERSION"),
                 vnr_core::journal::ENTRY_SCHEMA
             )));
@@ -273,7 +273,7 @@ impl App {
 
     /// Walk every allowlisted surface and put what a clean would remove into the world.
     ///
-    /// This is the dry run: it reads names, sizes and times and writes nothing ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â no journal
+    /// This is the dry run: it reads names, sizes and times and writes nothing — no journal
     /// line, no removal, no file of its own. The walk's items stay here rather than in the
     /// world, because the world is what the interface draws and this is the only list the
     /// action path may remove from.
@@ -447,7 +447,7 @@ impl App {
                 ScanMessage::Done(snapshot) => {
                     let snapshot = *snapshot;
                     self.note(Draft::event("scan").with_reason(&format!(
-                        "{} processes Ãƒâ€šÃ‚Â· {} startup items Ãƒâ€šÃ‚Â· {} listeners Ãƒâ€šÃ‚Â· {} packages",
+                        "{} processes · {} startup items · {} listeners · {} packages",
                         snapshot.processes.len(),
                         snapshot.autoruns.len(),
                         snapshot.listeners.len(),
@@ -512,7 +512,7 @@ impl App {
                 worker::WatchMessage::Events(events) => {
                     for event in events {
                         self.note(Draft::event(&event.subject).with_reason(&format!(
-                            "{} Ãƒâ€šÃ‚Â· {} Ãƒâ€šÃ‚Â· {}",
+                            "{} · {} · {}",
                             event.kind.label(),
                             event.source,
                             event.detail
@@ -547,7 +547,7 @@ impl App {
                     EventKind::BaselineAccepted,
                     "This scan",
                     format!(
-                        "{} processes Ãƒâ€šÃ‚Â· {} startup items",
+                        "{} processes · {} startup items",
                         snapshot.processes.len(),
                         snapshot.autoruns.len()
                     ),
@@ -628,9 +628,10 @@ impl App {
                 ));
             }
             for (rule, subject, severity) in raised {
-                self.note(Draft::finding(&rule).with_reason(&format!(
-                    "{severity} Ãƒâ€šÃ‚Â· {subject} Ãƒâ€šÃ‚Â· raised from the rules engine"
-                )));
+                self.note(
+                    Draft::finding(&rule)
+                        .with_reason(&format!("{severity} · {subject} · raised from the rules engine")),
+                );
             }
         }
         self.world.findings = findings;
@@ -642,8 +643,7 @@ impl App {
             Action::CancelScan => {
                 if let Some(token) = &self.cancel {
                     token.store(true, Ordering::Relaxed);
-                    self.world.notice =
-                        Some("Stopping after the current collectorÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦".to_owned());
+                    self.world.notice = Some("Stopping after the current collector…".to_owned());
                 }
             }
             Action::ScanElevated => self.start_scan(ctx, true),

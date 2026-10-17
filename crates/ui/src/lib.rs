@@ -1,4 +1,4 @@
-﻿//! vn-ranger's egui interface.
+//! vn-ranger's egui interface.
 //!
 //! The interface draws a [`World`] and returns [`Action`]s. It does not scan, read a
 //! configuration file or start a process: the shell does those things and hands the
@@ -67,7 +67,7 @@ pub(crate) enum LedState {
 ///
 /// This is a square wave's opposite: a beat is an event with a timestamp, so the lamp
 /// flashes and then goes quiet. A boolean toggled per poll would be a metronome, and a
-/// metronome cannot say that the poll has stopped Ã¢â‚¬â€ which is the one thing this lamp is
+/// metronome cannot say that the poll has stopped — which is the one thing this lamp is
 /// for.
 #[must_use]
 pub(crate) fn led_state(
@@ -532,7 +532,7 @@ impl Ui {
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
                     ui.add_space(4.0);
                     ui.label(
-                        RichText::new("No network Ã‚Â· No telemetry")
+                        RichText::new("No network · No telemetry")
                             .size(10.0)
                             .color(theme::muted(ui)),
                     );
@@ -607,7 +607,7 @@ impl Ui {
                     ui.add_sized(
                         vec2(240.0, 26.0),
                         egui::TextEdit::singleline(&mut self.search)
-                            .hint_text("FilterÃ¢â‚¬Â¦")
+                            .hint_text("Filter…")
                             .margin(Margin::symmetric(8, 6)),
                     );
                 });
@@ -853,21 +853,21 @@ impl Ui {
             .collect();
         for process in world.processes().iter().take(200) {
             entries.push(PaletteEntry {
-                label: format!("Process Ã‚Â· {} (pid {})", process.name, process.pid),
+                label: format!("Process · {} (pid {})", process.name, process.pid),
                 hit: PaletteHit::Process(process.pid),
             });
         }
         if let Some(snapshot) = world.snapshot() {
             for autorun in snapshot.autoruns.iter().take(200) {
                 entries.push(PaletteEntry {
-                    label: format!("Startup Ã‚Â· {} ({})", autorun.name, autorun.kind.label()),
+                    label: format!("Startup · {} ({})", autorun.name, autorun.kind.label()),
                     hit: PaletteHit::Autorun(autorun.id.clone()),
                 });
             }
         }
         for finding in world.findings.iter().take(100) {
             entries.push(PaletteEntry {
-                label: format!("Finding Ã‚Â· {}", finding.title),
+                label: format!("Finding · {}", finding.title),
                 hit: PaletteHit::Finding(finding.title.to_owned()),
             });
         }
@@ -925,7 +925,7 @@ impl Ui {
                         ui.set_max_width(380.0);
                         ui.horizontal(|ui| {
                             ui.label(RichText::new(error.as_str()).size(11.5).color(theme::BAD));
-                            if ui.small_button("Ã¢Å“â€¢").clicked() {
+                            if ui.small_button("✕").clicked() {
                                 dismiss = true;
                             }
                         });

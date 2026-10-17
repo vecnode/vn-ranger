@@ -96,7 +96,7 @@ impl Ui {
             } else {
                 ui.label(
                     RichText::new(format!(
-                        "{} finding(s) Â· {attention} attention Â· {notice} notice Â· {info} info",
+                        "{} finding(s) · {attention} attention · {notice} notice · {info} info",
                         world.findings.len()
                     ))
                     .size(11.5),
@@ -344,9 +344,9 @@ impl Ui {
                 let selected = self.process_sort == key;
                 let label = if selected {
                     if self.process_sort_desc {
-                        format!("{} â†“", key.label())
+                        format!("{} ↓", key.label())
                     } else {
-                        format!("{} â†‘", key.label())
+                        format!("{} ↑", key.label())
                     }
                 } else {
                     key.label().to_owned()
@@ -439,7 +439,7 @@ impl Ui {
             .as_ref()
             .filter(|live| !live.items.is_empty())
             .map(|live| describe_age(world.now_unix, live.at_unix));
-        let live_note = if live_age.is_some() { " Â· live" } else { "" };
+        let live_note = if live_age.is_some() { " · live" } else { "" };
         let caption = ui.label(
             RichText::new(format!(
                 "{} of {} processes{}",
@@ -514,7 +514,7 @@ impl Ui {
                             let (_, response) = row.col(|ui| {
                                 ui.add(
                                     egui::Label::new(
-                                        RichText::new(process.user.as_deref().unwrap_or("â€”"))
+                                        RichText::new(process.user.as_deref().unwrap_or("—"))
                                             .size(11.5)
                                             .color(theme::muted(ui)),
                                     )
@@ -525,7 +525,7 @@ impl Ui {
                             let (_, response) = row.col(|ui| {
                                 ui.label(
                                     RichText::new(process.started_at_unix.map_or_else(
-                                        || "â€”".to_owned(),
+                                        || "—".to_owned(),
                                         |then| describe_age(world.now_unix, then),
                                     ))
                                     .size(11.5)
@@ -818,9 +818,7 @@ impl Ui {
                             let (_, response) = row.col(|ui| {
                                 ui.label(
                                     RichText::new(
-                                        listener
-                                            .pid
-                                            .map_or_else(|| "â€”".to_owned(), |pid| pid.to_string()),
+                                        listener.pid.map_or_else(|| "—".to_owned(), |pid| pid.to_string()),
                                     )
                                     .size(11.5)
                                     .color(theme::muted(ui)),
@@ -1163,7 +1161,7 @@ impl Ui {
                     }
                     for skipped in &world.watch.skipped {
                         ui.label(
-                            RichText::new(format!("Not watched â€” {skipped}"))
+                            RichText::new(format!("Not watched — {skipped}"))
                                 .size(10.5)
                                 .color(theme::muted(ui)),
                         );
@@ -1266,7 +1264,7 @@ impl Ui {
                     ui.horizontal(|ui| {
                         ui.add(
                             egui::Label::new(
-                                RichText::new(format!("{} Â· {}", suppression.rule_id, suppression.subject))
+                                RichText::new(format!("{} · {}", suppression.rule_id, suppression.subject))
                                     .size(10.5)
                                     .color(theme::muted(ui)),
                             )
@@ -1281,7 +1279,7 @@ impl Ui {
                     });
                     ui.label(
                         RichText::new(format!(
-                            "{} â€” until {}",
+                            "{} — until {}",
                             suppression.reason,
                             format_utc(suppression.expires_unix)
                         ))
@@ -1360,8 +1358,8 @@ impl Ui {
                     ),
                 )
                 .on_hover_text(
-                    "Off by default. Ranger writes one entry of its own â€” a registry value, a \
-                     LaunchAgent or a desktop file â€” shows you where it is, and removes only \
+                    "Off by default. Ranger writes one entry of its own — a registry value, a \
+                     LaunchAgent or a desktop file — shows you where it is, and removes only \
                      that entry.",
                 )
                 .changed()
@@ -1390,7 +1388,7 @@ impl Ui {
             ui.label(RichText::new("About").family(theme::semibold()));
             ui.label(
                 RichText::new(format!(
-                    "vn-ranger {} Â· MIT Â· Rust and egui, no webview.",
+                    "vn-ranger {} · MIT · Rust and egui, no webview.",
                     world.version
                 ))
                 .size(11.5)
@@ -1425,7 +1423,7 @@ fn signature_matches_card(ui: &mut egui::Ui, snapshot: &Snapshot) {
         });
         ui.add_space(4.0);
         for hit in snapshot.signatures.matches.iter().take(5) {
-            ui.label(RichText::new(format!("{} Â· {}", hit.name, hit.path)).size(11.5));
+            ui.label(RichText::new(format!("{} · {}", hit.name, hit.path)).size(11.5));
         }
         if snapshot.signatures.matches.len() > 5 {
             ui.label(
@@ -1515,7 +1513,7 @@ fn listener_preview(ui: &mut egui::Ui, snapshot: &Snapshot) {
                 ui.add(
                     egui::Label::new(
                         RichText::new(format!(
-                            "{}:{} Â· {}",
+                            "{}:{} · {}",
                             listener.address,
                             listener.port,
                             listener.process.as_deref().unwrap_or("unknown")
@@ -1588,20 +1586,20 @@ fn process_detail_body(ui: &mut egui::Ui, process: &ProcessFact, now: u64) {
     widgets::key_value(ui, "Path", process.exe.as_deref().unwrap_or("not visible"));
     widgets::key_value(ui, "Command", process.command.as_deref().unwrap_or("not visible"));
     ui.columns(3, |columns| {
-        widgets::key_value(&mut columns[0], "User", process.user.as_deref().unwrap_or("â€”"));
+        widgets::key_value(&mut columns[0], "User", process.user.as_deref().unwrap_or("—"));
         widgets::key_value(
             &mut columns[1],
             "Parent",
             &process
                 .parent
-                .map_or_else(|| "â€”".to_owned(), |pid| pid.to_string()),
+                .map_or_else(|| "—".to_owned(), |pid| pid.to_string()),
         );
         widgets::key_value(
             &mut columns[2],
             "Started",
             &process
                 .started_at_unix
-                .map_or_else(|| "â€”".to_owned(), |then| describe_age(now, then)),
+                .map_or_else(|| "—".to_owned(), |then| describe_age(now, then)),
         );
     });
     if let Some(path) = &process.exe
@@ -1695,7 +1693,7 @@ fn finding_card(ui: &mut egui::Ui, finding: &vnr_core::Finding) -> bool {
             widgets::badge(ui, finding.severity.label(), colour);
             ui.label(RichText::new(finding.title).size(12.5).family(theme::semibold()));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("Suppressâ€¦").clicked() {
+                if ui.button("Suppress…").clicked() {
                     suppress = true;
                 }
                 widgets::badge(ui, finding.confidence.label(), theme::muted(ui));
@@ -1722,7 +1720,7 @@ fn finding_card(ui: &mut egui::Ui, finding: &vnr_core::Finding) -> bool {
         ui.add(egui::Label::new(RichText::new(finding.remediation).size(11.0)).wrap());
         ui.add_space(4.0);
         ui.label(
-            RichText::new(format!("{} Â· {}", finding.rule_id, finding.subject))
+            RichText::new(format!("{} · {}", finding.rule_id, finding.subject))
                 .size(9.5)
                 .color(theme::muted(ui)),
         );
@@ -1743,7 +1741,7 @@ fn change_row(ui: &mut egui::Ui, change: &vnr_core::Change) {
         );
         ui.add(
             egui::Label::new(
-                RichText::new(format!("{} Â· {}", change.detail, change.source))
+                RichText::new(format!("{} · {}", change.detail, change.source))
                     .size(10.5)
                     .color(theme::muted(ui)),
             )

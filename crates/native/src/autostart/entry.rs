@@ -1,8 +1,8 @@
-﻿//! The text of each autostart entry, built without touching the machine.
+//! The text of each autostart entry, built without touching the machine.
 //!
 //! Three formats, three rules, and one property they share: they are strings a person can
 //! read before they are strings a system will run. Building them here, with no IO, is what
-//! lets every host test all three â€” a Windows machine checks the macOS plist and the Linux
+//! lets every host test all three — a Windows machine checks the macOS plist and the Linux
 //! desktop file, so a quoting mistake is caught by the suite rather than by the person
 //! whose login breaks.
 
@@ -20,7 +20,7 @@ pub(super) fn run_value(exe: &Path) -> String {
 /// The `LaunchAgent` plist, as XML.
 ///
 /// `ProgramArguments` rather than a `Program` string: an array has no quoting rules to get
-/// wrong, and `RunAtLoad` is the whole mechanism. `KeepAlive` is deliberately absent â€” a
+/// wrong, and `RunAtLoad` is the whole mechanism. `KeepAlive` is deliberately absent — a
 /// resident ranger that is restarted every time it exits is a watchdog, and the plan says
 /// there is no watchdog.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]

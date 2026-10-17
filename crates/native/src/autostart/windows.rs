@@ -1,11 +1,11 @@
 //! Autostart on Windows: one value under `HKCU\...\Run`.
 //!
 //! A per-user value in the run key, never `HKLM`, never a service, never a scheduled task
-//! running as SYSTEM (Â§6.5). The value's *name* is ranger's identity: the key is shared with
+//! running as SYSTEM (§6.5). The value's *name* is ranger's identity: the key is shared with
 //! every other program that starts at login, so writing and removing are done by name and
 //! nothing else in the key is touched.
 //!
-//! The three operations ranger needs â€” read one value, write one value, delete one value â€”
+//! The three operations ranger needs — read one value, write one value, delete one value —
 //! sit behind [`Store`], so the behaviour that matters (idempotent write, precise removal,
 //! "already gone" as success) is tested on every host against an in-memory store. The
 //! registry itself is then three lines per operation, which is the only part that cannot be
