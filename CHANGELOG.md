@@ -6,6 +6,27 @@ All notable changes to vn-ranger are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The action journal: append-only NDJSON, one entry synced before an action that changes
+  something, a reader that tolerates a torn tail, rotation at 10,000 entries and 90-day
+  retention. The window records a session start, every observed event, every new finding,
+  each scan, watcher failures and the session stop, and says once when the journal cannot
+  be written. `--report` records its scan; `--elevated-scan` deliberately does not.
+- Crash-recovery verdicts for the four states a half-finished action can leave on disk,
+  with one suggested next step each.
+- `VN_RANGER_DATA_DIR`, absolute paths only, for a disposable profile beside the daily
+  one; the soak harness needs it.
+
+### Fixed
+
+- The live indicator toggled once per poll, which reads as a metronome and keeps looking
+  alive after the thread that feeds it has stopped. It now flashes for 220 ms as each
+  poll arrives, stays quietly lit in between, and turns amber after three missed beats.
+- A quoted startup command with spaces was tokenised into `C:\Program`, so a duplicated
+  startup group was labelled "program". The tokeniser honours the closing quote, and an
+  ambiguous command is labelled with its entry name.
+
 ### Changed
 
 - The roadmap compresses the act, resident and rule-pack milestones into a single
