@@ -10,7 +10,9 @@
 #![forbid(unsafe_code)]
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
+pub mod act;
 pub mod action;
+pub mod clean;
 pub mod collect;
 pub mod elevation;
 pub mod hash;

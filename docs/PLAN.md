@@ -708,11 +708,12 @@ watched, not cleaned), Pictures, Music, Videos, `~/.ssh`, `~/.gnupg`, a password
 keychains, browser profiles, `.git`, a trash or recycle bin, any path that is not a
 child of a surface root, and any directory that still holds an ineligible entry.
 
-The walk never follows a link, never crosses a device boundary, stops at depth 8, skips
-anything modified inside the age threshold, removes files before pruning empty
-directories bottom-up, and cancels between two items. The preview and the act use the
-same iterator, and the act re-stats every item before removing it: a file that changed
-since the preview is skipped and counted, not deleted.
+The walk never follows a link, never enters another filesystem (Unix; Windows cannot read
+a volume serial from stable `std`, see §7), stops at depth 8, skips anything modified
+inside the age threshold, removes files before pruning empty directories bottom-up, and
+cancels between two items. The preview and the act walk the same roots, and the act
+re-stats every item before removing it: a file that changed since the preview is skipped
+and counted, not deleted.
 
 **Confirmation is proportional to the act**, and the journal says which one it was:
 
@@ -864,10 +865,12 @@ Notes that matter more than the ticks:
 - **Tray:** on Linux there is no icon unless a status-notifier host is running, and that
   is a supported state rather than an error. On all three platforms the tray holds
   nothing the window cannot reach, and closing it is never the only way to quit.
-- **Hard links on Windows:** the link count and the file number are behind an unstable
-  standard-library feature, so Windows refuses a link at the name and notices a changed
-  file by size and timestamps, but cannot refuse a second hard link. Unix does. A move on
-  Windows therefore leaves the other name alive, and the journal says what moved.
+- **Hard links and mount points on Windows:** the link count, the file number and the
+  volume serial are behind an unstable standard-library feature, so Windows refuses a
+  link at the name and notices a changed file by size and timestamps, but cannot refuse a
+  second hard link or a directory on another filesystem. Unix does both. A nested
+  filesystem inside a surface is therefore walked on Windows, and the journal records what
+  was removed so it can be found.
 - **Packs:** a rule pack is data. It cannot read a file, open a socket, run code or
   produce `urgent`, and the default build contains no YARA-X. Content scanning is a
   build feature and a named operation with its own consent screen.
