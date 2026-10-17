@@ -38,10 +38,10 @@ pub fn apply(ctx: &Context, dark: bool) {
         visuals.error_fg_color = BAD;
         visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, Color32::from_rgb(38, 44, 53));
         visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0, Color32::from_rgb(154, 161, 172));
-        visuals.widgets.inactive.bg_fill = Color32::from_rgb(42, 48, 56);
+        visuals.widgets.inactive.bg_fill = Color32::from_rgb(52, 59, 70);
         visuals.widgets.inactive.fg_stroke = Stroke::new(1.0, Color32::from_rgb(214, 218, 224));
-        visuals.widgets.hovered.bg_fill = Color32::from_rgb(52, 59, 70);
-        visuals.widgets.active.bg_fill = Color32::from_rgb(62, 70, 82);
+        visuals.widgets.hovered.bg_fill = Color32::from_rgb(68, 77, 91);
+        visuals.widgets.active.bg_fill = Color32::from_rgb(82, 92, 108);
     } else {
         visuals.panel_fill = Color32::from_rgb(247, 248, 250);
         visuals.window_fill = Color32::WHITE;
