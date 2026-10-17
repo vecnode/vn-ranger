@@ -12,10 +12,10 @@ pub(super) fn executable_from_command(command: &str) -> Option<PathBuf> {
     if command.is_empty() {
         return None;
     }
-    if let Some(rest) = command.strip_prefix('"') {
-        if let Some(end) = rest.find('"') {
-            return Some(PathBuf::from(&rest[..end]));
-        }
+    if let Some(rest) = command.strip_prefix('"')
+        && let Some(end) = rest.find('"')
+    {
+        return Some(PathBuf::from(&rest[..end]));
     }
     let first = command.split_whitespace().next()?;
     let path = Path::new(first);

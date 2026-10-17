@@ -24,7 +24,7 @@ pub fn collect() -> Outcome<PackageFact> {
             reason: "No dpkg or pacman package database was readable.".to_owned(),
         };
     }
-    items.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    items.sort_by_key(|package| package.name.to_lowercase());
     items.dedup_by(|a, b| a.name == b.name && a.version == b.version);
     Outcome::Partial {
         items,
@@ -51,15 +51,15 @@ fn parse_dpkg(body: &str, items: &mut Vec<PackageFact>) {
                 _ => {}
             }
         }
-        if let Some(name) = name {
-            if installed {
-                items.push(PackageFact {
-                    name,
-                    version,
-                    publisher,
-                    source: "dpkg".to_owned(),
-                });
-            }
+        if let Some(name) = name
+            && installed
+        {
+            items.push(PackageFact {
+                name,
+                version,
+                publisher,
+                source: "dpkg".to_owned(),
+            });
         }
     }
 }

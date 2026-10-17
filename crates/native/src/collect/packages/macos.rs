@@ -62,7 +62,7 @@ pub fn collect() -> Outcome<PackageFact> {
         }
     }
     reasons.push("Mac App Store receipts and curl-installed tools are not listed yet.".to_owned());
-    items.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    items.sort_by_key(|package| package.name.to_lowercase());
     items.dedup_by(|a, b| a.name == b.name && a.version == b.version);
     Outcome::Partial {
         items,
