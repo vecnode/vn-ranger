@@ -82,7 +82,8 @@ window creation and the first scan are excluded.
 
 A two-minute check of the final build, after the About window was added, measured
 0.286% CPU; the difference from the 30-minute run is window state and noise, not
-behaviour.
+behaviour. v0.1.3 changes only how a process's start time is read, which adds no work to
+a poll, so these figures stand for it.
 
 The application saw **32 processes** here. That is the one number the soak cannot speak
 for: the poll cost at the 300-process case needs a full desktop and is still owed, so

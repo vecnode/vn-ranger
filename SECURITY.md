@@ -65,7 +65,7 @@ are no backports to older 0.x lines.
 Process metadata, startup entries, listening sockets, installed package names, hashes of
 startup binaries and of files written to the watched folders (Downloads, Desktop, the
 temporary directory and the startup folders), and, once signature verification lands in
-v0.1.3, signatures. It does not read file contents apart from hashing, and it does not
+v0.1.4, signatures. It does not read file contents apart from hashing, and it does not
 read credentials, messages, browser data or keystrokes.
 
 ### Adversaries considered
@@ -75,7 +75,7 @@ read credentials, messages, browser data or keystrokes.
 - **An agent with more permission than its owner intended** — the agent inventory
   exists for this case.
 - **A malicious or mistaken rule pack.** Rules are data and cannot execute code;
-  third-party packs require a signature from v0.1.6.
+  third-party packs require a signature from v0.1.7.
 - **A compromised release.** Checksums now, signatures at v0.2.0.
 - **A local administrator.** Out of scope for integrity: an administrator can change
   ranger's binary, its data and the operating system. Ranger does not pretend

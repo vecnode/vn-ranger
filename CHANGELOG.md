@@ -6,6 +6,16 @@ All notable changes to vn-ranger are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-17
+
+### Fixed
+
+- Process identity on Linux and macOS. The start time was derived as `now - run_time`,
+  which wobbles by a second between polls on those platforms, so the two-second poll
+  reported every process as new and gone on every poll. It now uses the start time
+  sysinfo stores when the process is first loaded. The v0.1.2 Windows build was not
+  affected; the v0.1.2 release is superseded by this one on Linux and macOS.
+
 ## [0.1.2] - 2026-10-17
 
 ### Added
@@ -84,7 +94,8 @@ All notable changes to vn-ranger are recorded here. The format follows
 - vn-launcher cannot install the release until its own install path ships; ranger is
   built to the contract now.
 
-[Unreleased]: https://github.com/vecnode/vn-ranger/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/vecnode/vn-ranger/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/vecnode/vn-ranger/releases/tag/v0.1.3
 [0.1.2]: https://github.com/vecnode/vn-ranger/releases/tag/v0.1.2
 [0.1.1]: https://github.com/vecnode/vn-ranger/releases/tag/v0.1.1
 [0.1.0]: https://github.com/vecnode/vn-ranger/releases/tag/v0.1.0

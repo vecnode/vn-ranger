@@ -48,7 +48,6 @@ impl Poller {
     }
 
     fn facts(&self) -> Vec<ProcessFact> {
-        let now = crate::now_unix();
         let mut items = Vec::with_capacity(self.system.processes().len());
         for (pid, process) in self.system.processes() {
             let user = process
@@ -67,6 +66,11 @@ impl Poller {
                     Some(parts.join(" "))
                 }
             };
+            // The start time is stored when sysinfo loads the process and is not
+            // recomputed on refresh. Deriving it as `now - run_time` instead made it
+            // wobble by a second between polls on Linux and macOS, which turned the
+            // pid+start identity into a new-and-gone pair on every poll.
+            let started = process.start_time();
             items.push(ProcessFact {
                 pid: pid.as_u32(),
                 parent: process.parent().map(|parent| parent.as_u32()),
@@ -74,7 +78,7 @@ impl Poller {
                 exe: process.exe().map(|path| path.to_string_lossy().into_owned()),
                 command,
                 user,
-                started_at_unix: now.checked_sub(process.run_time()),
+                started_at_unix: (started > 0).then_some(started),
             });
         }
         items
