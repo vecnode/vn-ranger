@@ -3,20 +3,25 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// The profile CI uses: the same code, with dependencies unoptimised so a check is
+/// minutes rather than a coffee break.
+const CI_PROFILE: &str = "ci";
+
 fn main() {
     let command = std::env::args().nth(1).unwrap_or_else(|| "ci".to_owned());
     let result = match command.as_str() {
         "ci" => ci(),
         "fmt-fix" => run(&["fmt", "--all"]),
         "lint" => lint(),
-        "test" => run(&["test", "--workspace", "--all-targets"]),
-        "check" => run(&["check", "--workspace", "--all-targets"]),
+        "test" => test(),
+        "check" => run(&["check", "--workspace", "--all-targets", "--profile", CI_PROFILE]),
+        "no-network" => no_network(),
         "version" => {
             println!("{}", env!("CARGO_PKG_VERSION"));
             Ok(())
         }
         other => Err(format!(
-            "unknown xtask `{other}`; try ci, fmt-fix, lint, test, check or version"
+            "unknown xtask `{other}`; try ci, fmt-fix, lint, test, check, no-network or version"
         )),
     };
     if let Err(error) = result {
@@ -29,7 +34,7 @@ fn ci() -> Result<(), String> {
     run(&["fmt", "--all", "--check"])?;
     no_network()?;
     lint()?;
-    run(&["test", "--workspace", "--all-targets"])
+    test()
 }
 
 fn lint() -> Result<(), String> {
@@ -38,9 +43,37 @@ fn lint() -> Result<(), String> {
         "--workspace",
         "--all-targets",
         "--all-features",
+        "--profile",
+        CI_PROFILE,
         "--",
         "-D",
         "warnings",
+    ])
+}
+
+/// The tests live in the pure core and the native collectors. The interface and the
+/// shell have no tests yet, so they are type-checked rather than linked into an empty
+/// test binary; linking wgpu for zero tests is the slowest useful thing CI can do.
+fn test() -> Result<(), String> {
+    run(&[
+        "test",
+        "--package",
+        "vnr-core",
+        "--package",
+        "vnr-native",
+        "--all-targets",
+        "--profile",
+        CI_PROFILE,
+    ])?;
+    run(&[
+        "check",
+        "--package",
+        "vnr-ui",
+        "--package",
+        "vn-ranger",
+        "--all-targets",
+        "--profile",
+        CI_PROFILE,
     ])
 }
 

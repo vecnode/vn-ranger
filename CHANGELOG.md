@@ -6,16 +6,38 @@ All notable changes to vn-ranger are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-17
+
 ### Added
 
-- The plan: scope, research, architecture and roadmap (`docs/PLAN.md`).
-- The mark: the suite crystal with an ember inlay, in every size and as an application
-  icon (`assets/logo/`).
-- The licence (MIT), the security policy and the agent guide.
-- The release contract that makes ranger installable by vn-launcher
-  (`docs/RELEASES.md`).
+- The first working application: a Rust workspace with `vnr-core` (facts, signatures,
+  reports), `vnr-native` (collectors, hashing, signatures, elevation), `vnr-ui`
+  (egui 0.37) and the eframe shell.
+- Read-only inventory on Windows, macOS and Linux: processes and ancestry, startup
+  items, listening sockets (Windows and Linux) and installed packages. Every collector
+  reports what it could not see.
+- A clean-room ClamAV `.hdb` / `.hsb` hash-signature reader, MD5/SHA-1/SHA-256 matching,
+  and an in-memory EICAR self-test that still works when another antivirus removes the
+  test file.
+- An opt-in, one-shot administrator scan on Windows: the unelevated window asks, the
+  operating system prompts, a second copy writes one snapshot and exits.
+- The interface: Overview, Processes, Startup, Listeners, Report and Settings; search;
+  JSON and Markdown export; the suite mark in the title bar and rail; ink-on-ember
+  buttons that meet WCAG AA.
+- The designer record: `assets/logo/BRAND.md`, `MANIFEST.toml` with every digest, and
+  the contact sheet.
+- The plan, the release contract, the security policy, the agent guide and CI.
 
-No application code yet. The first binary is v0.1.0, the read-only inventory described
-in the plan.
+### Known limitations
 
-[Unreleased]: https://github.com/vecnode/vn-ranger/compare/main...HEAD
+- Read-only. No rules, findings, quarantine, cleaning or tray.
+- Signature verification (WinVerifyTrust, `codesign`) is not implemented; ranger
+  reports hashes, not trust.
+- macOS listeners are unavailable without a C build dependency; scheduled tasks, macOS
+  login items, MSIX, Snap and Flatpak packages are not listed yet.
+- No code signing. `SHA256SUMS.txt` is the only integrity statement.
+- vn-launcher cannot install the release until its own install path ships; ranger is
+  built to the contract now.
+
+[Unreleased]: https://github.com/vecnode/vn-ranger/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/vecnode/vn-ranger/releases/tag/v0.1.0

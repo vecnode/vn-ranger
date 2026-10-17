@@ -1,5 +1,6 @@
 # Build output
 /target
+/target-crt
 **/*.rs.bk
 
 # Editor and OS noise

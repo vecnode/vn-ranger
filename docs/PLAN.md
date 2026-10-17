@@ -563,34 +563,42 @@ task running as SYSTEM, or a helper that stays alive after its report is written
 
 ## 7. Platform matrix
 
-`●` full, `◐` partial or needs elevation, `○` not planned for v0.x.
+`●` shipped in v0.1.0, `◐` partial, `○` planned or unavailable. A `○` in this table is
+a named gap, not a silent one.
 
 | Capability | Windows | macOS | Linux |
 |---|---|---|---|
-| Processes, parent, command line | ● Toolhelp32 / `sysinfo` | ● `libproc` / `sysctl` | ● `/proc` |
+| Processes, parent, command line | ● `sysinfo` | ● `sysinfo` | ● `sysinfo` |
 | Binary hash | ● SHA-256 | ● SHA-256 | ● SHA-256 |
-| Signature / provenance | ● WinVerifyTrust (cache-only) | ● `codesign` / Security framework | ◐ package owner (dpkg/rpm) |
-| Autoruns | ● HKCU/HKLM Run, Startup, services, scheduled tasks | ● LaunchAgents/Daemons, cron; ◐ login items | ● systemd units, cron, XDG autostart |
-| Listeners → process | ● GetExtendedTcpTable/UDP | ◐ `libproc`; other users need privilege | ◐ `/proc/net` + fd inode; other users need privilege |
-| Installed packages | ● registry uninstall keys, MSIX | ● `pkgutil`, Homebrew | ● dpkg/rpm database |
-| File-change watch (v0.4) | ● ReadDirectoryChangesW | ● FSEvents | ● inotify |
+| Signature / provenance | ○ v0.2 (WinVerifyTrust, cache-only) | ○ v0.2 (`codesign` / Security framework) | ◐ package owner, later |
+| Autoruns | ◐ HKCU/HKLM Run, Startup, services; tasks not yet | ◐ LaunchAgents/Daemons; login items and cron not yet | ◐ systemd units, system cron, XDG; user crontabs not yet |
+| Listeners → process | ● IP helper via `netstat2` | ○ no safe, C-free path yet | ● `/proc/net` + fd inode |
+| Installed packages | ◐ registry uninstall keys; MSIX not yet | ◐ Applications, Homebrew; receipts not yet | ◐ dpkg, pacman; Snap/Flatpak not yet |
+| File-change watch (v0.2) | ○ ReadDirectoryChangesW | ○ FSEvents | ○ inotify |
 | Runtime file access | ○ ETW (user-mode) later | ○ EndpointSecurity (entitlement) later | ○ eBPF/auditd (root) later |
 | Kernel / rootkit | ○ | ○ | ○ |
 | Memory scanning | ○ | ○ | ○ |
 
+What v0.1.0 actually ships: processes, startup items, listeners (Windows and Linux),
+installed packages, SHA-256 hashes of startup binaries, the hash-signature engine and
+the one-shot administrator scan. Everything marked `○` is honest work for a later
+release.
+
 Notes that matter more than the ticks:
 
 - **Windows:** no service, no driver, and no HKLM autostart for ranger itself. (It
-  reads HKLM autoruns, because they are facts; it never writes one.) Signature checks
-  must use cached revocation data, so that verifying a signature never becomes a
-  network call.
-- **macOS:** several collectors trigger TCC prompts, and EndpointSecurity requires an
-  Apple entitlement. Ranger degrades and explains rather than asking for more access
-  than it needs. It is not notarised until v1.0.
+  reads HKLM autoruns, because they are facts; it never writes one.) Signature checks,
+  when they arrive, must use cached revocation data so that verifying a signature never
+  becomes a network call.
+- **macOS:** several collectors trigger TCC prompts, login items live in an opaque
+  store, and EndpointSecurity requires an Apple entitlement. Ranger degrades and
+  explains rather than asking for more access than it needs. It is not notarised until
+  v1.0.
 - **Linux:** `hidepid`, containers and sandboxed packages (Flatpak, Snap) reduce what
   is visible. The capability banner says which collector is degraded and why.
 - **All three:** "not visible without elevation" is a first-class state, not an empty
-  list.
+  list. The administrator scan fills some of those gaps; it never fills them by
+  guessing.
 
 ---
 
@@ -607,8 +615,10 @@ inside the crystal:
 
 The suite rule is simple: **same crystal, one colour per app, no other variants.** The
 application icon is the mark on the suite's black tile, with white ridges so it holds
-on both a light and a dark taskbar. The full set, its sizes and the regeneration notes
-are in [`assets/logo/README.md`](../assets/logo/README.md).
+on both a light and a dark taskbar. The construction, clear space, minimum sizes,
+contrast and usage rules are in [`assets/logo/BRAND.md`](../assets/logo/BRAND.md); the
+files and their digests are in [`assets/logo/MANIFEST.toml`](../assets/logo/MANIFEST.toml);
+the contact sheet is [`assets/logo/contact-sheet.png`](../assets/logo/contact-sheet.png).
 
 The launcher catalogue uses the same ember (`color = "#F26A21"`), so the card and the
 icon agree.
@@ -620,34 +630,48 @@ icon agree.
 Each milestone has an exit criterion. A milestone is not "done" because the code
 compiles; it is done when the criterion is met and written down.
 
-### M0 — Identity (this commit)
+### M0 — Identity — **shipped** `5a4aa68`
 
 - README, LICENSE, this plan, SECURITY, AGENTS, the release contract.
 - The mark in every size, including the application tile and the raw RGBA.
 - **Exit:** a reader can say what ranger is, what it refuses, and how it ships. No
-  application code.
+  application code. **Met.**
 
-### M1 — v0.1.0, Inventory (read-only)
+### M1 — v0.1.0, Inventory — **shipped** `ab1d8d4`
 
 - Workspace, three crates, app shell, CI, release workflow.
-- Collectors: processes and ancestry, autoruns, listeners (best effort), installed
-  packages, on all three platforms.
-- UI: Overview, Processes, Startup, Listeners, Report; search and sort; capability
-  banners; JSON and Markdown export.
-- No rules, no findings, no actions, no tray, no network.
+- Collectors: processes and ancestry, startup items, listeners (Windows and Linux),
+  installed packages, on all three platforms.
+- UI: Overview, Processes, Startup, Listeners, Report and Settings; search; capability
+  reports; JSON and Markdown export; the application mark in the title bar and rail.
+- A clean-room ClamAV `.hdb` / `.hsb` hash engine, the built-in EICAR self-test, and
+  hash matching for every startup binary.
+- A one-shot administrator scan on Windows (§6.9).
 - **Exit:** runs on Windows, macOS and Linux; no panic on malformed or missing data;
-  every row names its source; every unavailable collector says why; fixture tests for
-  each parser; a release that follows the contract and is parsed correctly by
-  vn-launcher, with install and removal verified as soon as the launcher's install
-  path ships; size and RSS measured in `docs/BENCHMARKS.md`.
+  every collector names its gaps; tests for the parsers and the signature engine; a
+  release that follows the contract and is parsed correctly by vn-launcher, with
+  install and removal verified as soon as the launcher's install path ships.
 
-### M2 — v0.2.0, Explain
+**Named gaps in v0.1.0:** signature verification (WinVerifyTrust, `codesign`), scheduled
+tasks, macOS login items and listeners, MSIX/Snap/Flatpak packages, the real-time
+watcher, rules, cleaning. Each is a row in §7 or a milestone below, not a surprise.
 
-- Rule engine, 15–25 built-in rules, findings with evidence and a named benign
-  explanation, expiring suppressions, baseline and diff, timeline, Markdown report.
+### M2 — v0.2.0, Watch and explain
+
+- **Real time:** a two-second process poll and `notify` watchers on Downloads, Desktop,
+  the temporary directory and the user's startup folders, with debounce and an idle
+  budget (§6.8).
+- **Signature verification:** WinVerifyTrust on Windows with cached revocation data;
+  `codesign` / Security framework on macOS. The result becomes a fact and a rule input,
+  never a verdict on its own.
+- **Close the named gaps:** scheduled tasks, macOS login items, MSIX, Snap/Flatpak.
+- **Rules:** the TOML rule engine, 15–25 built-in rules, findings with evidence and a
+  named benign explanation, expiring suppressions, baseline and diff, timeline.
 - **Exit:** every rule has a positive and a negative fixture; a false-positive trial
   against a corpus of popular applications is published; no finding exists without
-  evidence; the language audit in §5.5 passes.
+  evidence; the watcher survives a 24-hour soak inside the idle budget; the language
+  audit in §5.5 passes.
+
 
 ### M3 — v0.3.0, Act
 
@@ -705,7 +729,9 @@ The gates are order, not dates:
 
 Ranger follows the vecnode release convention, documented in
 [vn-launcher/docs/RELEASES.md](https://github.com/vecnode/vn-launcher/blob/main/docs/RELEASES.md).
-The concrete instantiation is in [`docs/RELEASES.md`](RELEASES.md).
+The concrete instantiation is in [`docs/RELEASES.md`](RELEASES.md). The checks are in
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) and the archives are built by
+[`.github/workflows/release.yml`](../.github/workflows/release.yml).
 
 Summary:
 
@@ -754,19 +780,25 @@ paths   = ["{install}/vn-ranger", "{install}/vn-ranger.exe"]
 
 ## 11. Budgets
 
-Targets, not claims. v0.1.0 publishes measured numbers in `docs/BENCHMARKS.md`; if a
-target is missed, the document says so and the target is revised with a reason.
+Targets, not claims. v0.1.0 publishes measured numbers in
+[`docs/BENCHMARKS.md`](BENCHMARKS.md); if a target is missed, the document says so and
+the target is revised with a reason.
 
 | Budget | Target | Why |
 |---|---|---|
 | Cold start to first frame | ≤ 500 ms | a resident app is opened often |
 | Idle CPU, resident, no scan | < 0.5% of one core | "always open" must not cost a laptop |
-| Idle RSS | ≤ 120 MB | egui plus the platform renderer |
-| Release archive | ≤ 12 MB | a small installer |
-| Installed footprint | ≤ 40 MB | no models, no runtime, no database |
-| Inventory scan | ≤ 3 s typical | longer is allowed with progress |
-| Hashing | ≥ 200 MB/s single-thread SHA-256 on NVMe | bounded, visible work |
-| Journal write | < 1 ms per event | no UI stalls |
+| Idle working set | ≤ 200 MB in v0.1.x; 120 MB is the v1.0 goal | 166 MB was measured with the wgpu backend; glow is the next experiment |
+| Release archive | ≤ 12 MB | a small installer; the Windows zip measured 5.85 MB |
+| Installed footprint | ≤ 40 MB | no models, no runtime, no database; the binary measured 14.55 MB |
+| Inventory scan | ≤ 3 s typical | longer is allowed with progress; measured 1.2–1.8 s |
+| Hashing | ≥ 200 MB/s single-thread SHA-256 on NVMe | bounded, visible work; not yet measured |
+| Journal write | < 1 ms per event | no UI stalls; the journal arrives with v0.3.0 |
+
+Measured on the development Windows machine: 287–291 processes, 131 startup items,
+95–102 listeners, 128 packages, a 1.2–1.8 s scan, 166 MB idle working set, 0% idle CPU,
+a 14.55 MB release binary and a 5.85 MB zip. `docs/BENCHMARKS.md` has the method and the
+numbers that are still owed.
 
 The one honest comparison to zeroclaw is shape, not bytes: one binary, no runtime, no
 external service, nothing to install beside it.
@@ -835,19 +867,40 @@ and that is the launcher's, not ranger's.
 | egui accessibility | Medium | Keyboard and labels now; document what remains |
 | Maintainer time and funding | High | Small scope, no server, no telemetry, MIT |
 
-### 14.2 Decisions needed from the owner
+### 14.2 Decisions
 
-1. **Licence:** MIT only (matches vn-launcher, recommended) or MIT/Apache-2.0 dual?
-2. **Cleaning:** quarantine-only, or allowlisted cache/temp cleanup in v0.3.0?
-3. **Tray:** support all three platforms from v0.4.0, or window-only first?
-4. **Elevation:** ever? If so, a separate helper with a written threat model.
-5. **Rule packs:** third-party at v0.5 with signing, or built-in rules only?
-6. **Binary name:** `vn-ranger` (recommended, avoids the `ranger` file manager).
-7. **Code signing:** Windows EV and Apple Developer ID certificates, and who owns them?
-8. **Platform floor:** Windows 10 1809+, macOS 13+, glibc 2.35+ (Ubuntu 22.04)?
-9. **Localisation:** English only until v1.0?
-10. **Agent scope:** process, network and persistence only — no prompt or content
-    inspection. Confirm.
+**Taken**
+
+1. **Licence:** MIT only, matching vn-launcher. ClamAV code is not copied; the app reads
+   ClamAV's documented hash formats instead (§3.3). If the owner wants the actual
+   ClamAV engine, the licence changes to GPL-2.0 first.
+2. **Elevation:** yes, as one named operation. The unelevated window asks; the operating
+   system prompts; a one-shot copy scans and writes one report; nothing stays elevated
+   (§6.9). Windows ships this in v0.1.0; macOS and Linux say "not yet".
+3. **Binary name:** `vn-ranger`, never `ranger`, which would collide with the terminal
+   file manager.
+4. **Cleaning:** quarantine and an allowlisted cache/temp cleanup in v0.3.0. Registry
+   cleaning, "junk" scoring and RAM boosting are never.
+5. **YARA-X:** an optional feature at v0.5, never the default dependency. It is pure
+   Rust and BSD-3-Clause; rules are the supply-chain risk, not the crate.
+6. **Sigma:** a user-supplied import at v0.5. The rules are DRL 1.1 and are not
+   vendored; the converter reads what the user brings.
+7. **Czkawka:** its MIT file-walking, preview and cancellation discipline informs the
+   cleanup layer; its Slint interface is not used. Attribution travels with any copied
+   code.
+8. **Network:** none in v0.x. No HTTP client, no telemetry, no update ping.
+9. **Model:** none in the application. Model-assisted triage is a possible post-1.0
+   feature, local and optional, never a dependency.
+
+**Still owed**
+
+1. **Code signing:** Windows EV and Apple Developer ID certificates, and who holds them.
+2. **Platform floor:** Windows 10 1809+, macOS 13+, glibc 2.35+ (Ubuntu 22.04)?
+3. **Tray:** all three platforms at v0.4.0, or a window-only first release?
+4. **Localisation:** English only until v1.0?
+5. **Agent scope:** confirm the process, network and persistence boundary, with no
+   prompt or content inspection.
+6. **Funding:** donations only, or no funding at all. No paywall either way.
 
 ---
 
@@ -858,8 +911,12 @@ and that is the launcher's, not ranger's.
   <https://github.com/vecnode/vn-launcher/blob/main/docs/RELEASES.md>
 - osquery — <https://github.com/osquery/osquery>
 - ClamAV — <https://github.com/Cisco-Talos/clamav>
+- ClamAV hash-signature formats —
+  <https://docs.clamav.net/manual/Signatures/HashSignatures.html>
 - YARA-X — <https://github.com/VirusTotal/yara-x>
 - Sigma — <https://github.com/SigmaHQ/sigma>
+- Sigma Detection Rule License 1.1 —
+  <https://github.com/SigmaHQ/Detection-Rule-License>
 - Czkawka — <https://github.com/qarmin/czkawka>
 - BleachBit — <https://github.com/bleachbit/bleachbit>
 - Lynis — <https://github.com/CISOfy/lynis>
@@ -877,6 +934,10 @@ and that is the launcher's, not ranger's.
   <https://arxiv.org/abs/2605.17413>
 - egui — <https://github.com/emilk/egui>
 - sysinfo — <https://github.com/GuillaumeGomez/sysinfo>
+- netstat2 — <https://github.com/ohadravid/netstat2-rs>
+- winreg — <https://crates.io/crates/winreg>
+- runas — <https://crates.io/crates/runas>
+- is_elevated — <https://crates.io/crates/is_elevated>
 - notify — <https://github.com/notify-rs/notify>
 - YARA-X crate — <https://crates.io/crates/yara-x>
 - tray-icon — <https://crates.io/crates/tray-icon>

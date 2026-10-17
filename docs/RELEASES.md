@@ -1,6 +1,7 @@
 # Releases
 
-**Status:** agreed. The first release is v0.1.0.
+**Status:** v0.1.0 is cut from this tree. The release workflow is
+[`.github/workflows/release.yml`](../.github/workflows/release.yml).
 **Audience:** whoever cuts a vn-ranger release, and the launcher that installs it.
 
 Ranger follows the vecnode release convention documented in
@@ -39,6 +40,18 @@ The binary is **`vn-ranger`**, never `ranger`. A binary called `ranger` collides
 the well-known terminal file manager on Linux and macOS, and a security tool that
 shadows another program is not a small mistake.
 
+### What v0.1.0 actually is
+
+- Read-only inventory: processes, startup items, listeners (Windows and Linux),
+  installed packages, SHA-256 hashes of startup binaries.
+- A clean-room hash-signature engine for local `.hdb` / `.hsb` databases, with the
+  built-in EICAR self-test.
+- An opt-in, one-shot administrator scan on Windows.
+- No rules, no findings, no quarantine, no cleaning, no tray, no network.
+
+The release notes must repeat those limitations. A release that implies antivirus
+coverage it does not have is the behaviour this project exists to reject.
+
 ## 2. The archive
 
 ```text
@@ -72,8 +85,13 @@ record-and-warn. Ranger publishes the first, so the first is what will be used.
 |---|---|---|
 | `x86_64-pc-windows-msvc` | `windows-latest` | Static CRT (`-C target-feature=+crt-static`) |
 | `x86_64-unknown-linux-gnu` | `ubuntu-22.04` | Oldest glibc we support; not `ubuntu-latest` |
-| `aarch64-apple-darwin` + `x86_64-apple-darwin` | `macos-latest` | `lipo` into one `macos-universal` archive when both build |
+| `aarch64-apple-darwin` | `macos-latest` | Universal binary once both macOS targets build in one job |
 | `aarch64-unknown-linux-gnu` | cross or native | Added only when a runner and a test exist |
+
+The workflow builds `-p vn-ranger` with `--locked`, so only the application is
+packaged and the dependency graph is the one in `Cargo.lock`. The checksum job runs
+after every build has uploaded, and re-downloads the assets rather than trusting the
+build directories.
 
 A platform that is not built publishes nothing for that platform. "There is no build
 for this system" is a useful answer; a Linux binary named `macos` is not.
@@ -111,10 +129,10 @@ and it is a v1.0 requirement, not a v0.1 claim.
 - [ ] `README.md` and `docs/PLAN.md` still describe what the binary does.
 - [ ] The archive unpacks to exactly one directory and contains the binary.
 - [ ] `SHA256SUMS.txt` is generated after the last build.
-- [ ] A clean VM installs through vn-launcher, launches, and uninstalls without
-      leaving a file behind.
-- [ ] No new dependency brings a network client (§6.6 of the plan).
-- [ ] The release notes name the known limitations.
+- [ ] A clean VM runs the archived binary, and install through vn-launcher is verified
+      as soon as the launcher's install path ships.
+- [ ] No new dependency brings a network client (`cargo xtask ci` checks it).
+- [ ] The release notes name the known limitations, including the ones in this file.
 
 ## 8. What is never published
 

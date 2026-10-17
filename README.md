@@ -18,11 +18,6 @@
 
 </div>
 
-<p align="center">
-  <img src="assets/screenshots/overview-dark.png" alt="vn-ranger's overview: processes, startup items, listeners and packages" width="880">
-</p>
-
-<p align="center"><sub>v0.1.0 · read-only inventory · local hash signatures · opt-in administrator scan</sub></p>
 
 ## What it is for
 
@@ -75,6 +70,7 @@ quarantine, clean or modify anything yet.
 | Document | What it answers |
 |---|---|
 | [docs/PLAN.md](docs/PLAN.md) | The research, the scope, the architecture and the roadmap |
+| [docs/BENCHMARKS.md](docs/BENCHMARKS.md) | What was measured, and what is still owed |
 | [docs/RELEASES.md](docs/RELEASES.md) | The release contract that makes ranger installable by vn-launcher |
 | [SECURITY.md](SECURITY.md) | What ranger protects, what it cannot, and how to report a flaw |
 | [AGENTS.md](AGENTS.md) | The rules a change to this repository has to keep |

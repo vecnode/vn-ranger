@@ -1,11 +1,17 @@
 # The vn-ranger mark
 
+![The vn-ranger brand sheet](contact-sheet.png)
+
 A girdled crystal, shared with every application in the vecnode/vn suite. The lines are
 vn-launcher's; the colour inside is ranger's.
 
 The suite keeps one mark and changes one thing per application: the **inlay**, the
 colour that fills the facets. vn-launcher leaves it transparent. vn-ranger fills it
 with ember.
+
+This file is the quick guide. [`BRAND.md`](BRAND.md) is the design record —
+construction, clear space, minimum sizes, contrast and usage rules. [`MANIFEST.toml`](MANIFEST.toml)
+is the machine-readable one: every palette value and the SHA-256 of every file here.
 
 ## Geometry
 
@@ -36,6 +42,9 @@ The gradient is vertical, `#FFA45E → #F26A21` at 55% `→ #D14A0C`, so the cro
 the light and the base sits deeper. Orange was chosen because it reads as attention
 without reading as alarm, and because it is unmistakably not the launcher's uncoloured
 crystal.
+
+Ink on ember is 6.36:1 and is the pair used for small text. White on ember is 3.06:1
+and is only for large text and icons. [`BRAND.md`](BRAND.md) has the full table.
 
 ## Which file to use
 
@@ -69,14 +78,16 @@ colour to find.
 ## The application icon
 
 `vn-ranger-app.rgba` is 64×64 unmultiplied RGBA, exactly the three fields
-`egui::IconData` takes. `apps/vn-ranger/src/main.rs` will embed it with
-`include_bytes!`, so putting an icon on the window and the taskbar costs the
-application no image decoder.
+`egui::IconData` takes. `apps/vn-ranger/src/main.rs` embeds it with `include_bytes!`,
+so putting an icon on the window and the taskbar costs the application no image
+decoder.
 
-The tile is the suite's black, not the ember. An icon has to hold its own against
-whatever is behind it: a bare black glyph disappears on a dark taskbar and a bare white
-one on a light taskbar, whereas a black tile with a white crystal and an ember inlay
-reads on both.
+The application tile is 1024 × 1024 with a **308 px** corner radius; the crystal is
+scaled **22.73×** and translated **239.25 px** so its visible bounds are about
+468 × 486 px, centred. The tile is the suite's black, not the ember. An icon has to
+hold its own against whatever is behind it: a bare black glyph disappears on a dark
+taskbar and a bare white one on a light taskbar, whereas a black tile with a white
+crystal and an ember inlay reads on both.
 
 ## The suite rule
 
@@ -95,12 +106,13 @@ The SVGs are the source of truth. The PNGs and the `.rgba` are generated:
    transparent.
 3. Decode `vn-ranger-app-64.png` to unmultiplied RGBA and write the 16,384 raw bytes to
    `vn-ranger-app.rgba`.
-4. Keep the set in step with `ui/src/icons.rs` once the interface exists; this
-   directory is the distribution copy, not the drawing code.
+4. Regenerate `contact-sheet.png` and `MANIFEST.toml`, and keep the mark in step with
+   `crates/ui/src/lib.rs`; this directory is the distribution copy, not the drawing
+   code.
 
 A future `cargo xtask logo` will do this, so the set is reproducible rather than
-hand-maintained. Until then, the geometry above and the SVGs are enough to regenerate
-it exactly.
+hand-maintained. Until then, the geometry in [`BRAND.md`](BRAND.md) and the SVGs are
+enough to regenerate it exactly.
 
 ## Licence
 

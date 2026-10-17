@@ -1,0 +1,150 @@
+name: Release
+
+# Publishing a tag is what publishes a release. A tag cannot exist without its
+# binaries, because the build is what attaches them.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build and attach binaries to'
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  STEM: vn-ranger
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  # Create the release once, as a draft. It becomes visible only after every archive
+  # and SHA256SUMS.txt are attached, so a half-finished release cannot be installed.
+  prepare:
+    name: Prepare release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Create the draft release if it does not exist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          gh release view "$TAG" >/dev/null 2>&1 || \
+            gh release create "$TAG" --draft --title "$TAG" --generate-notes
+
+  build:
+    name: ${{ matrix.target }}
+    needs: prepare
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            os_name: windows
+            arch: x86_64
+            ext: zip
+            rustflags: '-C target-feature=+crt-static'
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            os_name: linux
+            arch: x86_64
+            ext: tar.gz
+            rustflags: ''
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            os_name: macos
+            arch: aarch64
+            ext: tar.gz
+            rustflags: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.target }}
+          cache-on-failure: true
+
+      - name: Linux GUI dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libxkbcommon-dev libwayland-dev libx11-dev libxi-dev \
+            libxcursor-dev libxrandr-dev libgl1-mesa-dev
+
+      - name: Build
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags }}
+        run: cargo build --release --locked -p vn-ranger --target ${{ matrix.target }}
+
+      - name: Package
+        shell: bash
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${TAG#v}"
+          NAME="${STEM}-${VERSION}-${{ matrix.os_name }}-${{ matrix.arch }}"
+          mkdir -p "dist/${NAME}"
+          if [ "${{ matrix.os_name }}" = "windows" ]; then
+            cp "target/${{ matrix.target }}/release/vn-ranger.exe" "dist/${NAME}/"
+            cp README.md LICENSE "dist/${NAME}/"
+            powershell -NoProfile -Command \
+              "Compress-Archive -Path 'dist/${NAME}' -DestinationPath 'dist/${NAME}.zip'"
+          else
+            cp "target/${{ matrix.target }}/release/vn-ranger" "dist/${NAME}/"
+            cp README.md LICENSE "dist/${NAME}/"
+            (cd dist && tar -czf "${NAME}.tar.gz" "${NAME}")
+          fi
+          cp "dist/${NAME}.${{ matrix.ext }}" .
+          echo "ASSET=${NAME}.${{ matrix.ext }}" >> "$GITHUB_ENV"
+
+      - name: Upload
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          gh release upload "$TAG" "$ASSET" --clobber
+
+  checksums:
+    name: SHA256SUMS.txt
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # A checksum file computed before the last upload is a lie, so this job waits
+      # for every build and re-downloads what was actually published.
+      - name: Collect and publish SHA256SUMS.txt
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          mkdir -p assets
+          gh release download "$TAG" --pattern '*' --dir assets
+          rm -f assets/SHA256SUMS.txt
+          (cd assets && sha256sum ./* > SHA256SUMS.txt)
+          gh release upload "$TAG" assets/SHA256SUMS.txt --clobber
+
+  publish:
+    name: Publish
+    needs: checksums
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          gh release edit "$TAG" --draft=false
