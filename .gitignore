@@ -1,0 +1,15 @@
+# Build output
+/target
+**/*.rs.bk
+
+# Editor and OS noise
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local scratch: a developer's own notes or rule packs, never committed
+/scratch/
+*.local.toml

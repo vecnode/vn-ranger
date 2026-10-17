@@ -1,0 +1,785 @@
+# The plan — vn-ranger
+
+**Status:** plan. No application code exists yet.
+**Audience:** the maintainer, future contributors, and anyone deciding whether to
+trust this program with a machine.
+**What this document is:** the research behind ranger, the scope it will and will not
+take, the architecture that keeps it honest, and the order in which it gets built.
+
+The short version is §1. Everything after it exists to justify that version.
+
+**Contents:** [1. The short version](#1-the-short-version) ·
+[2. Why ranger exists](#2-why-ranger-exists) · [3. Prior art](#3-prior-art) ·
+[4. Principles](#4-principles) · [5. The product model](#5-the-product-model) ·
+[6. Architecture](#6-architecture) · [7. Platform matrix](#7-platform-matrix) ·
+[8. The mark and the suite](#8-the-mark-and-the-suite) · [9. Roadmap](#9-roadmap) ·
+[10. Distribution](#10-distribution) · [11. Budgets](#11-budgets) ·
+[12. Verification](#12-verification) · [13. Privacy and data](#13-privacy-and-data) ·
+[14. Risks and open questions](#14-risks-and-open-questions) ·
+[15. References](#15-references)
+
+---
+
+## 1. The short version
+
+vn-ranger is a resident, local-only system ranger for Windows, macOS and Linux. It
+answers four questions, in this order:
+
+1. **See** — what is running, what starts on its own, what is listening, what is
+   installed, and which autonomous agents are among them.
+2. **Explain** — for anything unusual, what was observed, which rule fired, and what
+   the finding does *not* mean.
+3. **Remember** — a baseline of the machine on a good day, so later checks report a
+   diff rather than a verdict.
+4. **Act** — quarantine and cleanup, previewed, journalled and reversible.
+
+It is a Rust and egui application, distributed as a small archive through GitHub
+releases, installed and updated by
+[vn-launcher](https://github.com/vecnode/vn-launcher). It has no model, no runtime, no
+service, no account and — in the v0.x line — no network code at all. It is MIT and
+free forever.
+
+The first release, **v0.1.0**, is read-only. It collects and displays inventory, and it
+does not delete, quarantine or "fix" anything. Every later capability has to earn its
+place (§9).
+
+---
+
+## 2. Why ranger exists
+
+### 2.1 The category lost the plot
+
+Consumer security software began with a good instinct: a program that watches the
+machine so its owner does not have to. It then became a business model. The modern
+category is full of upsells, scareware, opaque "scores", registry cleaning that fixes
+nothing, "RAM boosters" that do nothing, and warnings designed to sell an upgrade
+rather than explain a fact.
+
+The result is predictable. People do not trust security software, so they ignore it;
+or they trust it too much, so they believe a green tick means a clean machine.
+
+Ranger keeps the instinct and drops the business model. The product is not a verdict.
+It is **evidence a person can read**.
+
+### 2.2 The new resident
+
+A computer in 2026 runs more autonomous software than the security category was
+designed for: coding agents, MCP servers, local model runners, sync daemons, browser
+automation drivers, background "helpers" that hold a socket and a credential file.
+They are not malware. Most are useful. But they act without a person in the loop, and
+almost nobody can say what they are, who installed them, what they can reach, or
+whether they were there last week.
+
+Classic antivirus has no vocabulary for this. It asks "does this file match a
+signature?" The useful question is "what is this thing allowed to do, and did that
+change?"
+
+Ranger's answer is an **agent inventory**: a plain, local list of the autonomous
+processes on the machine, with provenance and reach, and a diff against the last time
+the machine looked normal. No judgement of intent — just the facts a person needs to
+make one.
+
+### 2.3 Ablated models and the intent problem
+
+The uncomfortable version of §2.2 is that capability and alignment are separable.
+Research on safety ablation treats the removal of refusal behaviour as a utility-risk
+frontier, not an "uncensoring recipe": refusal can be reduced while capability
+remains, and unsafe compliance rises as a measurable cost
+([David & Gervais, 2026](https://arxiv.org/abs/2605.17413)). The implication for a
+defender is narrow and practical:
+
+> A model's identity, vendor or model card cannot tell you what a process will do with
+> a user's keys.
+
+So ranger does not try to detect "an AI". It records what an agent can do: what
+spawned it, whether it persists, which sockets it holds, what it shipped with, whether
+its binary is signed, and what changed after it arrived. **The model is not the
+evidence; the behaviour is.**
+
+This is also why ranger itself contains no model. A detector that depends on a model
+inherits the model's failure modes, its update cadence, its licence and its supply
+chain. Deterministic rules can be read, tested and argued with. Model-assisted triage is
+a possible later feature (§9, "deferred"), never a dependency.
+
+### 2.4 The gap
+
+The tools that do parts of this well are either large, server-shaped, copyleft, or
+commercial:
+
+- **osquery** models the machine as facts, but expects an operator and a fleet.
+- **ClamAV** scans files, but is an engine, not an explanation.
+- **Autoruns** and **KnockKnock** answer "what starts on its own", but are
+  Windows-only / macOS-only and not designed as a quiet daily companion.
+- **EDR platforms** do this at enterprise scale, with an agent, a server and a price.
+- **Cleaners** delete things confidently and explain almost nothing.
+
+There is no small, free, local, cross-platform app that says: *here is what runs, here
+is what changed, here is why it matters, and here is the evidence*. That is the gap.
+
+---
+
+## 3. Prior art
+
+The research was done against the live repositories, not against memory. Licences are
+as reported by each repository in October 2026.
+
+| Project | Licence | What it does | What ranger takes | What it leaves |
+|---|---|---|---|---|
+| [vn-launcher](https://github.com/vecnode/vn-launcher) | MIT | Installs, updates and opens the vecnode applications | The workspace shape, the worker model, the release contract, the mark | The catalogue domain: it launches apps, ranger inspects a machine |
+| [osquery](https://github.com/osquery/osquery) | Apache-2.0 **or** GPL-2.0 | Exposes OS state as SQL tables | "Facts, not verdicts"; a cross-platform fact schema | The SQL surface, the agent/server model, the deployment weight |
+| [ClamAV](https://github.com/Cisco-Talos/clamav) | GPL-2.0 | Signature antivirus engine | The idea that signatures are a separate, optional layer; signature-update discipline | The engine: copyleft, C, and far larger than this app |
+| [YARA-X](https://github.com/VirusTotal/yara-x) | BSD-3-Clause | Rust pattern-matching rules for files | A linkable rule engine **if** it earns its place (v0.5, optional feature) | A default dependency; rules are a supply-chain surface |
+| [Sigma](https://github.com/SigmaHQ/sigma) | DRL 1.1 (rules) | A portable detection-rule format | The idea of a reviewable rule document with a rationale | The rules themselves: DRL is not an OSI licence, so import-only and user-supplied |
+| [Czkawka / Krokiet](https://github.com/qarmin/czkawka) | MIT (code), CC BY 4.0 (assets) | Fast cross-platform duplicate and junk finder | Preview → select → act; honest scope; no telemetry | Its scanning domain and its Slint interface |
+| [BleachBit](https://github.com/bleachbit/bleachbit) | GPL-3.0 | Cleaner with per-application rules | The "cleaner list" concept, and the caution it demands | Code (copyleft), GTK, registry cleaning |
+| [Lynis](https://github.com/CISOfy/lynis) | GPL-3.0 | Host hardening audit | Check IDs, "what was checked" reporting, remediation text | The shell implementation and copyleft code |
+| [Loki](https://github.com/Neo23x0/Loki) | GPL-3.0 | Indicator-of-compromise scanner | The indicator model and match reporting | Python, copyleft, and network-fed IOC lists |
+| [KnockKnock](https://github.com/objective-see/KnockKnock) | GPL-3.0 | macOS persistence inventory | The "what is installed that runs" question; signed/unsigned presentation | Objective-C code; macOS-only scope |
+| [Autoruns](https://learn.microsoft.com/sysinternals/downloads/autoruns) / Sigcheck | Proprietary freeware | Windows autorun and signature inventory | The feature bar: what "complete" means, and the category list | Code and redistribution; not open source |
+| [Wazuh](https://github.com/wazuh/wazuh) | GPL-2.0 | SIEM/EDR at fleet scale | Event vocabulary and the shape of an audit trail | Server/agent architecture; copyleft |
+| [Velociraptor](https://github.com/Velocidex/velociraptor) | AGPL-3.0 | DFIR collection at fleet scale | The discipline of evidence and collection scope | Server architecture; AGPL |
+| [zeroclaw](https://github.com/zeroclaw-labs/zeroclaw) | Apache-2.0 | Small autonomous assistant infrastructure | One binary, no runtime service, "deploy anywhere" packaging discipline | Its agent runtime and model plumbing: ranger has no model |
+| [agent-bom](https://github.com/agent-bom/agent-bom) | Apache-2.0 | Scans agentic infrastructure (agents, MCP servers) | The agent/MCP inventory as a first-class object | Its Python/control-plane scope |
+| [Microsoft Defender for AI agents](https://learn.microsoft.com/en-us/defender-xdr/security-for-ai/ai-agent-detection-protection) | Proprietary (preview) | Commercial agent discovery and protection | Nothing reusable — it confirms the category is real | Everything else |
+
+### 3.1 What the research changed
+
+1. **Visibility first.** The most useful half of this category is inventory, not
+   verdicts. osquery, Autoruns and KnockKnock are valuable because they show facts.
+   Ranger therefore ships inventory before it ships rules, and rules before actions.
+2. **Signatures are a separate layer.** ClamAV is GPL-2.0, so it cannot be linked into
+   an MIT application; YARA-X is BSD-3-Clause and can be, later, behind a feature flag.
+   Neither belongs in v0.1.
+3. **Cleaning is a trust problem, not a scanning problem.** Czkawka earns trust by
+   showing what it will delete before it deletes it. Ranger makes preview and
+   reversibility the default, and refuses the "registry cleaner" category outright.
+4. **Rule packs are attack surface.** Sigma's DRL is not an OSI licence, and a rule
+   pack that can name arbitrary paths is a deletion vector. Ranger rules are data, not
+   code; external packs arrive only with signatures (v0.5).
+5. **Agent inventory is real and unowned.** Commercial EDR now sells agent discovery;
+   the open-source options are server- or Python-shaped. A small local app can own this.
+6. **Distribution is already solved.** vn-launcher's release convention gives ranger a
+   channel from day one. Build to it rather than inventing an installer.
+
+### 3.2 Licence compatibility
+
+Ranger is MIT. That decides what can be linked:
+
+- **Linkable:** YARA-X (BSD-3-Clause), osquery (Apache-2.0 option), `sysinfo` (MIT),
+  `notify` (MIT/Apache-2.0), `aya` (Apache-2.0), `windows` (MIT/Apache-2.0),
+  `objc2` (MIT).
+- **Ideas only:** ClamAV, BleachBit, Lynis, Loki, KnockKnock, Wazuh, Velociraptor
+  (GPL/AGPL). No code is copied from them.
+- **Not vendored:** Sigma rules (DRL 1.1). If imported at all, the user supplies them
+  and the licence travels with them.
+
+---
+
+## 4. Principles
+
+These are the constitution. A change that breaks one is the wrong change, however
+useful it looks.
+
+1. **Visible.** Ranger is a normal process with a normal window and a normal tray icon.
+   It documents where it stores data and how to remove it. A security tool that hides
+   is indistinguishable from the thing it hunts.
+2. **Local.** No telemetry, no analytics, no account, no cloud, no network in v0.x.
+   The promise is enforced by the dependency graph, not by a paragraph (§6.6).
+3. **Honest.** A finding names its evidence and its limits. "I do not know" is a valid
+   answer. "Your PC is clean" is not a sentence ranger says.
+4. **Reversible.** Quarantine before delete. Preview before action. A journal entry for
+   everything. Nothing outside an allowlist is ever touched.
+5. **Least privilege.** No kernel driver, no root service, no silent elevation. What
+   cannot be seen without elevation is shown as unseen, not guessed.
+6. **Small.** One binary, no runtime, no model server, no database engine. egui and
+   `std`, not Electron and not a webview.
+7. **Boring.** No scareware, no countdowns, no red badges for attention metrics, no
+   "optimise" buttons that cannot explain themselves.
+8. **Free.** MIT, no paywall, no ads, no "pro" tier. If it cannot be funded honestly,
+   it stays small rather than becoming an upsell.
+
+### 4.1 Ranger's own threat model
+
+| Asset | Threat | Mitigation |
+|---|---|---|
+| The user's files | A bug or a malicious rule causes deletion | Read-only default; quarantine; allowlists; two-person review of deletion paths; tests for traversal, symlinks and TOCTOU |
+| The user's privacy | Inventory is exfiltrated or over-collected | No network; no file contents; no secrets; local storage; export only on request |
+| Trust in findings | False positives train the user to ignore the app | Evidence on every finding; a named benign explanation; expiring suppressions; no "urgent" without strong evidence |
+| The release | A compromised maintainer or asset | SHA256SUMS; signed releases when certificates exist; branch protection; no asset replacement |
+| The rule supply chain | A rule pack becomes a remote-delete primitive | Rules are data, not code; signed packs; no third-party packs before v0.5 |
+| The app's own persistence | Ranger becomes the hidden thing it warns about | Autostart is opt-in, visible and removable; no service; no driver; Quit really quits |
+
+**What ranger cannot do:** detect kernel rootkits, inspect firmware, scan memory,
+guarantee that a machine is free of malware, or replace the operating system's own
+security updates. The interface says so where it matters, and so does `SECURITY.md`.
+
+---
+
+## 5. The product model
+
+### 5.1 Facts
+
+A **fact** is a typed observation, not a judgement:
+
+```text
+Fact {
+  kind:        process | autorun | listener | package | agent | signature | file
+  id:          stable within a snapshot (pid:4242, hkcu-run:AcmeHelper, tcp:0.0.0.0:8080)
+  fields:      the observation (path, hash, parent, user, start time, signer, ...)
+  source:      the collector that produced it (windows.processes, macos.launchd, ...)
+  collected_at
+}
+```
+
+Facts can be shown raw in the **Inventory** view. They carry no severity and no score.
+The raw view is the escape hatch that makes the interpreted view auditable.
+
+### 5.2 Findings
+
+A **finding** is what a rule says about one or more facts:
+
+```text
+Finding {
+  id, rule_id, subject (a fact id or a small set),
+  severity:    info | notice | attention | urgent
+  confidence:  observed | likely | possible
+  evidence:    [ what was seen, where it was seen, why it was collected ]
+  why:         the plain-language rationale
+  benign:      the most likely innocent explanation
+  first_seen, last_seen, status: new | acknowledged | suppressed | resolved
+}
+```
+
+- **observed** — the fact itself is certain; the interpretation may not be.
+- **likely / possible** — inference from a pattern, with the pattern named.
+- **Severity is about consequence, not confidence.** A certain fact can be `info`; an
+  uncertain one is never `urgent`.
+- **`urgent` is rare by design.** It requires an active, observed harm (for example, a
+  binary that was quarantined has reappeared and is listening on a public interface),
+  not a suspicious-looking path.
+- **No numeric risk score in v0.x.** A single number hides the evidence. If a score is
+  ever added, it must decompose into the findings that produced it.
+
+### 5.3 Rules
+
+Two kinds, one shape:
+
+- **Built-in detectors** are Rust functions with fixtures. They are deterministic,
+  bounded, and tested against both a positive and a negative case.
+- **Data rules** are TOML: a subject kind, a small set of predicates, a rationale, a
+  severity and a benign explanation. No scripting, no shell, no unbounded regex.
+
+Every rule declares `id`, `title`, `severity`, `confidence`, `why`, `benign`, and
+`remediation`. A rule that cannot name a benign explanation may not ship as
+`attention`.
+
+**Suppressions** are scoped to one `(rule, subject)` pair, carry a reason, and expire
+(default 30 days, maximum 90). There is no "ignore everything" switch. A suppression is
+visible in Settings and in the report.
+
+### 5.4 The agent inventory
+
+An **agent** is a process that acts without a person in the loop. Ranger detects them
+by observable properties, not by brand:
+
+| Axis | What is recorded |
+|---|---|
+| Provenance | install path, signer, package owner, hash, parent chain |
+| Persistence | autorun entry, service, launch agent, scheduled task |
+| Reach | listening sockets, owning user, whether it can open a public interface |
+| Autonomy | long-running or scheduled, started by a person or by the system |
+| Change | first seen, last seen, and whether it is new since the baseline |
+
+Ranger does **not** read prompts, model files, browser content, messages or
+credentials, and it does not try to classify "AI" by name. It shows capability and
+provenance, and leaves intent to the person. That is the honest version of "a detector
+of agents".
+
+### 5.5 Language
+
+Words are part of the safety model.
+
+| Never | Instead |
+|---|---|
+| "Infected" | "An unexplained startup item" |
+| "Virus found" | "This binary matches rule `startup.temp-directory`" |
+| "Your PC is clean" | "No unexplained startup items in this check" |
+| "Threat score 87" | The findings, with their evidence |
+| "Fix" (for a finding) | "Quarantine", "remove the startup entry", "open the folder" |
+
+Empty states say what was checked, not that the machine is safe.
+
+### 5.6 What "clean" means
+
+"Clean" is something done to a cache, not a verdict on a computer. In v0.3.0:
+
+- **Quarantine** moves a user-selected file into app-managed storage, with its hash,
+  original path and reason recorded. Restore is one click.
+- **Cleanup** removes files only in an allowlist of cache, temporary and log
+  locations, with a size preview and per-item selection. User documents are excluded
+  by construction, not by a clever heuristic.
+- **Registry cleaning, "junk" scoring, RAM boosting and secure-delete claims are out
+  of scope.** They do not do what they say, and pretending otherwise is the behaviour
+  this project exists to reject.
+
+Ranger is not an antivirus. When a finding looks like malware, the honest next step is
+to quarantine the file and point the user at the operating system's own protections,
+not to promise a disinfection it cannot verify.
+
+---
+
+## 6. Architecture
+
+### 6.1 Crates and layering
+
+Same shape as vn-launcher, so the suite stays legible to one maintainer:
+
+```text
+crates/
+  core      vnr-core     pure: facts, findings, rules, diffs, evidence, reports
+  native    vnr-native   the only crate that touches the world:
+                         collectors, storage, quarantine, cleanup
+  ui        vnr-ui       egui: theme, fonts, icons, widgets, views
+apps/
+  vn-ranger              the eframe shell: owns the World, runs the worker,
+                         scheduler and tray
+xtask/                   cargo xtask ci | fmt | lint | test | version
+```
+
+The rules are the same rules:
+
+- `vnr-core` depends on nothing in the workspace and never gains a filesystem,
+  network, clock or OS dependency. "Now" is a parameter, so every decision is a pure
+  function with a test.
+- `vnr-native` may use `vnr-core`. It is the only crate that reads the machine or
+  writes to it.
+- `vnr-ui` may use `vnr-core`. It draws a `World` and returns `Action`s; it never reads
+  a file or spawns a process.
+- Only `apps/vn-ranger` opens a window and knows about all three.
+
+### 6.2 Data flow
+
+```text
+  collectors (worker thread) ──▶ Facts ──▶ vnr-core (diff, rules) ──▶ Findings
+        ▲                                                              │
+        │ Request                                                      ▼
+  apps/vn-ranger ◀──────────── Action ◀──────────── vnr-ui::show ◀── World
+```
+
+The worker exists for the same reason as in vn-launcher: an inventory can take
+seconds, and the window must not freeze while it does. A dead worker is visible: the
+channel closes, the shell says so, and the spinner is cleared.
+
+### 6.3 Collectors and capability
+
+Every collector returns an outcome, never an error a caller has to interpret:
+
+```text
+CollectorOutcome = Facts(Vec<Fact>)
+                 | Partial { facts, skipped: Vec<Skip> }
+                 | Unavailable { reason }
+```
+
+```text
+trait Collector {
+    fn id(&self) -> CollectorId;
+    fn capability(&self) -> Capability;   // Available | NeedsElevation | Unsupported { why }
+    fn collect(&self, ctx: &Context) -> CollectorOutcome;
+}
+```
+
+A collector that cannot see something says so. An empty list is a claim that there was
+nothing to find, and ranger is not allowed to make that claim on behalf of a permission
+it did not have.
+
+### 6.4 Storage
+
+Everything lives under the platform data directory (`directories::ProjectDirs`), in
+`vn-ranger/`:
+
+```text
+settings.toml          user choices; human-readable
+baseline.json          the last accepted snapshot (compacted)
+journal.ndjson         append-only findings, actions and errors
+reports/               exported JSON and Markdown
+quarantine/<id>/       the file plus manifest.json (from v0.3.0)
+logs/                  local, rotated, no secrets
+```
+
+No database engine. JSON and NDJSON are inspectable with a text editor, survive a
+decade, and add no C dependency. Writes are atomic: a temporary file, then a rename
+(`tempfile::NamedTempFile::persist`, which is correct on Windows too). A crash leaves
+the previous file intact.
+
+On Unix the data directory is created `0700`. On Windows it inherits the user's
+profile ACL. Nothing in it is secret, but paths contain usernames, so exports carry a
+"this is personal data" note.
+
+### 6.5 Scheduling and residency
+
+- **Start:** a quick inventory (processes, autoruns, listeners) within a few seconds.
+- **Resident:** every six hours, with jitter. A wake-from-sleep check is v0.4.0.
+- **Heavy work:** user-initiated. v0.1.0 has no full-disk scan.
+- **Budget:** idle CPU under 0.5% of one core, RSS under 120 MB, measured and
+  published (§11).
+- **Close to tray** is a choice; **Quit** ends the process. There is no daemon, no
+  service, and no watchdog that restarts ranger behind the user's back.
+
+Autostart, when it arrives, is opt-in and uses the least invasive mechanism per OS:
+
+| OS | Mechanism | Never |
+|---|---|---|
+| Windows | `HKCU\...\Run` | HKLM, a service, Task Scheduler with SYSTEM |
+| macOS | `~/Library/LaunchAgents` | `/Library/LaunchDaemons`, a privileged helper |
+| Linux | `~/.config/autostart/*.desktop` | a systemd system unit |
+
+Settings shows the exact entry, and one click removes it.
+
+### 6.6 No network, enforced
+
+The v0.x promise is "nothing leaves the machine". It is enforced, not asserted:
+
+- No HTTP/TLS client in the dependency tree. `cargo deny` bans `reqwest`, `ureq`,
+  `hyper`, `h2`, `curl`, `isahc`, `surf` and `attohttpc`; a CI step also greps
+  `Cargo.lock` so a new transitive dependency cannot slip in.
+- No socket code in the workspace: a review rule, plus a grep for `std::net`,
+  `socket2` and raw `libc::socket` in CI.
+- No auto-update inside ranger. vn-launcher updates it; a future self-updater would
+  require signed manifests and an explicit opt-in.
+- Rule packs are local files; they cannot fetch.
+
+If a future feature needs the network (a hash lookup, for example), it is opt-in,
+off by default, documented per feature, and visible in the UI while it runs. The
+default build stays offline.
+
+### 6.7 Failure policy
+
+- No panics in non-test code: the workspace lints deny `unwrap`, `expect`, `panic`,
+  `todo` and `unimplemented`; `unsafe_code = "forbid"`.
+- Every failure is an outcome with a reason a person can act on: permission denied,
+  file unreadable, OS API unavailable, disk full.
+- A dead worker is visible; a collector that hangs is cancellable.
+- A log is local and contains no secrets; there is no crash upload.
+
+---
+
+## 7. Platform matrix
+
+`●` full, `◐` partial or needs elevation, `○` not planned for v0.x.
+
+| Capability | Windows | macOS | Linux |
+|---|---|---|---|
+| Processes, parent, command line | ● Toolhelp32 / `sysinfo` | ● `libproc` / `sysctl` | ● `/proc` |
+| Binary hash | ● SHA-256 | ● SHA-256 | ● SHA-256 |
+| Signature / provenance | ● WinVerifyTrust (cache-only) | ● `codesign` / Security framework | ◐ package owner (dpkg/rpm) |
+| Autoruns | ● HKCU/HKLM Run, Startup, services, scheduled tasks | ● LaunchAgents/Daemons, cron; ◐ login items | ● systemd units, cron, XDG autostart |
+| Listeners → process | ● GetExtendedTcpTable/UDP | ◐ `libproc`; other users need privilege | ◐ `/proc/net` + fd inode; other users need privilege |
+| Installed packages | ● registry uninstall keys, MSIX | ● `pkgutil`, Homebrew | ● dpkg/rpm database |
+| File-change watch (v0.4) | ● ReadDirectoryChangesW | ● FSEvents | ● inotify |
+| Runtime file access | ○ ETW (user-mode) later | ○ EndpointSecurity (entitlement) later | ○ eBPF/auditd (root) later |
+| Kernel / rootkit | ○ | ○ | ○ |
+| Memory scanning | ○ | ○ | ○ |
+
+Notes that matter more than the ticks:
+
+- **Windows:** no service, no driver, and no HKLM autostart for ranger itself. (It
+  reads HKLM autoruns, because they are facts; it never writes one.) Signature checks
+  must use cached revocation data, so that verifying a signature never becomes a
+  network call.
+- **macOS:** several collectors trigger TCC prompts, and EndpointSecurity requires an
+  Apple entitlement. Ranger degrades and explains rather than asking for more access
+  than it needs. It is not notarised until v1.0.
+- **Linux:** `hidepid`, containers and sandboxed packages (Flatpak, Snap) reduce what
+  is visible. The capability banner says which collector is degraded and why.
+- **All three:** "not visible without elevation" is a first-class state, not an empty
+  list.
+
+---
+
+## 8. The mark and the suite
+
+The crystal is shared with vn-launcher: the same 24-unit grid, the same 2.914-unit
+stroke, the same six facets. What changes per application is the **inlay** — the colour
+inside the crystal:
+
+| Application | Inlay |
+|---|---|
+| vn-launcher | none (transparent) |
+| vn-ranger | ember: `#F26A21`, gradient `#FFA45E → #F26A21 → #D14A0C` |
+
+The suite rule is simple: **same crystal, one colour per app, no other variants.** The
+application icon is the mark on the suite's black tile, with white ridges so it holds
+on both a light and a dark taskbar. The full set, its sizes and the regeneration notes
+are in [`assets/logo/README.md`](../assets/logo/README.md).
+
+The launcher catalogue uses the same ember (`color = "#F26A21"`), so the card and the
+icon agree.
+
+---
+
+## 9. Roadmap
+
+Each milestone has an exit criterion. A milestone is not "done" because the code
+compiles; it is done when the criterion is met and written down.
+
+### M0 — Identity (this commit)
+
+- README, LICENSE, this plan, SECURITY, AGENTS, the release contract.
+- The mark in every size, including the application tile and the raw RGBA.
+- **Exit:** a reader can say what ranger is, what it refuses, and how it ships. No
+  application code.
+
+### M1 — v0.1.0, Inventory (read-only)
+
+- Workspace, three crates, app shell, CI, release workflow.
+- Collectors: processes and ancestry, autoruns, listeners (best effort), installed
+  packages, on all three platforms.
+- UI: Overview, Processes, Startup, Listeners, Report; search and sort; capability
+  banners; JSON and Markdown export.
+- No rules, no findings, no actions, no tray, no network.
+- **Exit:** runs on Windows, macOS and Linux; no panic on malformed or missing data;
+  every row names its source; every unavailable collector says why; fixture tests for
+  each parser; a release that follows the contract and is parsed correctly by
+  vn-launcher, with install and removal verified as soon as the launcher's install
+  path ships; size and RSS measured in `docs/BENCHMARKS.md`.
+
+### M2 — v0.2.0, Explain
+
+- Rule engine, 15–25 built-in rules, findings with evidence and a named benign
+  explanation, expiring suppressions, baseline and diff, timeline, Markdown report.
+- **Exit:** every rule has a positive and a negative fixture; a false-positive trial
+  against a corpus of popular applications is published; no finding exists without
+  evidence; the language audit in §5.5 passes.
+
+### M3 — v0.3.0, Act
+
+- Quarantine and restore with a manifest and hash; allowlisted cleanup with preview,
+  per-item selection and dry-run; the action journal; typed confirmation for anything
+  permanent.
+- **Exit:** traversal, symlink, hard-link and TOCTOU tests pass; restore is verified;
+  no path outside the allowlist can be reached; every deletion path has two reviewers;
+  a crash mid-action leaves the journal consistent.
+
+### M4 — v0.4.0, Resident
+
+- Tray, opt-in autostart, scheduler, single instance, close-to-tray, wake handling,
+  a 24-hour soak test.
+- **Exit:** budgets in §11 hold over the soak; autostart is visible and removable in
+  one click; no service or driver; tray fallback works on a desktop without
+  AppIndicator.
+
+### M5 — v0.5.0, Rules
+
+- Signed external rule packs, a rule-development guide, an optional `yara-x` feature,
+  and an importer for a user-supplied subset of Sigma (licence respected).
+- **Exit:** unsigned packs are refused; signature verification has tests; the default
+  build contains no YARA-X; a bad pack can be rolled back without touching data.
+
+### M6 — v1.0.0, Deep and done
+
+- External security audit, signed Windows and macOS binaries, notarisation,
+  reproducible builds, accessibility pass, benchmarks, complete documentation.
+- **Exit:** an audit with no open high-severity findings; a first-run experience that
+  never requests more privilege than it explains; a release a cautious person would
+  install.
+
+### Deferred, deliberately
+
+- Model-assisted triage (local, optional, never required).
+- Elevated "deep scan" helper.
+- ETW, EndpointSecurity and eBPF collectors.
+- A Windows service or a privileged helper.
+- Self-update.
+- Mobile, web, server, and fleet management.
+
+The gates are order, not dates:
+
+1. No cleaning before quarantine and the journal.
+2. No external rules before signing.
+3. No elevation before a threat model for the helper.
+4. No model before deterministic rules are proven.
+5. No self-update before signed manifests.
+6. No network without an opt-in, a disclosure, and an off switch.
+
+---
+
+## 10. Distribution
+
+Ranger follows the vecnode release convention, documented in
+[vn-launcher/docs/RELEASES.md](https://github.com/vecnode/vn-launcher/blob/main/docs/RELEASES.md).
+The concrete instantiation is in [`docs/RELEASES.md`](RELEASES.md).
+
+Summary:
+
+- Tag `v<major>.<minor>.<patch>` and publish a GitHub Release from the tag.
+- Assets named `vn-ranger-<version>-<os>-<arch>.zip` (Windows) or `.tar.gz`
+  (macOS, Linux), plus `SHA256SUMS.txt` generated after every build finishes.
+- One top-level directory in the archive: `vn-ranger-<version>/`, containing the
+  binary, `README.md` and `LICENSE`.
+- The binary is `vn-ranger`, never `ranger`: the latter collides with the well-known
+  terminal file manager.
+- macOS: universal binary once the build matrix allows it. Linux: build on
+  Ubuntu 22.04 for the oldest glibc. Windows: MSVC with a static CRT.
+- No installers (`.msi`, `.dmg`, `.deb`, `.rpm`, `.AppImage`): the launcher unpacks
+  archives.
+- Signing arrives with v1.0. Until then, `SHA256SUMS.txt` is the only integrity
+  statement, and the release notes say so.
+
+The vn-launcher catalogue entry:
+
+```toml
+[[app]]
+id       = "vn-ranger"
+name     = "vn-ranger"
+tagline  = "Resident system ranger: what runs, what persists, what changed"
+repo     = "vecnode/vn-ranger"
+color    = "#F26A21"
+order    = 2
+
+[app.install]
+stems      = ["vn-ranger"]
+extensions = ["zip", "tar.gz"]
+binary     = "vn-ranger"
+docs       = "https://github.com/vecnode/vn-ranger#build"
+
+[app.launch]
+windows = ["{bin}"]
+macos   = ["{bin}"]
+linux   = ["{bin}"]
+
+[app.detect]
+command = "vn-ranger"
+paths   = ["{install}/vn-ranger", "{install}/vn-ranger.exe"]
+```
+
+---
+
+## 11. Budgets
+
+Targets, not claims. v0.1.0 publishes measured numbers in `docs/BENCHMARKS.md`; if a
+target is missed, the document says so and the target is revised with a reason.
+
+| Budget | Target | Why |
+|---|---|---|
+| Cold start to first frame | ≤ 500 ms | a resident app is opened often |
+| Idle CPU, resident, no scan | < 0.5% of one core | "always open" must not cost a laptop |
+| Idle RSS | ≤ 120 MB | egui plus the platform renderer |
+| Release archive | ≤ 12 MB | a small installer |
+| Installed footprint | ≤ 40 MB | no models, no runtime, no database |
+| Inventory scan | ≤ 3 s typical | longer is allowed with progress |
+| Hashing | ≥ 200 MB/s single-thread SHA-256 on NVMe | bounded, visible work |
+| Journal write | < 1 ms per event | no UI stalls |
+
+The one honest comparison to zeroclaw is shape, not bytes: one binary, no runtime, no
+external service, nothing to install beside it.
+
+---
+
+## 12. Verification
+
+- **Unit tests** in `vnr-core` for every pure decision; property tests for parsers and
+  diffing.
+- **Fixture tests** for each collector: sanitised real output captured on each OS,
+  replayed on any host. The Linux rules are therefore tested by a Windows developer.
+- **Golden reports:** a fixed fixture set produces a byte-stable JSON report.
+- **No-network test:** `cargo deny` bans plus a `Cargo.lock` grep, as in §6.6.
+- **Cross-target clippy:** the workspace is checked against Linux and macOS targets, as
+  vn-launcher does, because a Windows machine cannot see what they see.
+- **Fuzzing:** the TOML rule parser and the plist/registry parsers, from v0.2.
+- **Manual matrix:** Windows 10 and 11; macOS 13, 14 and 15; Ubuntu 22.04 and 24.04;
+  Fedora; on VMs with known-clean snapshots.
+- **Release check:** version bump, changelog, tag, checksums, the launcher's parser
+  accepts the release, a clean VM unpacks it and smoke-tests the binary, and an
+  uninstall leaves nothing behind. Install through the launcher is added to this list
+  the day its install path ships.
+- **Accessibility:** keyboard reachability, labels for custom-painted widgets, reduced
+  motion, high contrast. egui has limits; they are documented rather than ignored.
+
+---
+
+## 13. Privacy and data
+
+**Collected:** process metadata (name, path, pid, parent, user, start time), autorun
+entries, the listener table, installed package names, signatures, and hashes of
+startup binaries. Host OS and version.
+
+**Not collected:** file contents (only hashes), browser history, messages, documents,
+credentials, keystrokes, screenshots, microphone or camera data, and anything sent off
+the machine.
+
+**Storage:** the platform data directory, readable by the user, exportable as JSON or
+Markdown, deletable by removing one folder. Reports can contain usernames and paths, so
+the export dialog says they are personal data.
+
+**Retention:** the journal keeps 90 days or 10,000 entries by default. The baseline is
+kept until replaced. Quarantine is kept until the user deletes it; automatic purge is
+opt-in and off by default.
+
+**Telemetry:** none. No analytics, no crash upload, no update ping. The only network
+traffic associated with ranger is the one vn-launcher performs to download a release,
+and that is the launcher's, not ranger's.
+
+---
+
+## 14. Risks and open questions
+
+### 14.1 Risks
+
+| Risk | Impact | Mitigation |
+|---|---|---|
+| False positives erode trust | High | Evidence, a benign explanation, expiring suppressions, no `urgent` without observed harm |
+| Scope creep into AV/EDR | High | The constitution (§4) and the milestone gates |
+| A deletion bug | Severe | Quarantine first, allowlists, two-person review, traversal and TOCTOU tests |
+| Permission gaps look like bugs | Medium | Capability banners and "not visible" states |
+| macOS TCC and entitlements | Medium | Degrade, document, avoid private APIs |
+| Linux tray inconsistency | Low | Tray where available, window-only fallback, no hard dependency |
+| Rule-pack supply chain | High | Signed packs, no code in rules, no third-party packs before v0.5 |
+| egui accessibility | Medium | Keyboard and labels now; document what remains |
+| Maintainer time and funding | High | Small scope, no server, no telemetry, MIT |
+
+### 14.2 Decisions needed from the owner
+
+1. **Licence:** MIT only (matches vn-launcher, recommended) or MIT/Apache-2.0 dual?
+2. **Cleaning:** quarantine-only, or allowlisted cache/temp cleanup in v0.3.0?
+3. **Tray:** support all three platforms from v0.4.0, or window-only first?
+4. **Elevation:** ever? If so, a separate helper with a written threat model.
+5. **Rule packs:** third-party at v0.5 with signing, or built-in rules only?
+6. **Binary name:** `vn-ranger` (recommended, avoids the `ranger` file manager).
+7. **Code signing:** Windows EV and Apple Developer ID certificates, and who owns them?
+8. **Platform floor:** Windows 10 1809+, macOS 13+, glibc 2.35+ (Ubuntu 22.04)?
+9. **Localisation:** English only until v1.0?
+10. **Agent scope:** process, network and persistence only — no prompt or content
+    inspection. Confirm.
+
+---
+
+## 15. References
+
+- vn-launcher — <https://github.com/vecnode/vn-launcher>
+- vn-launcher release convention —
+  <https://github.com/vecnode/vn-launcher/blob/main/docs/RELEASES.md>
+- osquery — <https://github.com/osquery/osquery>
+- ClamAV — <https://github.com/Cisco-Talos/clamav>
+- YARA-X — <https://github.com/VirusTotal/yara-x>
+- Sigma — <https://github.com/SigmaHQ/sigma>
+- Czkawka — <https://github.com/qarmin/czkawka>
+- BleachBit — <https://github.com/bleachbit/bleachbit>
+- Lynis — <https://github.com/CISOfy/lynis>
+- Loki — <https://github.com/Neo23x0/Loki>
+- KnockKnock — <https://github.com/objective-see/KnockKnock>
+- Sysinternals Autoruns — <https://learn.microsoft.com/sysinternals/downloads/autoruns>
+- Wazuh — <https://github.com/wazuh/wazuh>
+- Velociraptor — <https://github.com/Velocidex/velociraptor>
+- zeroclaw — <https://github.com/zeroclaw-labs/zeroclaw>
+- agent-bom — <https://github.com/agent-bom/agent-bom>
+- Microsoft Defender for AI agents —
+  <https://learn.microsoft.com/en-us/defender-xdr/security-for-ai/ai-agent-detection-protection>
+- David, I. & Gervais, A. (2026). *Ablating Safety: Mechanisms for Removing Alignment
+  in Language Models for Security Applications.* arXiv:2605.17413 —
+  <https://arxiv.org/abs/2605.17413>
+- egui — <https://github.com/emilk/egui>
+- sysinfo — <https://github.com/GuillaumeGomez/sysinfo>
+- notify — <https://github.com/notify-rs/notify>
+- YARA-X crate — <https://crates.io/crates/yara-x>
+- tray-icon — <https://crates.io/crates/tray-icon>
+- single-instance — <https://crates.io/crates/single-instance>

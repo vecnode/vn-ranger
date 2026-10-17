@@ -1,0 +1,34 @@
+# Line endings are pinned here rather than left to each machine's Git settings.
+#
+# Git for Windows ships `core.autocrlf=true` in its *system* config, so without this
+# file a Windows checkout gets CRLF while Linux and macOS CI get LF. That works right
+# up until a contributor has `core.autocrlf=false`, at which point a file committed on
+# Windows keeps its CRLF and every later diff against it is the whole file.
+#
+# `eol=lf` takes precedence over `core.autocrlf`, so this makes a Windows checkout and
+# a Linux one produce identical bytes. The repository is explicitly cross-platform:
+# developed on Windows, built and tested on all three in CI.
+* text=auto eol=lf
+
+# The one place CRLF is genuinely wanted: scripts Windows will run itself.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binaries: never diffed, never converted. Listing them keeps `git diff` from
+# claiming "Binary files differ" in a way that hides a real change, and stops the
+# text filters from being applied to an archive.
+*.png binary
+*.jpg binary
+*.ico binary
+*.ttf binary
+*.otf binary
+*.woff2 binary
+*.rgba binary
+*.zip binary
+*.gz binary
+*.crate binary
+
+# Lockfiles are generated; collapsing them in review is noise, and GitHub renders
+# them poorly. They are still text, so they diff normally — this only helps tooling.
+Cargo.lock text eol=lf
