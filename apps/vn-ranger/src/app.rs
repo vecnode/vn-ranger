@@ -44,6 +44,7 @@ impl App {
             now_unix: now_unix(),
             live: None,
             poll_enabled: true,
+            poll_led: true,
             watch: WatchReport {
                 enabled: true,
                 ..WatchReport::default()
@@ -161,6 +162,7 @@ impl App {
                         at_unix,
                         reason,
                     });
+                    self.ui.note_poll();
                 }
                 worker::WatchMessage::Events(events) => {
                     for event in events {
@@ -269,6 +271,7 @@ impl App {
                     self.world.watch.skipped.clear();
                 }
             }
+            Action::SetPollLed(enabled) => self.world.poll_led = enabled,
             Action::Quit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
         }
     }

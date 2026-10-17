@@ -19,6 +19,12 @@ pub use world::{Action, Live, ScanState, View, WatchReport, World};
 
 use egui::{Align2, CornerRadius, FontId, Margin, RichText, Sense, vec2};
 
+/// The height of the top bar's action controls, so the circle and the button agree.
+const ACTION_HEIGHT: f32 = 26.0;
+
+/// Where the project lives. Shown, never fetched: ranger has no network code.
+const PROJECT_URL: &str = "https://github.com/vecnode/vn-ranger";
+
 /// The interface's own state: what is on screen, not what is true about the machine.
 pub struct Ui {
     pub(crate) view: View,
@@ -30,6 +36,9 @@ pub struct Ui {
     pub(crate) confirm_elevate: bool,
     pub(crate) dark: bool,
     pub(crate) open_path: Option<String>,
+    led_lit: bool,
+    project_open: bool,
+    project_rect: egui::Rect,
     mark: egui::TextureHandle,
 }
 
@@ -51,8 +60,20 @@ impl Ui {
             confirm_elevate: false,
             dark: true,
             open_path: None,
+            led_lit: false,
+            project_open: false,
+            project_rect: egui::Rect::NOTHING,
             mark,
         }
+    }
+
+    /// Note that a poll just arrived, so the live indicator steps.
+    ///
+    /// The step happens on the frame the poll already asks for. An animation would cost
+    /// several extra frames a second and the idle budget is one of the product's
+    /// promises, so the indicator beats rather than fades.
+    pub fn note_poll(&mut self) {
+        self.led_lit = !self.led_lit;
     }
 
     /// Draw one frame and return what the person asked for.
@@ -91,6 +112,7 @@ impl Ui {
             actions.push(Action::OpenPath(path));
         }
         self.modal(&ctx, &mut actions);
+        self.project_modal(&ctx);
         actions
     }
 
@@ -106,7 +128,7 @@ impl Ui {
         }
     }
 
-    fn top_bar(&self, root: &mut egui::Ui, world: &World, actions: &mut Vec<Action>) {
+    fn top_bar(&mut self, root: &mut egui::Ui, world: &World, actions: &mut Vec<Action>) {
         egui::Panel::top("top")
             .exact_size(58.0)
             .frame(
@@ -130,6 +152,11 @@ impl Ui {
                         );
                     });
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let project = project_button(ui).on_hover_text("About this project");
+                        self.project_rect = project.rect;
+                        if project.clicked() {
+                            self.project_open = true;
+                        }
                         let scan = ui.add_enabled(
                             !world.busy(),
                             egui::Button::new(
@@ -138,10 +165,14 @@ impl Ui {
                                     .family(theme::semibold())
                                     .color(theme::ON_EMBER),
                             )
-                            .fill(theme::EMBER),
+                            .fill(theme::EMBER)
+                            .min_size(vec2(0.0, ACTION_HEIGHT)),
                         );
                         if scan.clicked() {
                             actions.push(Action::Scan);
+                        }
+                        if world.poll_enabled && world.poll_led {
+                            poll_led(ui, self.led_lit);
                         }
                         match &world.scan {
                             ScanState::Running(step) => {
@@ -149,17 +180,7 @@ impl Ui {
                                 ui.label(RichText::new(step.as_str()).size(11.5).color(theme::muted(ui)));
                             }
                             ScanState::Idle => {
-                                if let Some(live) = world.live.as_ref().filter(|live| !live.items.is_empty())
-                                {
-                                    ui.label(
-                                        RichText::new(format!(
-                                            "Live · polled {}",
-                                            vnr_core::time::describe_age(world.now_unix, live.at_unix)
-                                        ))
-                                        .size(11.5)
-                                        .color(theme::muted(ui)),
-                                    );
-                                } else if let Some(snapshot) = world.snapshot() {
+                                if let Some(snapshot) = world.snapshot() {
                                     ui.label(
                                         RichText::new(format!(
                                             "Scanned {}",
@@ -336,6 +357,111 @@ impl Ui {
             self.confirm_elevate = false;
         }
     }
+
+    fn project_modal(&mut self, ctx: &egui::Context) {
+        if !self.project_open {
+            return;
+        }
+        let mut open = true;
+        egui::Window::new("About vn-ranger")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0))
+            .open(&mut open)
+            .show(ctx, |ui| {
+                ui.set_max_width(420.0);
+                ui.horizontal(|ui| {
+                    ui.add(egui::Image::new(egui::load::SizedTexture::new(
+                        self.mark.id(),
+                        vec2(56.0, 56.0),
+                    )));
+                    ui.add_space(8.0);
+                    ui.vertical(|ui| {
+                        ui.label(
+                            RichText::new("vn-ranger")
+                                .size(16.0)
+                                .family(theme::semibold()),
+                        );
+                        ui.label(
+                            RichText::new("A quiet ranger for your machine.")
+                                .size(11.5)
+                                .color(theme::muted(ui)),
+                        );
+                    });
+                });
+                ui.add_space(12.0);
+                ui.label(
+                    RichText::new("Project page")
+                        .size(10.5)
+                        .color(theme::muted(ui)),
+                );
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(PROJECT_URL)
+                            .size(12.5)
+                            .monospace()
+                            .color(ui.visuals().strong_text_color()),
+                    )
+                    .wrap()
+                    .selectable(true),
+                );
+                ui.add_space(6.0);
+                ui.label(
+                    RichText::new(
+                        "Select the address to copy it. Ranger does not open a browser and makes no request of its own.",
+                    )
+                    .size(10.5)
+                    .color(theme::muted(ui)),
+                );
+                ui.add_space(10.0);
+                if ui.button("Close").clicked() {
+                    self.project_open = false;
+                }
+            });
+        if !open {
+            self.project_open = false;
+        }
+    }
+}
+
+fn project_button(ui: &mut egui::Ui) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(vec2(ACTION_HEIGHT, ACTION_HEIGHT), Sense::click());
+    let painter = ui.painter();
+    let fill = if response.hovered() {
+        ui.visuals().widgets.hovered.bg_fill
+    } else {
+        ui.visuals().widgets.inactive.bg_fill
+    };
+    painter.circle_filled(rect.center(), ACTION_HEIGHT / 2.0, fill);
+    painter.circle_stroke(
+        rect.center(),
+        ACTION_HEIGHT / 2.0 - 0.5,
+        egui::Stroke::new(1.0, theme::border(ui)),
+    );
+    icons::paint(
+        painter,
+        rect.shrink(ACTION_HEIGHT * 0.28),
+        icons::Icon::External,
+        if response.hovered() {
+            ui.visuals().strong_text_color()
+        } else {
+            theme::muted(ui)
+        },
+    );
+    response.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+fn poll_led(ui: &mut egui::Ui, lit: bool) {
+    let (rect, response) = ui.allocate_exact_size(vec2(18.0, 18.0), Sense::hover());
+    let center = rect.center();
+    let painter = ui.painter();
+    if lit {
+        painter.circle_filled(center, 7.5, theme::OK.gamma_multiply(0.18));
+        painter.circle_filled(center, 3.5, theme::OK);
+    } else {
+        painter.circle_filled(center, 2.5, theme::OK.gamma_multiply(0.4));
+    }
+    let _ = response.on_hover_text("Ranger polls every two seconds; the dot steps as each poll arrives.");
 }
 
 fn view_icon(view: View) -> icons::Icon {
@@ -386,6 +512,7 @@ mod tests {
             now_unix: 1_000,
             live: None,
             poll_enabled: true,
+            poll_led: true,
             watch: WatchReport::default(),
             baseline,
             baseline_error: None,
@@ -439,5 +566,62 @@ mod tests {
         for view in View::ALL {
             draw(view, &world);
         }
+    }
+
+    fn screen_input(events: Vec<egui::Event>) -> egui::RawInput {
+        egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, vec2(1180.0, 780.0))),
+            events,
+            ..Default::default()
+        }
+    }
+
+    fn frame(ctx: &egui::Context, ui: &mut Ui, world: &World, input: egui::RawInput) -> Vec<Action> {
+        let mut actions = Vec::new();
+        let output = ctx.run_pass(input, |ctx| {
+            let mut root = egui::Ui::new(
+                ctx.clone(),
+                egui::Id::unique("root"),
+                egui::UiBuilder::new().max_rect(ctx.viewport_rect()),
+            );
+            actions = ui.show(&mut root, world);
+        });
+        output.drop_without_applying_deltas();
+        actions
+    }
+
+    fn press(center: egui::Pos2, pressed: bool) -> egui::Event {
+        egui::Event::PointerButton {
+            pos: center,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::default(),
+        }
+    }
+
+    #[test]
+    fn the_project_button_returns_its_action() {
+        let ctx = egui::Context::default();
+        let mut ui = Ui::new(&ctx);
+        let world = base_world(None, None);
+
+        let _ = frame(&ctx, &mut ui, &world, screen_input(Vec::new()));
+        let center = ui.project_rect.center();
+        assert_ne!(
+            ui.project_rect,
+            egui::Rect::NOTHING,
+            "the circle was laid out in the top bar"
+        );
+
+        let _ = frame(
+            &ctx,
+            &mut ui,
+            &world,
+            screen_input(vec![egui::Event::PointerMoved(center), press(center, true)]),
+        );
+        let _ = frame(&ctx, &mut ui, &world, screen_input(vec![press(center, false)]));
+        assert!(ui.project_open, "clicking the circle must open the project modal");
+        // The modal itself draws without a panic on the next frame.
+        let _ = frame(&ctx, &mut ui, &world, screen_input(Vec::new()));
     }
 }

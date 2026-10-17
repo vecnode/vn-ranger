@@ -34,6 +34,8 @@ pub enum Icon {
     Search,
     /// An export arrow.
     Export,
+    /// An external link, for the project page.
+    External,
 }
 
 /// Draw an icon inside `rect`.
@@ -129,6 +131,23 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
                 stroke,
             ));
             painter.line_segment([point(0.18, 0.84), point(0.82, 0.84)], stroke);
+        }
+        Icon::External => {
+            painter.add(egui::Shape::line(
+                vec![
+                    point(0.64, 0.52),
+                    point(0.64, 0.84),
+                    point(0.16, 0.84),
+                    point(0.16, 0.30),
+                    point(0.44, 0.30),
+                ],
+                stroke,
+            ));
+            painter.line_segment([point(0.46, 0.54), point(0.86, 0.14)], stroke);
+            painter.add(egui::Shape::line(
+                vec![point(0.60, 0.14), point(0.86, 0.14), point(0.86, 0.40)],
+                stroke,
+            ));
         }
     }
 }

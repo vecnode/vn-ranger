@@ -138,6 +138,8 @@ pub struct World {
     pub live: Option<Live>,
     /// Whether the process poll is switched on.
     pub poll_enabled: bool,
+    /// Whether the top bar shows the live poll indicator.
+    pub poll_led: bool,
     /// What the file watcher is reading.
     pub watch: WatchReport,
     /// The baseline a person accepted, when there is one.
@@ -202,6 +204,8 @@ pub enum Action {
     SetPoll(bool),
     /// Turn the file watcher on or off.
     SetWatch(bool),
+    /// Show or hide the live poll indicator.
+    SetPollLed(bool),
     /// Open a file or directory in the platform's file manager.
     OpenPath(String),
     /// Close the application.

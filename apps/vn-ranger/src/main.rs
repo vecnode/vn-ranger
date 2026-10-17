@@ -36,7 +36,7 @@ fn main() -> eframe::Result<()> {
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("vn-ranger")
+            .with_title(format!("vn-ranger {}", env!("CARGO_PKG_VERSION")))
             .with_app_id("vn-ranger")
             .with_inner_size(STARTING_SIZE)
             .with_min_inner_size(MINIMUM_SIZE)

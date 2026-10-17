@@ -103,13 +103,13 @@ impl Ui {
             .iter()
             .filter(|process| filter_process(process, &needle))
             .collect();
-        let live_note = match &world.live {
-            Some(live) if !live.items.is_empty() => {
-                format!(" · live, polled {}", describe_age(world.now_unix, live.at_unix))
-            }
-            _ => String::new(),
-        };
-        ui.label(
+        let live_age = world
+            .live
+            .as_ref()
+            .filter(|live| !live.items.is_empty())
+            .map(|live| describe_age(world.now_unix, live.at_unix));
+        let live_note = if live_age.is_some() { " · live" } else { "" };
+        let caption = ui.label(
             RichText::new(format!(
                 "{} of {} processes{}",
                 rows.len(),
@@ -119,6 +119,9 @@ impl Ui {
             .size(11.0)
             .color(theme::muted(ui)),
         );
+        if let Some(age) = live_age {
+            let _ = caption.on_hover_text(format!("Last poll {age}."));
+        }
         if let Some(reason) = world.live.as_ref().and_then(|live| live.reason.as_ref()) {
             ui.label(
                 RichText::new(format!("This poll could not read every process: {reason}"))
@@ -658,11 +661,6 @@ impl Ui {
         widgets::card(ui, |ui| {
             ui.label(RichText::new("Appearance").family(theme::semibold()));
             ui.checkbox(&mut self.dark, "Dark theme");
-            ui.label(
-                RichText::new("The interface follows the suite's palette. A light theme is included.")
-                    .size(11.0)
-                    .color(theme::muted(ui)),
-            );
         });
         ui.add_space(10.0);
         widgets::card(ui, |ui| {
@@ -684,6 +682,13 @@ impl Ui {
                 .changed()
             {
                 actions.push(Action::SetWatch(watch));
+            }
+            let mut led = world.poll_led;
+            if ui
+                .checkbox(&mut led, "Show the live poll indicator in the top bar")
+                .changed()
+            {
+                actions.push(Action::SetPollLed(led));
             }
             ui.label(
                 RichText::new(

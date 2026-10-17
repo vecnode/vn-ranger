@@ -18,3 +18,9 @@ desktop.ini
 # Release asset verification downloads
 /.release-check/
 /.ci-*.log
+
+# Soak measurement artifacts, reproducible from the documented method
+/.soak.csv
+/.soak.log
+/.soak-summary.txt
+/.soak-temp/
