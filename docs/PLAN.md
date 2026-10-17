@@ -764,6 +764,12 @@ The release where ranger can change the machine. It is the only one in the 0.1.x
 can, so the order is fixed: the journal first, then quarantine, then cleanup. Every gate
 in §5.6 and in `AGENTS.md` §2 applies; a feature that cannot meet them waits.
 
+Interface work landed in the 0.1.5 line before the Act gates: sort and quick filters on
+the process table, scope and disabled filters on startup, severity/text/sort controls on
+findings, a source filter and a clear button on the session timeline, per-suppression
+removal in Settings, and findings in the Markdown report. None of it changes the gates
+below.
+
 | # | Work | Where | Done when |
 |---|---|---|---|
 | 1 | The action journal: append-only NDJSON, one entry flushed **before** the action, with id, time, action, subject, path, hash, result and reason | `native/src/journal.rs` (new) | A process killed between the "started" entry and the action leaves a readable journal with no "finished" entry; a test simulates the kill; a full disk refuses the action instead of performing it unrecorded |

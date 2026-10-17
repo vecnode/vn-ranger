@@ -3,12 +3,14 @@
 use std::fmt::Write as _;
 
 use crate::model::{AutorunFact, ListenerFact, ProcessFact, Snapshot};
+use crate::rules::Finding;
 
 const TABLE_LIMIT: usize = 60;
+const FINDING_LIMIT: usize = 40;
 
-/// Render a snapshot as a Markdown report.
+/// Render a snapshot as a Markdown report, with the findings the rules produced.
 #[must_use]
-pub fn to_markdown(snapshot: &Snapshot) -> String {
+pub fn to_markdown(snapshot: &Snapshot, findings: &[Finding]) -> String {
     let counts = snapshot.counts();
     let mut out = String::new();
     out.push_str("# vn-ranger report\n\n");
@@ -34,6 +36,43 @@ pub fn to_markdown(snapshot: &Snapshot) -> String {
         "\n**{} processes · {} startup items · {} listeners · {} packages.**\n",
         counts.processes, counts.autoruns, counts.listeners, counts.packages
     );
+
+    out.push_str("## Findings\n\n");
+    if findings.is_empty() {
+        out.push_str(
+            "No rule fired on this scan. That is a statement about the facts ranger could read, not a verdict that the machine is clean.\n\n",
+        );
+    } else {
+        let _ = writeln!(out, "{} finding(s).\n", findings.len());
+        for finding in findings.iter().take(FINDING_LIMIT) {
+            let _ = writeln!(
+                out,
+                "### {} — {}\n",
+                finding.severity.label(),
+                clean(finding.title)
+            );
+            let _ = writeln!(
+                out,
+                "- Rule: `{}` · Confidence: {}\n- Subject: {}",
+                finding.rule_id,
+                finding.confidence.label(),
+                clean(&finding.subject_label)
+            );
+            for line in &finding.evidence {
+                let _ = writeln!(out, "  - {}", clean(line));
+            }
+            let _ = writeln!(
+                out,
+                "\nWhy: {}\n\nLikely benign: {}\n\nWhat to do: {}\n",
+                clean(finding.why),
+                clean(finding.benign),
+                clean(finding.remediation)
+            );
+        }
+        if findings.len() > FINDING_LIMIT {
+            let _ = writeln!(out, "… and {} more finding(s).\n", findings.len() - FINDING_LIMIT);
+        }
+    }
 
     out.push_str("## What was checked\n\n");
     out.push_str("| Collector | Result | Items | Why not complete |\n|---|---|---:|---|\n");
@@ -222,6 +261,29 @@ pub fn describe_process(process: &ProcessFact) -> String {
 mod tests {
     use super::*;
     use crate::model::{CollectorStatus, Host, SignatureReport};
+    use crate::rules::{Confidence, Severity};
+
+    #[test]
+    fn a_finding_appears_in_the_report_with_its_evidence() {
+        let snapshot = Snapshot::empty(Host::default(), false);
+        let finding = Finding {
+            rule_id: "startup.temp-path",
+            title: "A startup item runs from a temporary folder",
+            severity: Severity::Attention,
+            confidence: Confidence::Observed,
+            subject: "autorun:x".to_owned(),
+            subject_label: "X".to_owned(),
+            evidence: vec!["Executable: C:\\Temp\\x.exe".to_owned()],
+            why: "Temporary folders are cleaned up.",
+            benign: "An installer registered a helper.",
+            remediation: "Check the file's publisher.",
+        };
+        let report = to_markdown(&snapshot, &[finding]);
+        assert!(report.contains("## Findings"));
+        assert!(report.contains("startup.temp-path"));
+        assert!(report.contains("An installer registered a helper."));
+        assert!(report.contains("Executable: C:\\Temp\\x.exe"));
+    }
 
     #[test]
     fn report_contains_the_counts_and_escapes_pipes() {
@@ -248,7 +310,7 @@ mod tests {
             user: None,
             started_at_unix: None,
         });
-        let report = to_markdown(&snapshot);
+        let report = to_markdown(&snapshot, &[]);
         assert!(report.contains("1 processes"));
         assert!(report.contains("a\\|b"));
         assert!(report.contains("2001-09-09"));

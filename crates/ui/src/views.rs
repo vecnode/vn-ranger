@@ -6,7 +6,7 @@ use egui_extras::{Column, TableBuilder};
 use vnr_core::time::{describe_age, format_utc};
 use vnr_core::{AutorunScope, ProcessFact, Snapshot};
 
-use crate::{Action, Ui, View, theme, widgets};
+use crate::{Action, ChangeFilter, FindingSort, ProcessFilter, SortKey, Ui, View, theme, widgets};
 
 const PROCESS_FOOTER: f32 = 190.0;
 const STARTUP_FOOTER: f32 = 210.0;
@@ -216,8 +216,37 @@ impl Ui {
             severity_ok && text_ok
         };
 
-        let shown: Vec<&vnr_core::Finding> =
+        let mut shown: Vec<&vnr_core::Finding> =
             world.findings.iter().filter(|finding| matches(finding)).collect();
+        shown.sort_by(|a, b| match self.finding_sort {
+            FindingSort::Severity => b
+                .severity
+                .rank()
+                .cmp(&a.severity.rank())
+                .then_with(|| a.rule_id.cmp(b.rule_id))
+                .then_with(|| a.subject.cmp(&b.subject)),
+            FindingSort::Rule => a
+                .rule_id
+                .cmp(b.rule_id)
+                .then_with(|| b.severity.rank().cmp(&a.severity.rank()))
+                .then_with(|| a.subject.cmp(&b.subject)),
+            FindingSort::Subject => a
+                .subject_label
+                .to_lowercase()
+                .cmp(&b.subject_label.to_lowercase())
+                .then_with(|| a.rule_id.cmp(b.rule_id)),
+        });
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new("Sort").size(10.5).color(theme::muted(ui)));
+            for sort in FindingSort::ALL {
+                if ui
+                    .selectable_label(self.finding_sort == sort, sort.label())
+                    .clicked()
+                {
+                    self.finding_sort = sort;
+                }
+            }
+        });
         ui.label(
             RichText::new(format!(
                 "Showing {} of {} finding(s)",
@@ -264,10 +293,88 @@ impl Ui {
             return;
         }
         let needle = self.search.trim().to_lowercase();
-        let rows: Vec<&ProcessFact> = processes
+        let mut rows: Vec<&ProcessFact> = processes
             .iter()
             .filter(|process| filter_process(process, &needle))
             .collect();
+
+        // Controls stay above the table: sort and quick filters, then the count.
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new("Sort").size(10.5).color(theme::muted(ui)));
+            for key in SortKey::ALL {
+                let selected = self.process_sort == key;
+                let label = if selected {
+                    if self.process_sort_desc {
+                        format!("{} ↓", key.label())
+                    } else {
+                        format!("{} ↑", key.label())
+                    }
+                } else {
+                    key.label().to_owned()
+                };
+                if ui.selectable_label(selected, label).clicked() {
+                    if selected {
+                        self.process_sort_desc = !self.process_sort_desc;
+                    } else {
+                        self.process_sort = key;
+                        self.process_sort_desc = false;
+                    }
+                }
+            }
+            ui.add_space(10.0);
+            ui.label(RichText::new("Filter").size(10.5).color(theme::muted(ui)));
+            for filter in ProcessFilter::ALL {
+                if ui
+                    .selectable_label(self.process_filter == filter, filter.label())
+                    .clicked()
+                {
+                    self.process_filter = filter;
+                }
+            }
+        });
+
+        let listening: std::collections::HashSet<u32> = world
+            .snapshot()
+            .map(|snapshot| {
+                snapshot
+                    .listeners
+                    .iter()
+                    .filter_map(|listener| listener.pid)
+                    .collect()
+            })
+            .unwrap_or_default();
+        rows.retain(|process| match self.process_filter {
+            ProcessFilter::All => true,
+            ProcessFilter::Listening => listening.contains(&process.pid),
+            ProcessFilter::NoPath => process.exe.is_none(),
+            ProcessFilter::Scratch => process.exe.as_deref().is_some_and(scratch_path),
+        });
+        rows.sort_by(|a, b| {
+            let ordering = match self.process_sort {
+                SortKey::Name => a
+                    .name
+                    .to_lowercase()
+                    .cmp(&b.name.to_lowercase())
+                    .then_with(|| a.pid.cmp(&b.pid)),
+                SortKey::Pid => a.pid.cmp(&b.pid),
+                SortKey::User => a
+                    .user
+                    .as_deref()
+                    .unwrap_or("")
+                    .to_lowercase()
+                    .cmp(&b.user.as_deref().unwrap_or("").to_lowercase())
+                    .then_with(|| a.pid.cmp(&b.pid)),
+                SortKey::Started => a
+                    .started_at_unix
+                    .cmp(&b.started_at_unix)
+                    .then_with(|| a.pid.cmp(&b.pid)),
+            };
+            if self.process_sort_desc {
+                ordering.reverse()
+            } else {
+                ordering
+            }
+        });
         let live_age = world
             .live
             .as_ref()
@@ -398,11 +505,31 @@ impl Ui {
             return;
         };
         let needle = self.search.trim().to_lowercase();
-        let rows: Vec<&vnr_core::AutorunFact> = snapshot
+        let mut rows: Vec<&vnr_core::AutorunFact> = snapshot
             .autoruns
             .iter()
             .filter(|autorun| filter_autorun(autorun, &needle))
             .collect();
+
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new("Scope").size(10.5).color(theme::muted(ui)));
+            for (label, value) in [
+                ("All", None),
+                ("User", Some(AutorunScope::User)),
+                ("Machine", Some(AutorunScope::System)),
+            ] {
+                if ui.selectable_label(self.autorun_scope == value, label).clicked() {
+                    self.autorun_scope = value;
+                }
+            }
+            ui.add_space(10.0);
+            ui.checkbox(&mut self.show_disabled, "Show disabled");
+        });
+
+        rows.retain(|autorun| {
+            self.autorun_scope.is_none_or(|scope| autorun.scope == scope)
+                && (self.show_disabled || autorun.enabled)
+        });
         ui.label(
             RichText::new(format!(
                 "{} of {} startup items",
@@ -638,6 +765,25 @@ impl Ui {
     pub(crate) fn changes(&mut self, ui: &mut egui::Ui, world: &crate::World, actions: &mut Vec<Action>) {
         let mut accept = false;
         let mut clear = false;
+        let mut clear_timeline = false;
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new("Source").size(10.5).color(theme::muted(ui)));
+            for filter in ChangeFilter::ALL {
+                if ui
+                    .selectable_label(self.change_filter == filter, filter.label())
+                    .clicked()
+                {
+                    self.change_filter = filter;
+                }
+            }
+        });
+        ui.add_space(8.0);
+        let filter = self.change_filter;
+        let changes: Vec<&vnr_core::Change> = world
+            .changes
+            .iter()
+            .filter(|change| change_matches(filter, &change.source))
+            .collect();
         widgets::card(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(RichText::new("Since the baseline").family(theme::semibold()));
@@ -673,29 +819,31 @@ impl Ui {
                 Some(baseline) => {
                     widgets::key_value(ui, "Accepted", &format_utc(baseline.taken_at_unix));
                     ui.add_space(6.0);
-                    if world.changes.is_empty() {
+                    if changes.is_empty() {
                         ui.label(
-                            RichText::new(
-                                "No difference from the baseline in this scan. That is a statement about the lists ranger reads, not a verdict about the machine.",
-                            )
+                            RichText::new(if filter == ChangeFilter::All {
+                                "No difference from the baseline in this scan. That is a statement about the lists ranger reads, not a verdict about the machine."
+                            } else {
+                                "No difference from the baseline in this source. Choose another source to see the rest."
+                            })
                             .size(11.5)
                             .color(theme::muted(ui)),
                         );
                     } else {
                         ui.label(
-                            RichText::new(format!("{} difference(s) from the baseline", world.changes.len()))
+                            RichText::new(format!("{} difference(s) from the baseline", changes.len()))
                                 .size(11.5),
                         );
                         ui.add_space(4.0);
                         const SHOWN: usize = 200;
-                        for change in world.changes.iter().take(SHOWN) {
+                        for change in changes.iter().take(SHOWN) {
                             change_row(ui, change);
                         }
-                        if world.changes.len() > SHOWN {
+                        if changes.len() > SHOWN {
                             ui.label(
                                 RichText::new(format!(
                                     "Showing the first {SHOWN} of {} differences.",
-                                    world.changes.len()
+                                    changes.len()
                                 ))
                                 .size(10.5)
                                 .color(theme::muted(ui)),
@@ -711,14 +859,21 @@ impl Ui {
             }
         });
         ui.add_space(10.0);
+        let events: Vec<&vnr_core::TimelineEvent> = world
+            .timeline
+            .iter()
+            .rev()
+            .filter(|event| change_matches(filter, &event.source))
+            .collect();
         widgets::card(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(RichText::new("This session").family(theme::semibold()));
-                widgets::badge(
-                    ui,
-                    &format!("{} EVENT(S)", world.timeline.len()),
-                    theme::muted(ui),
-                );
+                widgets::badge(ui, &format!("{} EVENT(S)", events.len()), theme::muted(ui));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if !world.timeline.is_empty() && ui.button("Clear").clicked() {
+                        clear_timeline = true;
+                    }
+                });
             });
             ui.add_space(4.0);
             ui.label(
@@ -729,8 +884,13 @@ impl Ui {
                 .color(theme::muted(ui)),
             );
             ui.add_space(6.0);
-            if world.timeline.is_empty() {
-                let (title, body) = if world.poll_enabled || world.watch.enabled {
+            if events.is_empty() {
+                let (title, body) = if filter != ChangeFilter::All {
+                    (
+                        "Nothing from this source",
+                        "No event from the chosen source has been recorded. Choose another source or All.",
+                    )
+                } else if world.poll_enabled || world.watch.enabled {
                     (
                         "Nothing has changed yet",
                         "Ranger is watching. A process that starts, or a file that appears in a watched folder, will be listed here.",
@@ -744,23 +904,21 @@ impl Ui {
                 widgets::empty(ui, title, body);
             } else {
                 const SHOWN: usize = 200;
-                let mut shown = 0;
-                for event in world.timeline.iter().rev().take(SHOWN) {
+                for event in events.iter().take(SHOWN) {
                     event_row(ui, event);
-                    shown += 1;
                 }
-                if world.timeline.len() > shown {
+                if events.len() > SHOWN {
                     ui.label(
-                        RichText::new(format!(
-                            "Showing the newest {shown} of {} events.",
-                            world.timeline.len()
-                        ))
-                        .size(10.5)
-                        .color(theme::muted(ui)),
+                        RichText::new(format!("Showing the newest {SHOWN} of {} events.", events.len()))
+                            .size(10.5)
+                            .color(theme::muted(ui)),
                     );
                 }
             }
         });
+        if clear_timeline {
+            actions.push(Action::ClearTimeline);
+        }
         if accept {
             actions.push(Action::AcceptBaseline);
         }
@@ -994,6 +1152,37 @@ impl Ui {
             );
             if !world.suppressions.is_empty() && ui.button("Clear all suppressions").clicked() {
                 actions.push(Action::ClearSuppressions);
+            }
+            if !world.suppressions.is_empty() {
+                ui.add_space(4.0);
+                for suppression in &world.suppressions {
+                    ui.horizontal(|ui| {
+                        ui.add(
+                            egui::Label::new(
+                                RichText::new(format!("{} · {}", suppression.rule_id, suppression.subject))
+                                    .size(10.5)
+                                    .color(theme::muted(ui)),
+                            )
+                            .truncate(),
+                        );
+                        if ui.small_button("Remove").clicked() {
+                            actions.push(Action::RemoveSuppression {
+                                rule_id: suppression.rule_id.clone(),
+                                subject: suppression.subject.clone(),
+                            });
+                        }
+                    });
+                    ui.label(
+                        RichText::new(format!(
+                            "{} — until {}",
+                            suppression.reason,
+                            format_utc(suppression.expires_unix)
+                        ))
+                        .size(10.0)
+                        .color(theme::muted(ui)),
+                    );
+                    ui.add_space(4.0);
+                }
             }
         });
         ui.add_space(10.0);
@@ -1397,6 +1586,24 @@ fn scope_color(scope: AutorunScope) -> Color32 {
         AutorunScope::User => theme::EMBER,
         AutorunScope::System => theme::ATTENTION,
     }
+}
+
+/// Whether a change or timeline event belongs to the chosen source.
+fn change_matches(filter: ChangeFilter, source: &str) -> bool {
+    match filter {
+        ChangeFilter::All => true,
+        ChangeFilter::Processes => source.eq_ignore_ascii_case("processes"),
+        ChangeFilter::Startup => source.eq_ignore_ascii_case("autoruns"),
+        ChangeFilter::Network => source.eq_ignore_ascii_case("listeners"),
+        ChangeFilter::Files => source.eq_ignore_ascii_case("watch"),
+        ChangeFilter::Rules => source.eq_ignore_ascii_case("rules"),
+    }
+}
+
+/// Whether a path sits in a temporary, download or desktop folder.
+fn scratch_path(path: &str) -> bool {
+    let lower = path.replace('/', "\\").to_lowercase();
+    lower.contains("\\temp\\") || lower.contains("\\downloads\\") || lower.contains("\\desktop\\")
 }
 
 fn filter_process(process: &ProcessFact, needle: &str) -> bool {

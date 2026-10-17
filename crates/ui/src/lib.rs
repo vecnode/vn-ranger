@@ -25,6 +25,108 @@ const ACTION_HEIGHT: f32 = 26.0;
 /// Where the project lives. Shown, never fetched: ranger has no network code.
 const PROJECT_URL: &str = "https://github.com/vecnode/vn-ranger";
 
+/// How the process table is ordered.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SortKey {
+    Name,
+    Pid,
+    User,
+    Started,
+}
+
+impl SortKey {
+    const ALL: [SortKey; 4] = [SortKey::Name, SortKey::Pid, SortKey::User, SortKey::Started];
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Name => "Name",
+            Self::Pid => "PID",
+            Self::User => "User",
+            Self::Started => "Started",
+        }
+    }
+}
+
+/// The quick filters above the process table.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ProcessFilter {
+    All,
+    Listening,
+    NoPath,
+    Scratch,
+}
+
+impl ProcessFilter {
+    const ALL: [ProcessFilter; 4] = [
+        ProcessFilter::All,
+        ProcessFilter::Listening,
+        ProcessFilter::NoPath,
+        ProcessFilter::Scratch,
+    ];
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::All => "All",
+            Self::Listening => "Listening",
+            Self::NoPath => "No path",
+            Self::Scratch => "Temp or downloads",
+        }
+    }
+}
+
+/// How findings are ordered.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum FindingSort {
+    Severity,
+    Rule,
+    Subject,
+}
+
+impl FindingSort {
+    const ALL: [FindingSort; 3] = [FindingSort::Severity, FindingSort::Rule, FindingSort::Subject];
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Severity => "Severity",
+            Self::Rule => "Rule",
+            Self::Subject => "Subject",
+        }
+    }
+}
+
+/// Which sources the Changes view shows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ChangeFilter {
+    All,
+    Processes,
+    Startup,
+    Network,
+    Files,
+    Rules,
+}
+
+impl ChangeFilter {
+    const ALL: [ChangeFilter; 6] = [
+        ChangeFilter::All,
+        ChangeFilter::Processes,
+        ChangeFilter::Startup,
+        ChangeFilter::Network,
+        ChangeFilter::Files,
+        ChangeFilter::Rules,
+    ];
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::All => "All",
+            Self::Processes => "Processes",
+            Self::Startup => "Startup",
+            Self::Network => "Network",
+            Self::Files => "Files",
+            Self::Rules => "Rules",
+        }
+    }
+}
+
 /// The interface's own state: what is on screen, not what is true about the machine.
 pub struct Ui {
     pub(crate) view: View,
@@ -43,6 +145,13 @@ pub struct Ui {
     suppress_reason: String,
     finding_severity: Option<vnr_core::Severity>,
     finding_query: String,
+    finding_sort: FindingSort,
+    process_sort: SortKey,
+    process_sort_desc: bool,
+    process_filter: ProcessFilter,
+    autorun_scope: Option<vnr_core::AutorunScope>,
+    show_disabled: bool,
+    change_filter: ChangeFilter,
     mark: egui::TextureHandle,
 }
 
@@ -71,6 +180,13 @@ impl Ui {
             suppress_reason: String::new(),
             finding_severity: None,
             finding_query: String::new(),
+            finding_sort: FindingSort::Severity,
+            process_sort: SortKey::Name,
+            process_sort_desc: false,
+            process_filter: ProcessFilter::All,
+            autorun_scope: None,
+            show_disabled: true,
+            change_filter: ChangeFilter::All,
             mark,
         }
     }

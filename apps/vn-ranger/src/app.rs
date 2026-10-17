@@ -360,6 +360,24 @@ impl App {
                 }
                 self.refresh_findings(false);
             }
+            Action::RemoveSuppression { rule_id, subject } => {
+                self.world.suppressions.retain(|suppression| {
+                    !(suppression.rule_id == rule_id && suppression.subject == subject)
+                });
+                match vnr_native::store::save_suppressions(&self.world.suppressions) {
+                    Ok(()) => {
+                        self.world.error = None;
+                        self.world.notice = Some("Suppression removed.".to_owned());
+                    }
+                    Err(error) => {
+                        self.world.error = Some(format!(
+                            "The suppression is removed for this session but the file could not be written: {error}"
+                        ));
+                    }
+                }
+                self.refresh_findings(false);
+            }
+            Action::ClearTimeline => self.world.timeline.clear(),
             Action::Quit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
         }
     }
@@ -385,7 +403,7 @@ impl App {
             return;
         };
         let path = vnr_native::paths::report_path("md");
-        let body = vnr_core::report::to_markdown(&snapshot);
+        let body = vnr_core::report::to_markdown(&snapshot, &self.world.findings);
         match vnr_native::store::write_markdown(&body, &path) {
             Ok(()) => {
                 self.world.error = None;

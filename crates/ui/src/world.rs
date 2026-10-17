@@ -226,6 +226,15 @@ pub enum Action {
     },
     /// Forget every suppression.
     ClearSuppressions,
+    /// Remove one suppression.
+    RemoveSuppression {
+        /// The rule it covers.
+        rule_id: String,
+        /// The subject it covers.
+        subject: String,
+    },
+    /// Clear the in-memory session timeline.
+    ClearTimeline,
     /// Open a file or directory in the platform's file manager.
     OpenPath(String),
     /// Close the application.
