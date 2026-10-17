@@ -18,6 +18,9 @@ desktop.ini
 # Scratch profile for a local test run: the data directory the harness writes
 /.tmp-ci/
 
+# A commit message written to a file, so a long one survives the shell
+/.git-commit-msg.txt
+
 # Release asset verification downloads
 /.release-check/
 /.ci-*.log

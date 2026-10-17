@@ -1,4 +1,4 @@
-﻿//! vn-ranger's desktop backend.
+//! vn-ranger's desktop backend.
 //!
 //! This is the only crate that touches the machine: it enumerates processes, startup
 //! items, listeners and packages, hashes the binaries a startup item reaches, reads

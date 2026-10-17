@@ -1,4 +1,4 @@
-﻿//! Quarantine: move a file into app-managed storage, and put it back verified.
+//! Quarantine: move a file into app-managed storage, and put it back verified.
 //!
 //! One directory per entry, named by an id:
 //!
