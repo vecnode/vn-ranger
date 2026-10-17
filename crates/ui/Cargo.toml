@@ -1,0 +1,17 @@
+[package]
+name = "vnr-ui"
+description = "vn-ranger's egui interface: theme, widgets and views"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+vnr-core = { workspace = true }
+egui = { workspace = true }
+log = { workspace = true }

@@ -1,0 +1,35 @@
+[package]
+name = "vnr-native"
+description = "vn-ranger's desktop backend: collectors, storage, signatures and elevation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+vnr-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+log = { workspace = true }
+sysinfo = { workspace = true }
+sha2 = { workspace = true }
+sha1 = { workspace = true }
+md-5 = { workspace = true }
+hex = { workspace = true }
+directories = { workspace = true }
+plist = { workspace = true }
+tempfile = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+winreg = { workspace = true }
+netstat2 = { workspace = true }
+is_elevated = { workspace = true }
+runas = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true }

@@ -1,0 +1,363 @@
+# vn-ranger mark manifest
+#
+# Generated from the files in this directory. Every digest is the file's own.
+# Regenerate this file whenever a mark or a rendered size changes.
+
+[mark]
+name = "vn-ranger"
+version = "1.0"
+date = "2026-10-17"
+grid = 24
+stroke = 2.914
+facets = 6
+viewbox = "0 0 24 24"
+geometry = "hexagon (12,2.8) (20.8,7.4) (20.8,16.6) (12,21.2) (3.2,16.6) (3.2,7.4); crown ridge (3.2,7.4)-(12,12)-(20.8,7.4); spine (12,2.8)-(12,21.2); girdle (12,15.4)-(3.2,16.6) and (12,15.4)-(20.8,16.6)"
+
+[palette]
+ember = "#F26A21"
+ember_highlight = "#FFA45E"
+ember_deep = "#D14A0C"
+ink = "#0B0D10"
+paper = "#FFFFFF"
+muted = "#9AA1AC"
+
+[contrast]
+ember_on_ink = "6.36:1"
+ink_on_ember = "6.36:1"
+white_on_ember = "3.06:1 (large text and icons only)"
+ember_on_paper = "3.06:1 (large text and icons only)"
+highlight_on_ink = "9.94:1"
+
+[application_icon]
+tile_px = 1024
+tile_radius_px = 308
+mark_scale = 22.73
+mark_translate_px = 239.25
+tile_fill = "#0B0D10"
+ridge = "#FFFFFF"
+rgba_px = 64
+
+[suite]
+rule = "same crystal, one colour per application"
+vn-launcher = "no inlay"
+vn-ranger = "ember inlay"
+
+[[file]]
+path = "contact-sheet.png"
+variant = "sheet"
+format = "png"
+size = "1600x1000"
+background = "ink"
+purpose = "Design reference sheet: variants, sizes, palette and contrast."
+bytes = 118309
+sha256 = "27bb183f55a4636256133894f9449760f1ff40c7389ab09afdd5a7fafe05b5fb"
+
+[[file]]
+path = "vn-ranger-1024.png"
+variant = "light"
+format = "png"
+size = "1024"
+background = "transparent"
+purpose = "Raster for light surfaces; ink linework, ember inlay."
+bytes = 54566
+sha256 = "265d7da2c0835ec173d8f7cf08a3618fa93e1e445ef60b5eea2aa53eeb134ca2"
+
+[[file]]
+path = "vn-ranger-128.png"
+variant = "light"
+format = "png"
+size = "128"
+background = "transparent"
+purpose = "Raster for light surfaces; ink linework, ember inlay."
+bytes = 5769
+sha256 = "df039978846fcee8fec3586fea6a17bc240833488094041047ed39a75373d0db"
+
+[[file]]
+path = "vn-ranger-16.png"
+variant = "light"
+format = "png"
+size = "16"
+background = "transparent"
+purpose = "Raster for light surfaces; ink linework, ember inlay."
+bytes = 625
+sha256 = "ffafa6c5528430e32bce15a5e397a4bd0c13811221368af684dee7d730a13bb8"
+
+[[file]]
+path = "vn-ranger-24.png"
+variant = "light"
+format = "png"
+size = "24"
+background = "transparent"
+purpose = "Raster for light surfaces; ink linework, ember inlay."
+bytes = 1024
+sha256 = "cb35ab5faffa2d73556d2af9ba344ce8f1832a621037bc21d44b13ce9a454ae5"
+
+[[file]]
+path = "vn-ranger-256.png"
+variant = "light"
+format = "png"
+size = "256"
+background = "transparent"
+purpose = "Raster for light surfaces; ink linework, ember inlay."
+bytes = 11486
+sha256 = "db03b1a73b6d7ab6f1ecdcc38e600d2d52cf576b1959f85cf282c32d88512659"
+
+[[file]]
+path = "vn-ranger-32.png"
+variant = "light"
+format = "png"
+size = "32"
+background = "transparent"
+purpose = "Raster for light surfaces; ink linework, ember inlay."
+bytes = 1331
+sha256 = "14bc57642d70e4b5d6497838e68f4e2b75cc634f63f07565e8170340be1f284a"
+
+[[file]]
+path = "vn-ranger-48.png"
+variant = "light"
+format = "png"
+size = "48"
+background = "transparent"
+purpose = "Raster for light surfaces; ink linework, ember inlay."
+bytes = 2004
+sha256 = "0743f334147a6595c2f9f39ea8f3c042a08a2640c736d8338f4c56bb829f9010"
+
+[[file]]
+path = "vn-ranger-512.png"
+variant = "light"
+format = "png"
+size = "512"
+background = "transparent"
+purpose = "Raster for light surfaces; ink linework, ember inlay."
+bytes = 24281
+sha256 = "0d7de3a9f29623e6e6e165380858eee71c8968315279c2ac95834f88d60879b9"
+
+[[file]]
+path = "vn-ranger-64.png"
+variant = "light"
+format = "png"
+size = "64"
+background = "transparent"
+purpose = "Raster for light surfaces; ink linework, ember inlay."
+bytes = 2680
+sha256 = "d40d54ee0d8137779f2e548fbbd5b68e723deb8fe947d300917b55d8b40169e8"
+
+[[file]]
+path = "vn-ranger-app-1024.png"
+variant = "app"
+format = "png"
+size = "1024"
+background = "black tile"
+purpose = "Raster application icon; ink tile, white linework, ember inlay."
+bytes = 40396
+sha256 = "d7e8acd67b023c6e142436bc7e22f86f31616006038b5259e9df71fffcc80b3f"
+
+[[file]]
+path = "vn-ranger-app-128.png"
+variant = "app"
+format = "png"
+size = "128"
+background = "black tile"
+purpose = "Raster application icon; ink tile, white linework, ember inlay."
+bytes = 4361
+sha256 = "84141e16d6d8fb9a6212a58844510341da9ab06e1de5d1d1a21f812e4848c415"
+
+[[file]]
+path = "vn-ranger-app-16.png"
+variant = "app"
+format = "png"
+size = "16"
+background = "black tile"
+purpose = "Raster application icon; ink tile, white linework, ember inlay."
+bytes = 516
+sha256 = "17bf8b65b0162ccbcac6a2081afbd2b9914a8a3423aa583450d473bba72e7c49"
+
+[[file]]
+path = "vn-ranger-app-24.png"
+variant = "app"
+format = "png"
+size = "24"
+background = "black tile"
+purpose = "Raster application icon; ink tile, white linework, ember inlay."
+bytes = 819
+sha256 = "fa76e853d293cb74aa9f582605ec9f31216bd111dbdba3c8160c880bb4222c2b"
+
+[[file]]
+path = "vn-ranger-app-256.png"
+variant = "app"
+format = "png"
+size = "256"
+background = "black tile"
+purpose = "Raster application icon; ink tile, white linework, ember inlay."
+bytes = 9030
+sha256 = "77025167b6d58f534167f13857a81c6954d64e7184d13aa360e9341669ab4ecf"
+
+[[file]]
+path = "vn-ranger-app-32.png"
+variant = "app"
+format = "png"
+size = "32"
+background = "black tile"
+purpose = "Raster application icon; ink tile, white linework, ember inlay."
+bytes = 1055
+sha256 = "772ae5bd8da8a768ca778091b8dd8887c848b2d92cf999b8cbb2669b6342e55b"
+
+[[file]]
+path = "vn-ranger-app-48.png"
+variant = "app"
+format = "png"
+size = "48"
+background = "black tile"
+purpose = "Raster application icon; ink tile, white linework, ember inlay."
+bytes = 1571
+sha256 = "06e70ca14b9ffdbe5ab47559a36e83a81ecfc2238948f5fe38e7cab342b8570a"
+
+[[file]]
+path = "vn-ranger-app-512.png"
+variant = "app"
+format = "png"
+size = "512"
+background = "black tile"
+purpose = "Raster application icon; ink tile, white linework, ember inlay."
+bytes = 18991
+sha256 = "83a646cfdf71ee9cc906878775641e6a3d8148db1127cd8fd1017c3f3f347349"
+
+[[file]]
+path = "vn-ranger-app-64.png"
+variant = "app"
+format = "png"
+size = "64"
+background = "black tile"
+purpose = "Raster application icon; ink tile, white linework, ember inlay."
+bytes = 2169
+sha256 = "ce8bb2c188f1ab45a41dcc13a3ffbc5d7b4977568abfba2e01ad294df6107c2b"
+
+[[file]]
+path = "vn-ranger-app.rgba"
+variant = "app"
+format = "rgba"
+size = "64"
+background = "black tile"
+purpose = "Unmultiplied RGBA for egui::IconData (16,384 bytes)."
+bytes = 16384
+sha256 = "7c29f72d5b1f4f6e8a86c4e6670821ae140a9641c67a21eb1441a44e9fb5318b"
+
+[[file]]
+path = "vn-ranger-app.svg"
+variant = "app"
+format = "svg"
+size = "1024"
+background = "black tile"
+purpose = "Application icon source; ink tile, white linework, ember inlay."
+bytes = 1008
+sha256 = "34e59bd212876b81f5e1e486312e52c0aaa023e06b2e7198a0dd4a42e3deda07"
+
+[[file]]
+path = "vn-ranger-white-1024.png"
+variant = "dark"
+format = "png"
+size = "1024"
+background = "transparent"
+purpose = "Raster for dark surfaces; white linework, ember inlay."
+bytes = 43928
+sha256 = "79a532a3baf0a89165fcdbadbde2d0e162a2eff6c5699176b149dd720f457f5a"
+
+[[file]]
+path = "vn-ranger-white-128.png"
+variant = "dark"
+format = "png"
+size = "128"
+background = "transparent"
+purpose = "Raster for dark surfaces; white linework, ember inlay."
+bytes = 4659
+sha256 = "2fc9eff0a106ef670ffce17d74e62eeb4ee13db4cc91873769b1d0f527214152"
+
+[[file]]
+path = "vn-ranger-white-16.png"
+variant = "dark"
+format = "png"
+size = "16"
+background = "transparent"
+purpose = "Raster for dark surfaces; white linework, ember inlay."
+bytes = 549
+sha256 = "94a547c5eb8b2f9678d0a10455849a36417ffeffad6a625cbf93aa77e6fc424d"
+
+[[file]]
+path = "vn-ranger-white-24.png"
+variant = "dark"
+format = "png"
+size = "24"
+background = "transparent"
+purpose = "Raster for dark surfaces; white linework, ember inlay."
+bytes = 851
+sha256 = "cc34ada6f5b3d20f0dc8c614d6caeda3adbd004cd7590bd55afa1126023fe0e4"
+
+[[file]]
+path = "vn-ranger-white-256.png"
+variant = "dark"
+format = "png"
+size = "256"
+background = "transparent"
+purpose = "Raster for dark surfaces; white linework, ember inlay."
+bytes = 9250
+sha256 = "aac20cd6a68bb79fbbacd5c95684cd8aeefefec142901372c2e965db1fb1cdc5"
+
+[[file]]
+path = "vn-ranger-white-32.png"
+variant = "dark"
+format = "png"
+size = "32"
+background = "transparent"
+purpose = "Raster for dark surfaces; white linework, ember inlay."
+bytes = 1113
+sha256 = "bc3bc32082b7cdaf29e26bc070fb2a46d05b921108732a5c7abc82548e35ed2b"
+
+[[file]]
+path = "vn-ranger-white-48.png"
+variant = "dark"
+format = "png"
+size = "48"
+background = "transparent"
+purpose = "Raster for dark surfaces; white linework, ember inlay."
+bytes = 1647
+sha256 = "95abfc8636b03909d999769abb5999fc23adf35c4e4f5bc8bd4cf6c82a9b4752"
+
+[[file]]
+path = "vn-ranger-white-512.png"
+variant = "dark"
+format = "png"
+size = "512"
+background = "transparent"
+purpose = "Raster for dark surfaces; white linework, ember inlay."
+bytes = 19118
+sha256 = "7c6f22fffc8f70d0ed4e2b3958712a2ceef1fe82c3e688a454194dee8f1fcc75"
+
+[[file]]
+path = "vn-ranger-white-64.png"
+variant = "dark"
+format = "png"
+size = "64"
+background = "transparent"
+purpose = "Raster for dark surfaces; white linework, ember inlay."
+bytes = 2252
+sha256 = "17870482f304733d46951e1f12a21b5870870349dd43837ac2cf82643d35d548"
+
+[[file]]
+path = "vn-ranger-white.svg"
+variant = "dark"
+format = "svg"
+size = "any"
+background = "transparent"
+purpose = "Primary vector for dark surfaces; white linework, ember inlay."
+bytes = 860
+sha256 = "8c3e65a6061f372388b2be93ab27a52c30ea5e9b14d4b8f5e361668bb7ca011d"
+
+[[file]]
+path = "vn-ranger.svg"
+variant = "light"
+format = "svg"
+size = "any"
+background = "transparent"
+purpose = "Primary vector; ink linework, ember inlay."
+bytes = 860
+sha256 = "bfffb9814f26988f03970b0ae63f9f2568b6ef14893206c0003f0102c447daec"

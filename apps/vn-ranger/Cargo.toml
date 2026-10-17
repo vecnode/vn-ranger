@@ -1,0 +1,24 @@
+[package]
+name = "vn-ranger"
+description = "A resident, local-only system ranger for Windows, macOS and Linux"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+default-run = "vn-ranger"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+vnr-core = { workspace = true }
+vnr-native = { workspace = true }
+vnr-ui = { workspace = true }
+eframe = { workspace = true, features = ["default_fonts", "wgpu", "accesskit", "wayland", "x11"] }
+egui = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
+serde_json = { workspace = true }
+opener = { workspace = true }

@@ -1,0 +1,21 @@
+//! vn-ranger's pure core.
+//!
+//! The core knows what a fact, a finding, a signature and a report are, and it knows
+//! how to compare them. It does not know what time it is, which files exist, or what
+//! operating system it is running on: every one of those is a parameter or a caller's
+//! job. That is what lets every decision here have a test beside it.
+
+#![warn(missing_docs)]
+#![forbid(unsafe_code)]
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
+
+pub mod model;
+pub mod report;
+pub mod signature;
+pub mod time;
+
+pub use model::{
+    AutorunFact, AutorunKind, AutorunScope, CollectorState, CollectorStatus, Counts, Host, ListenerFact,
+    PackageFact, ProcessFact, Protocol, SignatureMatch, SignatureReport, SignatureStatus, Snapshot,
+};
+pub use signature::{HashAlgorithm, HashSignature, SignatureSet};

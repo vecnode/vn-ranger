@@ -1,6 +1,8 @@
 # The plan — vn-ranger
 
-**Status:** plan. No application code exists yet.
+**Status:** v0.1.0. The read-only inventory, the local hash-signature engine and the
+one-shot administrator scan are in the repository. The sections below that describe
+rules, cleaning, residency and deeper platform access are the plan for what follows.
 **Audience:** the maintainer, future contributors, and anyone deciding whether to
 trust this program with a machine.
 **What this document is:** the research behind ranger, the scope it will and will not
@@ -39,9 +41,10 @@ releases, installed and updated by
 service, no account and — in the v0.x line — no network code at all. It is MIT and
 free forever.
 
-The first release, **v0.1.0**, is read-only. It collects and displays inventory, and it
-does not delete, quarantine or "fix" anything. Every later capability has to earn its
-place (§9).
+The first release, **v0.1.0**, is read-only. It collects and displays inventory,
+matches binary hashes against a local ClamAV-format database, and can ask the operating
+system for one administrator scan. It does not delete, quarantine or "fix" anything.
+Every later capability has to earn its place (§9).
 
 ---
 
@@ -173,6 +176,46 @@ Ranger is MIT. That decides what can be linked:
 - **Not vendored:** Sigma rules (DRL 1.1). If imported at all, the user supplies them
   and the licence travels with them.
 
+### 3.3 The detection stack, and what was actually built
+
+v0.1.0 ships the first layer of a stack whose layers are deliberately separate:
+
+| Layer | Status | What it does | Licence boundary |
+|---|---|---|---|
+| Hash signatures | **shipped** | Reads ClamAV `.hdb` / `.hsb` (`hash:size:name`) and matches MD5, SHA-1 or SHA-256 of startup binaries and a self-test file. | A clean-room reader of a documented format. No ClamAV code, so the app stays MIT. |
+| Pattern rules | v0.5, optional | YARA-X behind a feature flag, for string and byte patterns. | BSD-3-Clause, linkable. Not in the default build. |
+| Behavioural rules | v0.2 | Ranger's own TOML rules over facts: an unsigned binary in a temporary directory, a service whose image changed, a listener owned by a process that arrived this week. | Ranger's own schema, MIT. |
+| Sigma import | v0.5, user-supplied | A converter for the subset of Sigma that maps onto ranger facts. | Sigma rules are DRL 1.1, not OSI. Never vendored; the user brings the rules. |
+| Cleanup patterns | v0.3 | File walking, preview and cancellation discipline learned from Czkawka. | Czkawka is MIT; if code is copied, attribution travels with it. |
+
+**Why not port ClamAV itself.** ClamAV is GPL-2.0. Translating its code to Rust creates
+a derivative work, so the translated engine — and the combined application — would have
+to be GPL-2.0. That is a legitimate choice, but it is not the MIT choice this
+repository made. The compatible path is the one taken: read the documented signature
+formats, implement the matching, and say "ClamAV-compatible database" rather than
+"ClamAV engine". If the owner later wants the actual engine, the licence decision comes
+first and the code second.
+
+**The EICAR self-test.** The only signature shipped is the EICAR test file, which is
+not malware and is what every engine is expected to recognise. The self-test hashes it
+in memory, so it still proves the parser and the matcher on a machine whose antivirus
+removes the file the moment it is written. That is exactly what happened on the
+development machine, and the test reports it rather than pretending otherwise.
+
+**YARA-X is a crate, not a dependency.** It is pure Rust and BSD-3-Clause, and it is a
+good fit for the pattern layer. It is not linked into v0.1 because rules are a
+supply-chain surface, it adds size for a layer that has no rule pack yet, and the hash
+layer already answers "is this known bad?" for the files ranger can hash. The v0.5
+feature flag keeps the default build small and offline.
+
+**"Pure Rust" has one boundary.** The application, its UI and its collectors are safe
+Rust with `unsafe_code = "forbid"` in every workspace crate. The Windows registry,
+socket table and elevation prompt come through `winreg`, `netstat2`, `is_elevated` and
+`runas`: safe Rust APIs over OS calls made by someone else. There is no C or C++ build
+dependency in the default build, and no webview. A crate that needs a C toolchain is not
+automatically wrong, but it has to justify itself; `netstat2`'s macOS/Linux `bindgen`
+path is why macOS listeners are marked unavailable rather than compiled in.
+
 ---
 
 ## 4. Principles
@@ -189,8 +232,10 @@ useful it looks.
    answer. "Your PC is clean" is not a sentence ranger says.
 4. **Reversible.** Quarantine before delete. Preview before action. A journal entry for
    everything. Nothing outside an allowlist is ever touched.
-5. **Least privilege.** No kernel driver, no root service, no silent elevation. What
-   cannot be seen without elevation is shown as unseen, not guessed.
+5. **Least privilege.** No kernel driver, no standing root service, no silent
+   elevation. Elevation is one operation, started by a person, approved by the
+   operating system, and finished before the window asks for anything else. What cannot
+   be seen without elevation is shown as unseen, not guessed.
 6. **Small.** One binary, no runtime, no model server, no database engine. egui and
    `std`, not Electron and not a webview.
 7. **Boring.** No scareware, no countdowns, no red badges for attention metrics, no
@@ -460,6 +505,59 @@ default build stays offline.
   file unreadable, OS API unavailable, disk full.
 - A dead worker is visible; a collector that hangs is cancellable.
 - A log is local and contains no secrets; there is no crash upload.
+
+### 6.8 Real time without a kernel driver
+
+"Real time" usually means a driver. Ranger does not have one, and will not pretend it
+does. The honest version is event-driven where the OS offers an event, and polled where
+it does not:
+
+- **v0.1.0:** scans on launch and on demand. This is the inventory a person can read,
+  not a daemon.
+- **v0.2.0:** a process poll every two seconds, which is cheap because it reads the
+  process table rather than the disk. A process that is new since the last check has
+  its executable hashed and matched, and appears in the timeline.
+- **v0.2.0:** `notify` watchers on Downloads, Desktop, the temporary directory and the
+  user's startup folders. A file written and closed is queued, debounced and scanned.
+  No file-open interception, no kernel hook.
+- **v0.4.0:** the watcher and the poll run while the window is closed to the tray, under
+  the same idle budget.
+- **Later, and only with a written scope:** user-mode ETW on Windows, EndpointSecurity
+  with an Apple entitlement on macOS, eBPF or fanotify on Linux. None of them is a
+  kernel driver, and none is in v0.x.
+
+What this cannot catch, and says it cannot: a file that is opened and executed entirely
+in memory, a process that starts and exits between polls, and anything a rootkit hides
+from the operating system's own process table. The interface names those limits rather
+than implying that "real time" means "sees everything".
+
+The cost matters as much as the coverage. A watch event is debounced, a file is hashed
+once per scan, and a scan that would exceed the idle budget waits for the machine to be
+idle. A security tool that heats a laptop is a security tool people uninstall.
+
+### 6.9 Elevation: one operation at a time
+
+The window is never elevated. Elevation is a separate, short-lived copy of the same
+binary, started for one named operation:
+
+1. A person chooses **Run an administrator scan**.
+2. The interface explains what the elevated copy can read, and what it will not do.
+3. The operating system asks for consent — UAC on Windows. Nothing is bypassed.
+4. A second copy runs `vn-ranger --elevated-scan <file>`: the same `scan()` code, one
+   snapshot written to the data directory, then exit.
+5. The unelevated window reads the snapshot and marks it `elevated: true`.
+
+There is no standing administrator process, no service, no driver and no persistent
+helper. The elevated copy can do exactly one thing: scan and write one file. It cannot
+delete, quarantine or change configuration.
+
+macOS and Linux do not have this path yet; the interface reports `can_elevate = false`
+and the button says so. When they arrive, the same shape applies: a named operation, a
+consent prompt, a one-shot helper, a journal entry. An unprivileged process never gets
+to hand an elevated helper an arbitrary path to delete.
+
+Never: a shell string passed to `sudo`, a UAC bypass, an elevated service, a scheduled
+task running as SYSTEM, or a helper that stays alive after its report is written.
 
 ---
 
