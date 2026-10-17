@@ -6,6 +6,29 @@ All notable changes to vn-ranger are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-10-17
+
+### Added
+
+- A command palette with global search (Ctrl+K) over views, processes, startup items,
+  findings and the common actions; the arrow keys move, Enter runs a row.
+- Keyboard navigation: j/k and the arrow keys move the selected process or startup row,
+  and Esc clears it.
+- Filters and sorting on the process table (name, pid, user, started; listening, no
+  path, temporary or download folders), startup (scope, disabled items), findings
+  (severity, text, sort) and the Changes view (source, clear).
+- A baseline card on the overview, findings in the Markdown report, and findings as
+  JSON.
+- Extra watched folders, with the watcher restarted when the list changes.
+- Cancelling a scan between collectors.
+- Preferences in settings.json, and a single-instance guard that refuses a second
+  window and does not save from it.
+- An error is a dismissible top-right notice instead of red text under every view.
+
+### Changed
+
+- An atomic save retries a transient access or sharing denial three times.
+- The scan-completion message and the report's "What this report is not" card are gone.
 ## [0.1.4] - 2026-10-17
 
 ### Added
@@ -120,7 +143,8 @@ All notable changes to vn-ranger are recorded here. The format follows
 - vn-launcher cannot install the release until its own install path ships; ranger is
   built to the contract now.
 
-[Unreleased]: https://github.com/vecnode/vn-ranger/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/vecnode/vn-ranger/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/vecnode/vn-ranger/releases/tag/v0.1.5
 [0.1.4]: https://github.com/vecnode/vn-ranger/releases/tag/v0.1.4
 [0.1.3]: https://github.com/vecnode/vn-ranger/releases/tag/v0.1.3
 [0.1.2]: https://github.com/vecnode/vn-ranger/releases/tag/v0.1.2

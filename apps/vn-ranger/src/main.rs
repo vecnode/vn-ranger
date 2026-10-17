@@ -56,7 +56,10 @@ fn main() -> eframe::Result<()> {
 }
 
 fn write_headless_report(path: &Path) {
-    let snapshot = vnr_native::scan(&|_| {});
+    let Some(snapshot) = vnr_native::scan(&|_| {}, &|| false) else {
+        eprintln!("vn-ranger: the scan was cancelled");
+        std::process::exit(1);
+    };
     if let Err(error) = vnr_native::store::write_json(&snapshot, path) {
         eprintln!("vn-ranger: could not write {}: {error}", path.display());
         std::process::exit(1);

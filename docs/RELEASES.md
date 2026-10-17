@@ -1,6 +1,6 @@
 # Releases
 
-**Status:** v0.1.4 is cut from this tree. The release workflow is
+**Status:** v0.1.5 is cut from this tree. The release workflow is
 [`.github/workflows/release.yml`](../.github/workflows/release.yml).
 **Audience:** whoever cuts a vn-ranger release, and the launcher that installs it.
 

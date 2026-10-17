@@ -1051,18 +1051,6 @@ impl Ui {
             );
             widgets::key_value(ui, "Data", &world.data_dir.display().to_string());
         });
-        ui.add_space(10.0);
-        widgets::card(ui, |ui| {
-            ui.label(RichText::new("What this report is not").family(theme::semibold()));
-            ui.add_space(4.0);
-            ui.label(
-                RichText::new(
-                    "It is an inventory, not a verdict. A fact that is absent does not mean it was not there. No numeric threat score exists, and no data left this machine.",
-                )
-                .size(11.5)
-                .color(theme::muted(ui)),
-            );
-        });
     }
 
     /// Preferences, elevation and privacy.
@@ -1102,12 +1090,36 @@ impl Ui {
                 actions.push(Action::SetPollLed(led));
             }
             ui.label(
-                RichText::new(
-                    "These switches last for this session; ranger does not write a settings file yet.",
-                )
-                .size(10.5)
-                .color(theme::muted(ui)),
+                RichText::new("These switches are kept in settings.json in the data folder.")
+                    .size(10.5)
+                    .color(theme::muted(ui)),
             );
+            ui.add_space(6.0);
+            ui.label(
+                RichText::new("Extra watched folders")
+                    .size(10.5)
+                    .color(theme::muted(ui)),
+            );
+            for root in &world.watch_extra {
+                ui.horizontal(|ui| {
+                    ui.add(egui::Label::new(RichText::new(root.as_str()).size(10.5).monospace()).truncate());
+                    if ui.small_button("Remove").clicked() {
+                        actions.push(Action::RemoveWatchRoot(root.clone()));
+                    }
+                });
+            }
+            ui.horizontal(|ui| {
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.watch_new)
+                        .hint_text("A folder to watch")
+                        .desired_width(240.0)
+                        .margin(egui::Margin::symmetric(8, 4)),
+                );
+                if ui.button("Add folder").clicked() && !self.watch_new.trim().is_empty() {
+                    actions.push(Action::AddWatchRoot(self.watch_new.trim().to_owned()));
+                    self.watch_new.clear();
+                }
+            });
             if let Some(reason) = world.live.as_ref().and_then(|live| live.reason.as_ref()) {
                 ui.label(
                     RichText::new(format!("The last process poll was incomplete: {reason}"))

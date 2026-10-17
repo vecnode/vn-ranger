@@ -59,6 +59,12 @@ pub fn settings_path() -> PathBuf {
     data_dir().join("settings.json")
 }
 
+/// Where the extra watched folders are kept.
+#[must_use]
+pub fn watch_roots_path() -> PathBuf {
+    data_dir().join("watch-roots.json")
+}
+
 /// The instance lock that keeps one window per data directory.
 #[must_use]
 pub fn instance_path() -> PathBuf {

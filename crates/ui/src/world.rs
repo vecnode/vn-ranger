@@ -168,6 +168,8 @@ pub struct World {
     pub findings: Vec<Finding>,
     /// The person's active suppressions.
     pub suppressions: Vec<Suppression>,
+    /// Folders the person added to the watcher.
+    pub watch_extra: Vec<String>,
 }
 
 impl World {
@@ -202,6 +204,8 @@ impl World {
 pub enum Action {
     /// Run an ordinary scan.
     Scan,
+    /// Ask the running scan to stop between collectors.
+    CancelScan,
     /// Ask the operating system for an administrator scan.
     ScanElevated,
     /// Write the snapshot as JSON.
@@ -250,6 +254,10 @@ pub enum Action {
     },
     /// Clear the in-memory session timeline.
     ClearTimeline,
+    /// Add a folder to the watcher.
+    AddWatchRoot(String),
+    /// Stop watching a folder the person added.
+    RemoveWatchRoot(String),
     /// Open a file or directory in the platform's file manager.
     OpenPath(String),
     /// Close the application.

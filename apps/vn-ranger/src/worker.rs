@@ -32,19 +32,27 @@ pub enum ScanMessage {
     Done(Box<Snapshot>),
     /// A failure a person can act on.
     Failed(String),
+    /// The person stopped the scan between collectors.
+    Cancelled,
 }
 
 /// Run an ordinary scan on a background thread.
-pub fn spawn_scan(ctx: egui::Context) -> Receiver<ScanMessage> {
+pub fn spawn_scan(ctx: egui::Context, cancelled: Arc<AtomicBool>) -> Receiver<ScanMessage> {
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {
-        let snapshot = vnr_native::scan(&|progress| {
-            if let vnr_native::ScanProgress::Started(label) = progress {
-                send(&sender, ScanMessage::Progress(label));
-                ctx.request_repaint();
-            }
-        });
-        send(&sender, ScanMessage::Done(Box::new(snapshot)));
+        let snapshot = vnr_native::scan(
+            &|progress| {
+                if let vnr_native::ScanProgress::Started(label) = progress {
+                    send(&sender, ScanMessage::Progress(label));
+                    ctx.request_repaint();
+                }
+            },
+            &|| cancelled.load(Ordering::Relaxed),
+        );
+        match snapshot {
+            Some(snapshot) => send(&sender, ScanMessage::Done(Box::new(snapshot))),
+            None => send(&sender, ScanMessage::Cancelled),
+        }
         ctx.request_repaint();
     });
     receiver
@@ -215,7 +223,14 @@ fn run(
 
         if watch_on.load(Ordering::Relaxed) {
             if watcher.is_none() && !watch_failed {
-                match vnr_native::watch::start(&vnr_native::paths::watch_roots(), raw_sender.clone()) {
+                let mut roots = vnr_native::paths::watch_roots();
+                for extra in vnr_native::store::load_watch_roots() {
+                    let path = std::path::PathBuf::from(extra);
+                    if path.is_dir() && !roots.contains(&path) {
+                        roots.push(path);
+                    }
+                }
+                match vnr_native::watch::start(&roots, raw_sender.clone()) {
                     Ok(started) => {
                         let roots: Vec<String> = started
                             .watching

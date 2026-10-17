@@ -1,7 +1,8 @@
 # The plan — vn-ranger
 
-**Status:** v0.1.4 ships the rules and findings layer: fifteen built-in rules, the
-Findings view, scoped suppressions and the session timeline. The process poll, file
+**Status:** v0.1.5 ships the interface layer on top of the rules: a command palette with
+global search, keyboard navigation, filters and sorting, saved preferences, a
+single-instance guard, watch roots and cancellation between collectors. The process poll, file
 watchers and accepted baseline arrived in 0.1.2/0.1.3; the read-only inventory, the local
 hash-signature engine and the one-shot administrator scan remain in the repository. The
 sections below that describe cleaning, residency and deeper platform access are the plan
@@ -134,7 +135,7 @@ as reported by each repository in October 2026.
 | [vn-launcher](https://github.com/vecnode/vn-launcher) | MIT | Installs, updates and opens the vecnode applications | The workspace shape, the worker model, the release contract, the mark | The catalogue domain: it launches apps, ranger inspects a machine |
 | [osquery](https://github.com/osquery/osquery) | Apache-2.0 **or** GPL-2.0 | Exposes OS state as SQL tables | "Facts, not verdicts"; a cross-platform fact schema | The SQL surface, the agent/server model, the deployment weight |
 | [ClamAV](https://github.com/Cisco-Talos/clamav) | GPL-2.0 | Signature antivirus engine | The idea that signatures are a separate, optional layer; signature-update discipline | The engine: copyleft, C, and far larger than this app |
-| [YARA-X](https://github.com/VirusTotal/yara-x) | BSD-3-Clause | Rust pattern-matching rules for files | A linkable rule engine **if** it earns its place (v0.1.7, optional feature) | A default dependency; rules are a supply-chain surface |
+| [YARA-X](https://github.com/VirusTotal/yara-x) | BSD-3-Clause | Rust pattern-matching rules for files | A linkable rule engine **if** it earns its place (v0.1.8, optional feature) | A default dependency; rules are a supply-chain surface |
 | [Sigma](https://github.com/SigmaHQ/sigma) | DRL 1.1 (rules) | A portable detection-rule format | The idea of a reviewable rule document with a rationale | The rules themselves: DRL is not an OSI licence, so import-only and user-supplied |
 | [Czkawka / Krokiet](https://github.com/qarmin/czkawka) | MIT (code), CC BY 4.0 (assets) | Fast cross-platform duplicate and junk finder | Preview → select → act; honest scope; no telemetry | Its scanning domain and its Slint interface |
 | [BleachBit](https://github.com/bleachbit/bleachbit) | GPL-3.0 | Cleaner with per-application rules | The "cleaner list" concept, and the caution it demands | Code (copyleft), GTK, registry cleaning |
@@ -161,7 +162,7 @@ as reported by each repository in October 2026.
    reversibility the default, and refuses the "registry cleaner" category outright.
 4. **Rule packs are attack surface.** Sigma's DRL is not an OSI licence, and a rule
    pack that can name arbitrary paths is a deletion vector. Ranger rules are data, not
-   code; external packs arrive only with signatures (v0.1.7).
+   code; external packs arrive only with signatures (v0.1.8).
 5. **Agent inventory is real and unowned.** Commercial EDR now sells agent discovery;
    the open-source options are server- or Python-shaped. A small local app can own this.
 6. **Distribution is already solved.** vn-launcher's release convention gives ranger a
@@ -186,10 +187,10 @@ v0.1.0 ships the first layer of a stack whose layers are deliberately separate:
 | Layer | Status | What it does | Licence boundary |
 |---|---|---|---|
 | Hash signatures | **shipped** | Reads ClamAV `.hdb` / `.hsb` (`hash:size:name`) and matches MD5, SHA-1 or SHA-256 of startup binaries and a self-test file. | A clean-room reader of a documented format. No ClamAV code, so the app stays MIT. |
-| Pattern rules | v0.1.7, optional | YARA-X behind a feature flag, for string and byte patterns. | BSD-3-Clause, linkable. Not in the default build. |
+| Pattern rules | v0.1.8, optional | YARA-X behind a feature flag, for string and byte patterns. | BSD-3-Clause, linkable. Not in the default build. |
 | Behavioural rules | **shipped** (v0.1.4) | Ranger's own detectors over facts: a startup item in a temporary folder, a binary that changed since the baseline, a persistent process holding a socket. | Ranger's own code, MIT. |
-| Sigma import | v0.1.7, user-supplied | A converter for the subset of Sigma that maps onto ranger facts. | Sigma rules are DRL 1.1, not OSI. Never vendored; the user brings the rules. |
-| Cleanup patterns | v0.1.5 | File walking, preview and cancellation discipline learned from Czkawka. | Czkawka is MIT; if code is copied, attribution travels with it. |
+| Sigma import | v0.1.8, user-supplied | A converter for the subset of Sigma that maps onto ranger facts. | Sigma rules are DRL 1.1, not OSI. Never vendored; the user brings the rules. |
+| Cleanup patterns | v0.1.6 | File walking, preview and cancellation discipline learned from Czkawka. | Czkawka is MIT; if code is copied, attribution travels with it. |
 
 **Why not port ClamAV itself.** ClamAV is GPL-2.0. Translating its code to Rust creates
 a derivative work, so the translated engine — and the combined application — would have
@@ -208,7 +209,7 @@ development machine, and the test reports it rather than pretending otherwise.
 **YARA-X is a crate, not a dependency.** It is pure Rust and BSD-3-Clause, and it is a
 good fit for the pattern layer. It is not linked into v0.1 because rules are a
 supply-chain surface, it adds size for a layer that has no rule pack yet, and the hash
-layer already answers "is this known bad?" for the files ranger can hash. The v0.1.7
+layer already answers "is this known bad?" for the files ranger can hash. The v0.1.8
 feature flag keeps the default build small and offline.
 
 **"Pure Rust" has one boundary.** The application, its UI and its collectors are safe
@@ -254,7 +255,7 @@ useful it looks.
 | The user's privacy | Inventory is exfiltrated or over-collected | No network; no file contents; no secrets; local storage; export only on request |
 | Trust in findings | False positives train the user to ignore the app | Evidence on every finding; a named benign explanation; expiring suppressions; no "urgent" without strong evidence |
 | The release | A compromised maintainer or asset | SHA256SUMS; signed releases when certificates exist; branch protection; no asset replacement |
-| The rule supply chain | A rule pack becomes a remote-delete primitive | Rules are data, not code; signed packs; no third-party packs before v0.1.7 |
+| The rule supply chain | A rule pack becomes a remote-delete primitive | Rules are data, not code; signed packs; no third-party packs before v0.1.8 |
 | The app's own persistence | Ranger becomes the hidden thing it warns about | Autostart is opt-in, visible and removable; no service; no driver; Quit really quits |
 
 **What ranger cannot do:** detect kernel rootkits, inspect firmware, scan memory,
@@ -359,7 +360,7 @@ Empty states say what was checked, not that the machine is safe.
 
 ### 5.6 What "clean" means
 
-"Clean" is something done to a cache, not a verdict on a computer. In v0.1.5:
+"Clean" is something done to a cache, not a verdict on a computer. In v0.1.6:
 
 - **Quarantine** moves a user-selected file into app-managed storage, with its hash,
   original path and reason recorded. Restore is one click.
@@ -450,7 +451,7 @@ settings.toml          user choices; human-readable
 baseline.json          the last accepted snapshot (compacted)
 journal.ndjson         append-only findings, actions and errors
 reports/               exported JSON and Markdown
-quarantine/<id>/       the file plus manifest.json (from v0.1.5)
+quarantine/<id>/       the file plus manifest.json (from v0.1.6)
 logs/                  local, rotated, no secrets
 ```
 
@@ -466,7 +467,7 @@ profile ACL. Nothing in it is secret, but paths contain usernames, so exports ca
 ### 6.5 Scheduling and residency
 
 - **Start:** a quick inventory (processes, autoruns, listeners) within a few seconds.
-- **Resident:** every six hours, with jitter. A wake-from-sleep check is v0.1.6.
+- **Resident:** every six hours, with jitter. A wake-from-sleep check is v0.1.7.
 - **Heavy work:** user-initiated. v0.1.0 has no full-disk scan.
 - **Budget:** idle CPU under 0.5% of one core, RSS under 120 MB, measured and
   published (§11).
@@ -523,7 +524,7 @@ it does not:
 - **v0.1.2:** `notify` watchers on Downloads, Desktop, the temporary directory and the
   user's startup folders. A file written and closed is queued, debounced and scanned.
   No file-open interception, no kernel hook.
-- **v0.1.6:** the watcher and the poll run while the window is closed to the tray, under
+- **v0.1.7:** the watcher and the poll run while the window is closed to the tray, under
   the same idle budget.
 - **Later, and only with a written scope:** user-mode ETW on Windows, EndpointSecurity
   with an Apple entitlement on macOS, eBPF or fanotify on Linux. None of them is a
@@ -707,7 +708,7 @@ this crate alone. Default features are off and the macOS build selects `macos_kq
 so no `fsevent-sys` is linked. The alternative was per-platform watchers, which is more
 code and more platform risk for the same result. The decision is recorded in §14.2.
 
-**The journal stays in v0.1.5.** The 0.1.2 timeline lives in memory for the session,
+**The journal stays in v0.1.6.** The 0.1.2 timeline lives in memory for the session,
 so nothing is written that looks like a journal without its guarantees.
 
 **Exit for 0.1.2:** the poll and the watcher are correct on a real machine and in
@@ -758,17 +759,17 @@ expiry.
   evidence; the language audit in §5.5 passes. Met by reading every rule's text against
   that table by hand.
 
-### M4 — v0.1.5, Act
+### M4 — v0.1.5, Interface — **shipped**
 
-The release where ranger can change the machine. It is the only one in the 0.1.x line that
-can, so the order is fixed: the journal first, then quarantine, then cleanup. Every gate
-in §5.6 and in `AGENTS.md` §2 applies; a feature that cannot meet them waits.
+The 0.1.5 line is the interface release: a command palette with global search (Ctrl+K),
+keyboard navigation (j/k, arrows, Enter, Esc), sort and quick filters on the process
+table, scope and disabled filters on startup, severity/text/sort controls on findings,
+a source filter and clear button on the session timeline, per-suppression removal, a
+baseline card on the overview, extra watched folders, cancellation between collectors,
+findings in the Markdown report, findings as JSON, saved preferences, a single-instance
+guard and a top-right error toast.
 
-Interface work landed in the 0.1.5 line before the Act gates: sort and quick filters on
-the process table, scope and disabled filters on startup, severity/text/sort controls on
-findings, a source filter and a clear button on the session timeline, per-suppression
-removal in Settings, and findings in the Markdown report. None of it changes the gates
-below.
+#### Act — planned for v0.1.6
 
 | # | Work | Where | Done when |
 |---|---|---|---|
@@ -780,15 +781,15 @@ below.
 | 6 | The Act surfaces: quarantine candidates with preview, the quarantine list with restore and permanent delete, the journal newest first, and the data-directory size in Settings | `crates/ui/src/views.rs` | Every empty state says what was checked; a failure names the file and the OS error |
 | 7 | Budgets: the cleanup walk and the journal write measured, published | `docs/BENCHMARKS.md` | Journal write < 1 ms per event; a 10,000-entry preview bounded and cancellable |
 
-**Exit for 0.1.5:** every deletion path has two reviewers and traversal, symlink,
+**Exit for 0.1.6:** every deletion path has two reviewers and traversal, symlink,
 hard-link and TOCTOU tests; no path outside the allowlist is reachable; a crash
 mid-action leaves the journal consistent; restore is verified; the language audit says
 "quarantine", never "fix"; `cargo xtask ci` is green on three platforms.
 
-**Deliberately not in 0.1.5:** registry cleaning, "junk" scoring, secure-delete claims, a
+**Deliberately not in 0.1.6:** registry cleaning, "junk" scoring, secure-delete claims, a
 service, and any elevated deletion. The elevated copy stays a one-shot scan.
 
-### M5 — v0.1.6, Resident
+### M5 — v0.1.7, Resident
 
 - Tray, opt-in autostart, scheduler, single instance, close-to-tray, wake handling.
 - A 24-hour soak with the poll and the watcher running, so the budgets are measured on
@@ -797,7 +798,7 @@ service, and any elevated deletion. The elevated copy stays a one-shot scan.
   one click; no service or driver; tray fallback works on a desktop without
   AppIndicator.
 
-### M6 — v0.1.7, Rule packs
+### M6 — v0.1.8, Rule packs
 
 - Signed external rule packs, a rule-development guide, an optional `yara-x` feature,
   and an importer for a user-supplied subset of Sigma (licence respected).
@@ -913,7 +914,7 @@ the target is revised with a reason.
 | Installed footprint | ≤ 40 MB | no models, no runtime, no database; the Windows binary measured 15.64 MB |
 | Inventory scan | ≤ 3 s typical | longer is allowed with progress; measured 1.2–1.8 s |
 | Hashing | ≥ 200 MB/s single-thread SHA-256 on NVMe | bounded, visible work; not yet measured |
-| Journal write | < 1 ms per event | no UI stalls; the journal arrives with v0.1.5 |
+| Journal write | < 1 ms per event | no UI stalls; the journal arrives with v0.1.6 |
 
 Measured on the development Windows machine: 287–291 processes, 131 startup items,
 95–102 listeners, 128 packages, a 1.2–1.8 s scan, 166 MB idle working set, 0% idle CPU,
@@ -989,7 +990,7 @@ and that is the launcher's, not ranger's.
 | Permission gaps look like bugs | Medium | Capability banners and "not visible" states |
 | macOS TCC and entitlements | Medium | Degrade, document, avoid private APIs |
 | Linux tray inconsistency | Low | Tray where available, window-only fallback, no hard dependency |
-| Rule-pack supply chain | High | Signed packs, no code in rules, no third-party packs before v0.1.7 |
+| Rule-pack supply chain | High | Signed packs, no code in rules, no third-party packs before v0.1.8 |
 | egui accessibility | Medium | Keyboard and labels now; document what remains |
 | Maintainer time and funding | High | Small scope, no server, no telemetry, MIT |
 
@@ -1005,11 +1006,11 @@ and that is the launcher's, not ranger's.
    (§6.9). Windows ships this in v0.1.0; macOS and Linux say "not yet".
 3. **Binary name:** `vn-ranger`, never `ranger`, which would collide with the terminal
    file manager.
-4. **Cleaning:** quarantine and an allowlisted cache/temp cleanup in v0.1.5. Registry
+4. **Cleaning:** quarantine and an allowlisted cache/temp cleanup in v0.1.6. Registry
    cleaning, "junk" scoring and RAM boosting are never.
-5. **YARA-X:** an optional feature at v0.1.7, never the default dependency. It is pure
+5. **YARA-X:** an optional feature at v0.1.8, never the default dependency. It is pure
    Rust and BSD-3-Clause; rules are the supply-chain risk, not the crate.
-6. **Sigma:** a user-supplied import at v0.1.7. The rules are DRL 1.1 and are not
+6. **Sigma:** a user-supplied import at v0.1.8. The rules are DRL 1.1 and are not
    vendored; the converter reads what the user brings.
 7. **Czkawka:** its MIT file-walking, preview and cancellation discipline informs the
    cleanup layer; its Slint interface is not used. Attribution travels with any copied
@@ -1027,7 +1028,7 @@ and that is the launcher's, not ranger's.
 
 1. **Code signing:** Windows EV and Apple Developer ID certificates, and who holds them.
 2. **Platform floor:** Windows 10 1809+, macOS 13+, glibc 2.35+ (Ubuntu 22.04)?
-3. **Tray:** all three platforms at v0.1.6, or a window-only first release?
+3. **Tray:** all three platforms at v0.1.7, or a window-only first release?
 4. **Localisation:** English only until v1.0?
 5. **Agent scope:** confirm the process, network and persistence boundary, with no
    prompt or content inspection.

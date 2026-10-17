@@ -155,6 +155,9 @@ pub struct Ui {
     palette_open: bool,
     palette_query: String,
     palette_index: usize,
+    watch_new: String,
+    error_seen: Option<(String, u64)>,
+    error_dismissed: Option<String>,
     mark: egui::TextureHandle,
 }
 
@@ -208,6 +211,9 @@ impl Ui {
             palette_open: false,
             palette_query: String::new(),
             palette_index: 0,
+            watch_new: String::new(),
+            error_seen: None,
+            error_dismissed: None,
             mark,
         }
     }
@@ -306,6 +312,7 @@ impl Ui {
         self.project_modal(&ctx);
         self.suppress_modal(&ctx, &mut actions);
         self.palette(&ctx, world, &mut actions);
+        self.toast(&ctx, world);
         actions
     }
 
@@ -372,6 +379,13 @@ impl Ui {
                             ScanState::Running(step) => {
                                 ui.spinner();
                                 ui.label(RichText::new(step.as_str()).size(11.5).color(theme::muted(ui)));
+                                if ui
+                                    .add(egui::Button::new(RichText::new("Cancel").size(10.5)).frame(false))
+                                    .on_hover_text("Stop after the collector that is running now.")
+                                    .clicked()
+                                {
+                                    actions.push(Action::CancelScan);
+                                }
                             }
                             ScanState::Idle => {
                                 if let Some(snapshot) = world.snapshot() {
@@ -494,10 +508,6 @@ impl Ui {
                 });
             }
         });
-        if let Some(error) = &world.error {
-            ui.add_space(4.0);
-            ui.label(RichText::new(error).size(11.5).color(theme::BAD));
-        }
         if let Some(notice) = &world.notice {
             ui.add_space(4.0);
             ui.label(RichText::new(notice).size(11.5).color(theme::OK));
@@ -775,6 +785,53 @@ impl Ui {
         entries
     }
 
+    fn toast(&mut self, ctx: &egui::Context, world: &World) {
+        let Some(error) = world.error.clone() else {
+            self.error_seen = None;
+            self.error_dismissed = None;
+            return;
+        };
+        let now = world.now_unix;
+        match &mut self.error_seen {
+            Some((text, at)) if *text == error => {
+                if now.saturating_sub(*at) > 10 {
+                    return;
+                }
+            }
+            _ => {
+                self.error_seen = Some((error.clone(), now));
+                self.error_dismissed = None;
+            }
+        }
+        if self.error_dismissed.as_deref() == Some(error.as_str()) {
+            return;
+        }
+        let mut dismiss = false;
+        egui::Area::new(toast_id())
+            .anchor(Align2::RIGHT_TOP, vec2(-16.0, 72.0))
+            .order(egui::Order::Foreground)
+            .show(ctx, |ui| {
+                egui::Frame::new()
+                    .fill(theme::panel(self.dark))
+                    .stroke(egui::Stroke::new(1.0, theme::BAD))
+                    .corner_radius(egui::CornerRadius::same(8))
+                    .inner_margin(Margin::same(10))
+                    .show(ui, |ui| {
+                        ui.set_max_width(380.0);
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new(error.as_str()).size(11.5).color(theme::BAD));
+                            if ui.small_button("✕").clicked() {
+                                dismiss = true;
+                            }
+                        });
+                    });
+            });
+        if dismiss {
+            self.error_dismissed = Some(error);
+        }
+        ctx.request_repaint_after(std::time::Duration::from_secs(1));
+    }
+
     fn suppress_modal(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
         let Some(finding) = self.suppress_target.clone() else {
             return;
@@ -897,6 +954,11 @@ fn palette_input_id() -> egui::Id {
     egui::Id::new("palette-input")
 }
 
+#[allow(deprecated)]
+fn toast_id() -> egui::Id {
+    egui::Id::new("error-toast")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -941,6 +1003,7 @@ mod tests {
             timeline: Timeline::new(),
             findings: Vec::new(),
             suppressions: Vec::new(),
+            watch_extra: Vec::new(),
         }
     }
 

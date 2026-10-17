@@ -75,7 +75,7 @@ read credentials, messages, browser data or keystrokes.
 - **An agent with more permission than its owner intended** — the agent inventory
   exists for this case.
 - **A malicious or mistaken rule pack.** Rules are data and cannot execute code;
-  third-party packs require a signature from v0.1.7.
+  third-party packs require a signature from v0.1.8.
 - **A compromised release.** Checksums now, signatures at v0.2.0.
 - **A local administrator.** Out of scope for integrity: an administrator can change
   ranger's binary, its data and the operating system. Ranger does not pretend

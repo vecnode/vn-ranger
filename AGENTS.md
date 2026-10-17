@@ -5,10 +5,11 @@ machine, explains what is unusual, remembers a baseline, and — later, and care
 quarantines and cleans. It is written in **Rust only**: a native egui/eframe
 application, with **no Tauri, Electron, webview or JavaScript build step**.
 
-**Status:** v0.1.4 is released; 0.1.5 is the next line. The read-only inventory, the
+**Status:** v0.1.5 is released; 0.1.6 is the next line. The read-only inventory, the
 local hash signature engine, the one-shot administrator scan, the two-second process
-poll, the file watchers, the accepted baseline, fifteen rules and the Findings view
-work. Cleaning and the tray are still ahead. This file is the contract for all of it,
+poll, the file watchers, the accepted baseline, fifteen rules, the Findings view, the command palette and
+keyboard navigation work, with preferences saved and one window per data directory.
+Cleaning and the tray are still ahead. This file is the contract for all of it,
 written before the features that will need it.
 
 `docs/PLAN.md` explains the research, the scope and the architecture.
@@ -81,8 +82,8 @@ act on — never a panic.
 
 ### Never delete
 
-- Read-only is the default. There is no deletion API in v0.1.4, on purpose.
-- When quarantine arrives in v0.1.5: quarantine before delete, preview before action,
+- Read-only is the default. There is no deletion API in v0.1.5, on purpose.
+- When quarantine arrives in v0.1.6: quarantine before delete, preview before action,
   and an allowlist of cache, temporary and log locations. User documents are excluded
   by construction, not by a heuristic.
 - The deletion API takes an **id**, not a path. It resolves under the quarantine or
@@ -224,7 +225,7 @@ Shipped in v0.1.4 as fifteen built-in rules. The contract every rule obeys:
 - **A rule that cannot name a benign explanation may not ship as `attention`.**
 - Rule ids are stable forever; changing one is a breaking change to suppressions.
 - Rules are Rust detectors with fixtures, not data loaded at runtime. External rule
-  packs arrive at v0.1.7 with signing; until then no rule text or predicate comes from
+  packs arrive at v0.1.8 with signing; until then no rule text or predicate comes from
   outside the binary.
 - `urgent` requires an observed harm, not a suspicious-looking path. No rule uses it yet.
 - Suppressions are scoped to one `(rule, subject)`, carry a reason, and expire after 30

@@ -21,9 +21,10 @@ pub enum ScanProgress {
 /// Run one scan.
 ///
 /// Every collector is attempted; a failure becomes a status in the snapshot rather
-/// than aborting the scan. The returned snapshot always has a schema and a host.
+/// than aborting the scan. A snapshot always has a schema and a host. None means the
+/// person cancelled between collectors; nothing was written.
 #[must_use]
-pub fn scan(progress: &dyn Fn(ScanProgress)) -> Snapshot {
+pub fn scan(progress: &dyn Fn(ScanProgress), cancelled: &dyn Fn() -> bool) -> Option<Snapshot> {
     let started = Instant::now();
     let mut snapshot = Snapshot::empty(collect::host::current(), crate::elevation::is_elevated());
 
@@ -31,6 +32,9 @@ pub fn scan(progress: &dyn Fn(ScanProgress)) -> Snapshot {
     let (signatures, signature_report) = crate::signatures::load();
     snapshot.signatures = signature_report;
     let algorithms = signatures.algorithms();
+    if cancelled() {
+        return None;
+    }
     let mut hasher = Hasher::new(
         algorithms.contains(&HashAlgorithm::Md5),
         algorithms.contains(&HashAlgorithm::Sha1),
@@ -39,11 +43,17 @@ pub fn scan(progress: &dyn Fn(ScanProgress)) -> Snapshot {
     progress(ScanProgress::Started("Listing processes"));
     let (processes, process_status) = collect::processes::collect().into_parts("processes", "Processes");
     snapshot.processes = processes;
+    if cancelled() {
+        return None;
+    }
 
     progress(ScanProgress::Started("Reading startup items"));
     let (autoruns, autorun_status) =
         collect::autoruns::collect(&mut hasher).into_parts("autoruns", "Startup items");
     snapshot.autoruns = autoruns;
+    if cancelled() {
+        return None;
+    }
 
     progress(ScanProgress::Started("Reading listening sockets"));
     let process_names: HashMap<u32, String> = snapshot
@@ -54,16 +64,25 @@ pub fn scan(progress: &dyn Fn(ScanProgress)) -> Snapshot {
     let (listeners, listener_status) =
         collect::listeners::collect(&process_names).into_parts("listeners", "Listening sockets");
     snapshot.listeners = listeners;
+    if cancelled() {
+        return None;
+    }
 
     progress(ScanProgress::Started("Reading installed packages"));
     let (packages, package_status) =
         collect::packages::collect().into_parts("packages", "Installed packages");
     snapshot.packages = packages;
+    if cancelled() {
+        return None;
+    }
 
     snapshot.collectors = vec![process_status, autorun_status, listener_status, package_status];
 
     let mut matches = Vec::new();
     for autorun in &snapshot.autoruns {
+        if cancelled() {
+            return None;
+        }
         let Some(exe) = autorun.exe.as_deref() else {
             continue;
         };
@@ -95,5 +114,5 @@ pub fn scan(progress: &dyn Fn(ScanProgress)) -> Snapshot {
     snapshot.duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
     snapshot.sort();
     progress(ScanProgress::Completed);
-    snapshot
+    Some(snapshot)
 }

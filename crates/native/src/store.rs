@@ -114,6 +114,20 @@ pub fn save_ui_settings(settings: &UiSettings) -> std::io::Result<()> {
     write_json_value(settings, &crate::paths::settings_path())
 }
 
+/// The extra folders the person added to the watcher.
+#[must_use]
+pub fn load_watch_roots() -> Vec<String> {
+    std::fs::read_to_string(crate::paths::watch_roots_path())
+        .ok()
+        .and_then(|text| serde_json::from_str::<Vec<String>>(&text).ok())
+        .unwrap_or_default()
+}
+
+/// Save the extra watched folders.
+pub fn save_watch_roots(roots: &[String]) -> std::io::Result<()> {
+    write_json_value(roots, &crate::paths::watch_roots_path())
+}
+
 fn load(path: &Path) -> Option<Snapshot> {
     let text = std::fs::read_to_string(path).ok()?;
     let snapshot: Snapshot = serde_json::from_str(&text).ok()?;

@@ -1,6 +1,8 @@
 //! The window's owner: the world, the worker, and the actions it carries out.
 
 use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -17,6 +19,7 @@ pub struct App {
     watch: worker::WatchService,
     settings: vnr_native::store::UiSettings,
     instance: Option<vnr_native::instance::InstanceGuard>,
+    cancel: Option<Arc<AtomicBool>>,
 }
 
 impl App {
@@ -40,6 +43,7 @@ impl App {
         };
         let suppressions = vnr_native::store::load_suppressions(now_unix());
         let findings = findings_for(snapshot.as_ref(), baseline.as_ref(), &suppressions, now_unix());
+        let watch_extra = vnr_native::store::load_watch_roots();
         let world = World {
             snapshot,
             scan: ScanState::Idle,
@@ -64,6 +68,7 @@ impl App {
             timeline: vnr_core::Timeline::new(),
             findings,
             suppressions,
+            watch_extra,
         };
         let mut ui = Ui::new(&cc.egui_ctx);
         if let Some(dark) = settings.dark {
@@ -80,6 +85,7 @@ impl App {
             watch,
             settings,
             instance,
+            cancel: None,
         };
         if app.world.snapshot.is_none() {
             app.start_scan(&cc.egui_ctx, false);
@@ -98,10 +104,13 @@ impl App {
         } else {
             "Starting".to_owned()
         });
+        self.cancel = None;
         self.receiver = Some(if elevated {
             worker::spawn_elevated_scan(ctx.clone())
         } else {
-            worker::spawn_scan(ctx.clone())
+            let token = Arc::new(AtomicBool::new(false));
+            self.cancel = Some(Arc::clone(&token));
+            worker::spawn_scan(ctx.clone(), token)
         });
     }
 
@@ -147,7 +156,6 @@ impl App {
                         self.world.error =
                             Some(format!("The scan finished, but it could not be saved: {error}"));
                     }
-                    let duration = snapshot.duration_ms;
                     let changes = self
                         .world
                         .baseline
@@ -156,13 +164,21 @@ impl App {
                     self.world.changes = changes;
                     self.world.snapshot = Some(snapshot);
                     self.world.scan = ScanState::Idle;
-                    self.world.notice = Some(format!("Scan finished in {duration} ms."));
+                    self.world.notice = None;
+                    self.cancel = None;
                     self.refresh_findings(true);
                     finished = true;
                 }
                 ScanMessage::Failed(error) => {
                     self.world.scan = ScanState::Idle;
                     self.world.error = Some(error);
+                    self.cancel = None;
+                    finished = true;
+                }
+                ScanMessage::Cancelled => {
+                    self.world.scan = ScanState::Idle;
+                    self.world.notice = Some("Scan cancelled between collectors.".to_owned());
+                    self.cancel = None;
                     finished = true;
                 }
             }
@@ -298,6 +314,12 @@ impl App {
     fn apply(&mut self, action: Action, ctx: &egui::Context) {
         match action {
             Action::Scan => self.start_scan(ctx, false),
+            Action::CancelScan => {
+                if let Some(token) = &self.cancel {
+                    token.store(true, Ordering::Relaxed);
+                    self.world.notice = Some("Stopping after the current collector…".to_owned());
+                }
+            }
             Action::ScanElevated => self.start_scan(ctx, true),
             Action::ExportJson => self.export_json(),
             Action::ExportMarkdown => self.export_markdown(),
@@ -411,6 +433,52 @@ impl App {
                 self.refresh_findings(false);
             }
             Action::ClearTimeline => self.world.timeline.clear(),
+            Action::AddWatchRoot(path) => {
+                let candidate = std::path::PathBuf::from(&path);
+                if !candidate.is_dir() {
+                    self.world.error = Some(format!("{path} is not a folder that exists."));
+                } else if self
+                    .world
+                    .watch_extra
+                    .iter()
+                    .any(|root| root.eq_ignore_ascii_case(&path))
+                {
+                    self.world.notice = Some("That folder is already watched.".to_owned());
+                } else {
+                    self.world.watch_extra.push(path);
+                    match vnr_native::store::save_watch_roots(&self.world.watch_extra) {
+                        Ok(()) => {
+                            self.restart_watch(ctx);
+                            self.world.error = None;
+                            self.world.notice = Some("Watcher restarted with the new folder.".to_owned());
+                        }
+                        Err(error) => {
+                            self.world.watch_extra.pop();
+                            self.world.error = Some(format!("The folder was not saved: {error}"));
+                        }
+                    }
+                }
+            }
+            Action::RemoveWatchRoot(path) => {
+                let before = self.world.watch_extra.len();
+                self.world
+                    .watch_extra
+                    .retain(|root| !root.eq_ignore_ascii_case(&path));
+                if before == self.world.watch_extra.len() {
+                    return;
+                }
+                match vnr_native::store::save_watch_roots(&self.world.watch_extra) {
+                    Ok(()) => {
+                        self.restart_watch(ctx);
+                        self.world.error = None;
+                        self.world.notice = Some("Watcher restarted without that folder.".to_owned());
+                    }
+                    Err(error) => {
+                        self.world.watch_extra.push(path);
+                        self.world.error = Some(format!("The folder was not removed: {error}"));
+                    }
+                }
+            }
             Action::Quit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
         }
     }
@@ -446,6 +514,12 @@ impl App {
                 self.world.error = Some(format!("Could not write the Markdown report: {error}"));
             }
         }
+    }
+
+    fn restart_watch(&mut self, ctx: &egui::Context) {
+        self.watch = worker::WatchService::start(ctx.clone());
+        self.watch.set_poll(self.world.poll_enabled);
+        self.watch.set_watch(self.world.watch.enabled);
     }
 
     fn persist_settings(&mut self) {
