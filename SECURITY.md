@@ -33,7 +33,7 @@ are no backports to older 0.x lines.
 - The ranger binary and its collectors.
 - The hash-signature engine, its ClamAV-format reader, and the databases it loads.
 - The rule engine and the rules that ship with it.
-- The release pipeline, checksums and (from v1.0) signatures.
+- The release pipeline, checksums and (from v0.2.0) signatures.
 - A documentation claim that is false about the software's behaviour.
 - A finding that is dangerous to act on, or a recommended action that is not
   reversible.
@@ -75,7 +75,7 @@ data or keystrokes.
   exists for this case.
 - **A malicious or mistaken rule pack.** Rules are data and cannot execute code;
   third-party packs require a signature from v0.5.
-- **A compromised release.** Checksums now, signatures at v1.0.
+- **A compromised release.** Checksums now, signatures at v0.2.0.
 - **A local administrator.** Out of scope for integrity: an administrator can change
   ranger's binary, its data and the operating system. Ranger does not pretend
   otherwise.

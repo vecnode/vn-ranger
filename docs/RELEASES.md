@@ -99,18 +99,19 @@ for this system" is a useful answer; a Linux binary named `macos` is not.
 ## 5. Versioning
 
 - Start at `v0.1.0`.
-- Patch releases fix defects; minor releases add a milestone from
-  [`PLAN.md`](PLAN.md#9-roadmap); v1.0.0 is the audited release.
+- Patch releases fix defects; the `0.1.x` line also carries the watch, act, resident and
+  rule-pack milestones. The `0.2.0` minor is distribution and signing; `v1.0.0` is the
+  audited release.
 - Pre-releases carry a semver suffix and the GitHub pre-release flag.
 - **Never replace an asset on an existing tag.** A checksum is a statement about a
   file; replacing the file invalidates every verification already made. Cut a patch.
 
 ## 6. Signing
 
-v0.1.0 through v0.x ship with `SHA256SUMS.txt` only. The README and the release notes
+v0.1.0 through v0.1.x ship with `SHA256SUMS.txt` only. The README and the release notes
 say so.
 
-v1.0.0 targets:
+v0.2.0 targets:
 
 - Windows: Authenticode, with a certificate the project owns.
 - macOS: Developer ID, hardened runtime, notarisation.
@@ -119,7 +120,7 @@ v1.0.0 targets:
 A checksum protects against a truncated download and a corrupted mirror. It does not
 protect against a compromised maintainer account, because whoever can replace the
 archive can replace the checksum in the same release. Signing is the answer to that,
-and it is a v1.0 requirement, not a v0.1 claim.
+and it is a v0.2.0 requirement, not a v0.1 claim.
 
 ## 7. Checklist before tagging
 

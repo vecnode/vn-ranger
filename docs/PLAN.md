@@ -356,7 +356,7 @@ Empty states say what was checked, not that the machine is safe.
 
 ### 5.6 What "clean" means
 
-"Clean" is something done to a cache, not a verdict on a computer. In v0.3.0:
+"Clean" is something done to a cache, not a verdict on a computer. In v0.1.3:
 
 - **Quarantine** moves a user-selected file into app-managed storage, with its hash,
   original path and reason recorded. Restore is one click.
@@ -447,7 +447,7 @@ settings.toml          user choices; human-readable
 baseline.json          the last accepted snapshot (compacted)
 journal.ndjson         append-only findings, actions and errors
 reports/               exported JSON and Markdown
-quarantine/<id>/       the file plus manifest.json (from v0.3.0)
+quarantine/<id>/       the file plus manifest.json (from v0.1.3)
 logs/                  local, rotated, no secrets
 ```
 
@@ -463,7 +463,7 @@ profile ACL. Nothing in it is secret, but paths contain usernames, so exports ca
 ### 6.5 Scheduling and residency
 
 - **Start:** a quick inventory (processes, autoruns, listeners) within a few seconds.
-- **Resident:** every six hours, with jitter. A wake-from-sleep check is v0.4.0.
+- **Resident:** every six hours, with jitter. A wake-from-sleep check is v0.1.4.
 - **Heavy work:** user-initiated. v0.1.0 has no full-disk scan.
 - **Budget:** idle CPU under 0.5% of one core, RSS under 120 MB, measured and
   published (§11).
@@ -514,13 +514,13 @@ it does not:
 
 - **v0.1.0:** scans on launch and on demand. This is the inventory a person can read,
   not a daemon.
-- **v0.2.0:** a process poll every two seconds, which is cheap because it reads the
+- **v0.1.2:** a process poll every two seconds, which is cheap because it reads the
   process table rather than the disk. A process that is new since the last check has
   its executable hashed and matched, and appears in the timeline.
-- **v0.2.0:** `notify` watchers on Downloads, Desktop, the temporary directory and the
+- **v0.1.2:** `notify` watchers on Downloads, Desktop, the temporary directory and the
   user's startup folders. A file written and closed is queued, debounced and scanned.
   No file-open interception, no kernel hook.
-- **v0.4.0:** the watcher and the poll run while the window is closed to the tray, under
+- **v0.1.4:** the watcher and the poll run while the window is closed to the tray, under
   the same idle budget.
 - **Later, and only with a written scope:** user-mode ETW on Windows, EndpointSecurity
   with an Apple entitlement on macOS, eBPF or fanotify on Linux. None of them is a
@@ -593,7 +593,7 @@ Notes that matter more than the ticks:
 - **macOS:** several collectors trigger TCC prompts, login items live in an opaque
   store, and EndpointSecurity requires an Apple entitlement. Ranger degrades and
   explains rather than asking for more access than it needs. It is not notarised until
-  v1.0.
+  v0.2.0.
 - **Linux:** `hidepid`, containers and sandboxed packages (Flatpak, Snap) reduce what
   is visible. The capability banner says which collector is degraded and why.
 - **All three:** "not visible without elevation" is a first-class state, not an empty
@@ -682,7 +682,7 @@ way. Detection work belongs to M2.
 The typography and responsive layout are in the repository now. The rest of M1.1 is
 open, and each item gets its own commit.
 
-### M2 — v0.2.0, Watch and explain
+### M2 — v0.1.2, Watch and explain
 
 - **Real time:** a two-second process poll and `notify` watchers on Downloads, Desktop,
   the temporary directory and the user's startup folders, with debounce and an idle
@@ -699,7 +699,7 @@ open, and each item gets its own commit.
   audit in §5.5 passes.
 
 
-### M3 — v0.3.0, Act
+### M3 — v0.1.3, Act
 
 - Quarantine and restore with a manifest and hash; allowlisted cleanup with preview,
   per-item selection and dry-run; the action journal; typed confirmation for anything
@@ -708,7 +708,7 @@ open, and each item gets its own commit.
   no path outside the allowlist can be reached; every deletion path has two reviewers;
   a crash mid-action leaves the journal consistent.
 
-### M4 — v0.4.0, Resident
+### M4 — v0.1.4, Resident
 
 - Tray, opt-in autostart, scheduler, single instance, close-to-tray, wake handling,
   a 24-hour soak test.
@@ -716,17 +716,30 @@ open, and each item gets its own commit.
   one click; no service or driver; tray fallback works on a desktop without
   AppIndicator.
 
-### M5 — v0.5.0, Rules
+### M5 — v0.1.5, Rule packs
 
 - Signed external rule packs, a rule-development guide, an optional `yara-x` feature,
   and an importer for a user-supplied subset of Sigma (licence respected).
 - **Exit:** unsigned packs are refused; signature verification has tests; the default
   build contains no YARA-X; a bad pack can be rolled back without touching data.
 
-### M6 — v1.0.0, Deep and done
+### M6 — v0.2.0, Distribution (minor)
 
-- External security audit, signed Windows and macOS binaries, notarisation,
-  reproducible builds, accessibility pass, benchmarks, complete documentation.
+This is deliberately a minor release, not another 0.1.x. It is held until the 0.1.x
+line has settled; it is not part of 0.1.1.
+
+- Signed Windows binaries (Authenticode), Developer ID and notarisation on macOS, and
+  a detached `minisign` signature over the archives on Linux.
+- Launcher catalogue integration, install and removal verification, reproducible-build
+  notes, and release notes that state exactly what is signed.
+- **Exit:** all three archives are signed and verify; vn-launcher installs and removes
+  the application; no unsigned asset is published; the keys and the release process are
+  documented.
+
+### M7 — v1.0.0, Deep and done
+
+- External security audit, reproducible builds, accessibility pass, benchmarks, and
+  complete documentation.
 - **Exit:** an audit with no open high-severity findings; a first-run experience that
   never requests more privilege than it explains; a release a cautious person would
   install.
@@ -772,7 +785,7 @@ Summary:
   Ubuntu 22.04 for the oldest glibc. Windows: MSVC with a static CRT.
 - No installers (`.msi`, `.dmg`, `.deb`, `.rpm`, `.AppImage`): the launcher unpacks
   archives.
-- Signing arrives with v1.0. Until then, `SHA256SUMS.txt` is the only integrity
+- Signing arrives with v0.2.0. Until then, `SHA256SUMS.txt` is the only integrity
   statement, and the release notes say so.
 
 The vn-launcher catalogue entry:
@@ -819,7 +832,7 @@ the target is revised with a reason.
 | Installed footprint | ≤ 40 MB | no models, no runtime, no database; the Windows binary measured 14.8 MB |
 | Inventory scan | ≤ 3 s typical | longer is allowed with progress; measured 1.2–1.8 s |
 | Hashing | ≥ 200 MB/s single-thread SHA-256 on NVMe | bounded, visible work; not yet measured |
-| Journal write | < 1 ms per event | no UI stalls; the journal arrives with v0.3.0 |
+| Journal write | < 1 ms per event | no UI stalls; the journal arrives with v0.1.3 |
 
 Measured on the development Windows machine: 287–291 processes, 131 startup items,
 95–102 listeners, 128 packages, a 1.2–1.8 s scan, 166 MB idle working set, 0% idle CPU,
@@ -906,7 +919,7 @@ and that is the launcher's, not ranger's.
    (§6.9). Windows ships this in v0.1.0; macOS and Linux say "not yet".
 3. **Binary name:** `vn-ranger`, never `ranger`, which would collide with the terminal
    file manager.
-4. **Cleaning:** quarantine and an allowlisted cache/temp cleanup in v0.3.0. Registry
+4. **Cleaning:** quarantine and an allowlisted cache/temp cleanup in v0.1.3. Registry
    cleaning, "junk" scoring and RAM boosting are never.
 5. **YARA-X:** an optional feature at v0.5, never the default dependency. It is pure
    Rust and BSD-3-Clause; rules are the supply-chain risk, not the crate.
@@ -923,7 +936,7 @@ and that is the launcher's, not ranger's.
 
 1. **Code signing:** Windows EV and Apple Developer ID certificates, and who holds them.
 2. **Platform floor:** Windows 10 1809+, macOS 13+, glibc 2.35+ (Ubuntu 22.04)?
-3. **Tray:** all three platforms at v0.4.0, or a window-only first release?
+3. **Tray:** all three platforms at v0.1.4, or a window-only first release?
 4. **Localisation:** English only until v1.0?
 5. **Agent scope:** confirm the process, network and persistence boundary, with no
    prompt or content inspection.

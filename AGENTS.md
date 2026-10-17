@@ -81,7 +81,7 @@ act on — never a panic.
 ### Never delete
 
 - Read-only is the default. There is no deletion API in v0.1.0, on purpose.
-- When quarantine arrives in v0.3.0: quarantine before delete, preview before action,
+- When quarantine arrives in v0.1.3: quarantine before delete, preview before action,
   and an allowlist of cache, temporary and log locations. User documents are excluded
   by construction, not by a heuristic.
 - The deletion API takes an **id**, not a path. It resolves under the quarantine or
@@ -216,7 +216,7 @@ reads `/proc` directly, and macOS reports the collector as unavailable.
 
 ## 7. Rules and findings
 
-Not shipped yet. The contract for v0.2.0:
+Not shipped yet. The contract for v0.1.2:
 
 - A rule declares `id`, `title`, `severity`, `confidence`, `why`, `benign` and
   `remediation`.
