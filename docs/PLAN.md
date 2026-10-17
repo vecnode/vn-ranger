@@ -635,9 +635,22 @@ It is never used to compute a destination.
 | Refusal | How it is recognised | Test |
 |---|---|---|
 | Outside the root | impossible to express through `RootId` + `EntryId` + `cap-std` | `..`, absolute, UNC, `\\?\`, drive-relative `C:x`, NUL, invalid UTF-8, trailing dot or space, a Unicode-normalised alias, a separator inside an id |
-| A link | `symlink_metadata` on every component; never followed | file symlink, directory symlink, dangling link, a chain, a Windows junction, a reparse point |
-| A hard link | `nlink > 1` on Unix, `number_of_links() > 1` on Windows | a second link to the same inode; the refusal names both paths |
-| A changed file | open once, hash from the handle, re-stat the directory entry, compare device, file id, size and mtime | a deterministic seam: `ActionIo` is a trait and the test double swaps the file between the stat and the rename |
+| A link | the acted entry's own name is a link or reparse point (`symlink_metadata`, never followed), and the walk never descends into one | file symlink, directory symlink, dangling link, a chain, a Windows junction, a reparse point, a link swapped after the preview |
+| A hard link | `nlink > 1` before the file is opened, and again before the move | a second link to the same inode; the refusal names both paths |
+| A changed file | the entry's identity is taken before the open and after the hash, and compared once more immediately before the rename | a deterministic seam: `ActionIo` is a trait and the test double swaps the file at the Nth identity check |
+
+The link rule is about the acted entry, not about its ancestors. A person's own path may
+cross one legitimately — on macOS `$TMPDIR` resolves through `/var`, which is a link to
+`/private/var` — so re-litigating every ancestor would refuse the temporary directory on
+one of the three platforms while adding nothing: the destination is a capability, and no
+ancestor can move it. The walk is stricter, because there an ancestor *is* the next step:
+a directory that is a link is never entered, so a surface cannot be left through one.
+
+Windows cannot report a link count or a file number without a standard-library feature
+that is still unstable, so on that platform the identity check uses size, write time and
+creation time, and a second hard link is **not** refused. That is a named gap in §7, not a
+claim: the alternate name survives the move, and the journal records what was moved so it
+can be found.
 
 The identity check is the TOCTOU refusal. It is a seam rather than a race on purpose: a
 test that has to win a race to fail is a test that passes in CI.
@@ -851,6 +864,10 @@ Notes that matter more than the ticks:
 - **Tray:** on Linux there is no icon unless a status-notifier host is running, and that
   is a supported state rather than an error. On all three platforms the tray holds
   nothing the window cannot reach, and closing it is never the only way to quit.
+- **Hard links on Windows:** the link count and the file number are behind an unstable
+  standard-library feature, so Windows refuses a link at the name and notices a changed
+  file by size and timestamps, but cannot refuse a second hard link. Unix does. A move on
+  Windows therefore leaves the other name alive, and the journal says what moved.
 - **Packs:** a rule pack is data. It cannot read a file, open a socket, run code or
   produce `urgent`, and the default build contains no YARA-X. Content scanning is a
   build feature and a named operation with its own consent screen.

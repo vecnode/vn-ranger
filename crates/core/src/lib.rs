@@ -1,4 +1,4 @@
-//! vn-ranger's pure core.
+﻿//! vn-ranger's pure core.
 //!
 //! The core knows what a fact, a finding, a signature and a report are, and it knows
 //! how to compare them. It does not know what time it is, which files exist, or what
@@ -9,6 +9,7 @@
 #![forbid(unsafe_code)]
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
+pub mod action;
 pub mod diff;
 pub mod journal;
 pub mod model;

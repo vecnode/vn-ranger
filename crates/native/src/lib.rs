@@ -1,4 +1,4 @@
-//! vn-ranger's desktop backend.
+﻿//! vn-ranger's desktop backend.
 //!
 //! This is the only crate that touches the machine: it enumerates processes, startup
 //! items, listeners and packages, hashes the binaries a startup item reaches, reads
@@ -10,6 +10,7 @@
 #![forbid(unsafe_code)]
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
+pub mod action;
 pub mod collect;
 pub mod elevation;
 pub mod hash;

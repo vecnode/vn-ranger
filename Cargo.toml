@@ -53,6 +53,12 @@ plist = "1.10.1"
 tempfile = "3.27.0"
 opener = "0.9.0"
 
+# The action path's one unconditional dependency (docs/PLAN.md §6.10). A destructive act
+# is resolved from an already-open directory handle rather than from a path, and `cap-std`
+# is what makes that expressible on Windows too: `std` cannot open with
+# FILE_FLAG_OPEN_REPARSE_POINT, so a check-then-use there would be a race, not a refusal.
+cap-std = "4.0.3"
+
 # Watching files. CC0-1.0 is a public-domain dedication with no attribution or
 # copyleft burden, added to the allowlist in AGENTS.md §8 for this crate alone.
 # Default features are off: the macOS build uses the pure-Rust kqueue backend
