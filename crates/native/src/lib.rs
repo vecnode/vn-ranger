@@ -19,6 +19,7 @@ pub mod elevation;
 pub mod hash;
 pub mod instance;
 pub mod journal;
+pub mod pack;
 pub mod paths;
 pub mod power;
 pub mod quarantine;

@@ -27,6 +27,7 @@ tempfile = { workspace = true }
 notify = { workspace = true }
 cap-std = { workspace = true }
 tray-icon = { workspace = true }
+minisign-verify = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 notify = { workspace = true, features = ["macos_kqueue"] }
@@ -39,3 +40,8 @@ runas = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true }
+
+[dev-dependencies]
+# A test needs a signature that is genuinely valid before it can prove that one flipped
+# byte is refused. Signing never happens in the product.
+minisign = "0.10.0"

@@ -82,6 +82,11 @@ nix = { version = "0.31.3", features = ["user"] }
 # that feature resolves to nothing, because the crate gates the dependency by target.
 tray-icon = { version = "0.26.1", default-features = false, features = ["ksni"] }
 
+# Pack signatures: Ed25519 over BLAKE2b-512, one detached file, one key. MIT, no external
+# dependencies, and the verification half only — ranger never signs anything on a user
+# machine, so the signing code is a dev-dependency in the tests that need a valid signature.
+minisign-verify = "0.3.0"
+
 [profile.dev]
 opt-level = 1
 
