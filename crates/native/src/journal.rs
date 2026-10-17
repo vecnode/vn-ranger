@@ -55,7 +55,7 @@ impl Journal {
         let seq = existing.last_seq();
         let lines = u64::try_from(existing.entries.len()).unwrap_or(u64::MAX);
         let first_seq = existing.entries.first().map_or(0, |entry| entry.seq);
-        let mut file = OpenOptions::new().create(true).append(true).open(&path)?;
+        let mut file = open_for_append(&path)?;
         // A crash can leave the last line without its newline. Appending straight onto
         // it would swallow the next entry into the damaged line, so the tail is closed
         // first: it becomes one corrupt line in the middle of the file, which the reader
@@ -237,6 +237,29 @@ impl Journal {
         }
         merge(&mut combined, &self.path);
         combined
+    }
+}
+
+/// Open the journal for appending, retrying a transient sharing denial.
+///
+/// A file created a moment ago can be held briefly by a scanner or an indexer on Windows,
+/// and the atomic save already retries for the same reason. A journal that refuses to open
+/// leaves the whole session unrecorded, so the retry is worth more here than anywhere else.
+fn open_for_append(path: &Path) -> io::Result<File> {
+    let mut attempt = 0_u32;
+    loop {
+        match OpenOptions::new().create(true).append(true).open(path) {
+            Ok(file) => return Ok(file),
+            Err(error) => {
+                let transient = error.kind() == io::ErrorKind::PermissionDenied
+                    || matches!(error.raw_os_error(), Some(5) | Some(32));
+                if attempt >= 3 || !transient {
+                    return Err(error);
+                }
+                attempt = attempt.saturating_add(1);
+                std::thread::sleep(std::time::Duration::from_millis(60 * u64::from(attempt)));
+            }
+        }
     }
 }
 

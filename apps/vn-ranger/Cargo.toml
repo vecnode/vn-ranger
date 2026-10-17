@@ -16,7 +16,11 @@ workspace = true
 vnr-core = { workspace = true }
 vnr-native = { workspace = true }
 vnr-ui = { workspace = true }
-eframe = { workspace = true, features = ["default_fonts", "wgpu", "accesskit", "wayland", "x11"] }
+# `clipboard` is not in the list by accident: `default-features = false` drops eframe's
+# default set, and without this feature there is no clipboard backend at all — Ctrl+C and
+# every "Copy" button silently did nothing. It brings `arboard` (MIT OR Apache-2.0), which
+# is inside the §8 allowlist.
+eframe = { workspace = true, features = ["default_fonts", "wgpu", "accesskit", "clipboard", "wayland", "x11"] }
 egui = { workspace = true }
 log = { workspace = true }
 env_logger = { workspace = true }
