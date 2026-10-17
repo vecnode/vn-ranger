@@ -1,6 +1,6 @@
 # Releases
 
-**Status:** v0.1.0 is cut from this tree. The release workflow is
+**Status:** v0.1.1 is cut from this tree. The release workflow is
 [`.github/workflows/release.yml`](../.github/workflows/release.yml).
 **Audience:** whoever cuts a vn-ranger release, and the launcher that installs it.
 
@@ -15,6 +15,7 @@ the result.
 | Question | Ranger's answer |
 |---|---|
 | Tag | `v<major>.<minor>.<patch>`, e.g. `v0.1.0` |
+| Release title | `vn-ranger v<version>`, e.g. `vn-ranger v0.1.1` |
 | Release | A published, non-draft GitHub Release for the tag |
 | Asset stem | `vn-ranger` |
 | Asset names | `vn-ranger-<version>-<os>-<arch>.<ext>` |
@@ -26,6 +27,11 @@ the result.
 | Checksums | `SHA256SUMS.txt`, generated after every build finishes |
 | Trigger | `on: push: tags: ['v*']` |
 | Update mechanism | vn-launcher. Ranger does not update itself. |
+
+The release title is the product and the version, and nothing else. What shipped is
+described in the milestone and the changelog; a description never becomes the title.
+The workflow creates every release with that title, so renaming one is a correction,
+not a step in the process.
 
 So a full set looks like:
 
@@ -100,8 +106,8 @@ for this system" is a useful answer; a Linux binary named `macos` is not.
 
 - Start at `v0.1.0`.
 - Patch releases fix defects; the `0.1.x` line also carries interface polish and the
-  watch, act, resident and rule-pack milestones. The `0.2.0` minor is distribution and
-  signing; `v1.0.0` is the audited release.
+  watch, explain, act, resident and rule-pack milestones. The `0.2.0` minor is
+  distribution and signing; `v1.0.0` is the audited release.
 - Pre-releases carry a semver suffix and the GitHub pre-release flag.
 - **Never replace an asset on an existing tag.** A checksum is a statement about a
   file; replacing the file invalidates every verification already made. Cut a patch.

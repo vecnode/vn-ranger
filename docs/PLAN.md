@@ -1,9 +1,10 @@
 # The plan — vn-ranger
 
-**Status:** v0.1.1 ships the professional interface, full-tab tables and row footers.
-The read-only inventory, the local hash-signature engine and the
-one-shot administrator scan are in the repository. The sections below that describe
-rules, cleaning, residency and deeper platform access are the plan for what follows.
+**Status:** v0.1.1 ships the interface pass, the full-tab tables and the row footers;
+0.1.2 adds the watcher, the timeline and the baseline. The read-only inventory, the
+local hash-signature engine and the one-shot administrator scan are in the repository.
+The sections below that describe rules, cleaning, residency and deeper platform access
+are the plan for what follows.
 **Audience:** the maintainer, future contributors, and anyone deciding whether to
 trust this program with a machine.
 **What this document is:** the research behind ranger, the scope it will and will not
@@ -132,7 +133,7 @@ as reported by each repository in October 2026.
 | [vn-launcher](https://github.com/vecnode/vn-launcher) | MIT | Installs, updates and opens the vecnode applications | The workspace shape, the worker model, the release contract, the mark | The catalogue domain: it launches apps, ranger inspects a machine |
 | [osquery](https://github.com/osquery/osquery) | Apache-2.0 **or** GPL-2.0 | Exposes OS state as SQL tables | "Facts, not verdicts"; a cross-platform fact schema | The SQL surface, the agent/server model, the deployment weight |
 | [ClamAV](https://github.com/Cisco-Talos/clamav) | GPL-2.0 | Signature antivirus engine | The idea that signatures are a separate, optional layer; signature-update discipline | The engine: copyleft, C, and far larger than this app |
-| [YARA-X](https://github.com/VirusTotal/yara-x) | BSD-3-Clause | Rust pattern-matching rules for files | A linkable rule engine **if** it earns its place (v0.5, optional feature) | A default dependency; rules are a supply-chain surface |
+| [YARA-X](https://github.com/VirusTotal/yara-x) | BSD-3-Clause | Rust pattern-matching rules for files | A linkable rule engine **if** it earns its place (v0.1.6, optional feature) | A default dependency; rules are a supply-chain surface |
 | [Sigma](https://github.com/SigmaHQ/sigma) | DRL 1.1 (rules) | A portable detection-rule format | The idea of a reviewable rule document with a rationale | The rules themselves: DRL is not an OSI licence, so import-only and user-supplied |
 | [Czkawka / Krokiet](https://github.com/qarmin/czkawka) | MIT (code), CC BY 4.0 (assets) | Fast cross-platform duplicate and junk finder | Preview → select → act; honest scope; no telemetry | Its scanning domain and its Slint interface |
 | [BleachBit](https://github.com/bleachbit/bleachbit) | GPL-3.0 | Cleaner with per-application rules | The "cleaner list" concept, and the caution it demands | Code (copyleft), GTK, registry cleaning |
@@ -159,7 +160,7 @@ as reported by each repository in October 2026.
    reversibility the default, and refuses the "registry cleaner" category outright.
 4. **Rule packs are attack surface.** Sigma's DRL is not an OSI licence, and a rule
    pack that can name arbitrary paths is a deletion vector. Ranger rules are data, not
-   code; external packs arrive only with signatures (v0.5).
+   code; external packs arrive only with signatures (v0.1.6).
 5. **Agent inventory is real and unowned.** Commercial EDR now sells agent discovery;
    the open-source options are server- or Python-shaped. A small local app can own this.
 6. **Distribution is already solved.** vn-launcher's release convention gives ranger a
@@ -184,10 +185,10 @@ v0.1.0 ships the first layer of a stack whose layers are deliberately separate:
 | Layer | Status | What it does | Licence boundary |
 |---|---|---|---|
 | Hash signatures | **shipped** | Reads ClamAV `.hdb` / `.hsb` (`hash:size:name`) and matches MD5, SHA-1 or SHA-256 of startup binaries and a self-test file. | A clean-room reader of a documented format. No ClamAV code, so the app stays MIT. |
-| Pattern rules | v0.5, optional | YARA-X behind a feature flag, for string and byte patterns. | BSD-3-Clause, linkable. Not in the default build. |
-| Behavioural rules | v0.2 | Ranger's own TOML rules over facts: an unsigned binary in a temporary directory, a service whose image changed, a listener owned by a process that arrived this week. | Ranger's own schema, MIT. |
-| Sigma import | v0.5, user-supplied | A converter for the subset of Sigma that maps onto ranger facts. | Sigma rules are DRL 1.1, not OSI. Never vendored; the user brings the rules. |
-| Cleanup patterns | v0.3 | File walking, preview and cancellation discipline learned from Czkawka. | Czkawka is MIT; if code is copied, attribution travels with it. |
+| Pattern rules | v0.1.6, optional | YARA-X behind a feature flag, for string and byte patterns. | BSD-3-Clause, linkable. Not in the default build. |
+| Behavioural rules | v0.1.3 | Ranger's own TOML rules over facts: an unsigned binary in a temporary directory, a service whose image changed, a listener owned by a process that arrived this week. | Ranger's own schema, MIT. |
+| Sigma import | v0.1.6, user-supplied | A converter for the subset of Sigma that maps onto ranger facts. | Sigma rules are DRL 1.1, not OSI. Never vendored; the user brings the rules. |
+| Cleanup patterns | v0.1.4 | File walking, preview and cancellation discipline learned from Czkawka. | Czkawka is MIT; if code is copied, attribution travels with it. |
 
 **Why not port ClamAV itself.** ClamAV is GPL-2.0. Translating its code to Rust creates
 a derivative work, so the translated engine — and the combined application — would have
@@ -206,7 +207,7 @@ development machine, and the test reports it rather than pretending otherwise.
 **YARA-X is a crate, not a dependency.** It is pure Rust and BSD-3-Clause, and it is a
 good fit for the pattern layer. It is not linked into v0.1 because rules are a
 supply-chain surface, it adds size for a layer that has no rule pack yet, and the hash
-layer already answers "is this known bad?" for the files ranger can hash. The v0.5
+layer already answers "is this known bad?" for the files ranger can hash. The v0.1.6
 feature flag keeps the default build small and offline.
 
 **"Pure Rust" has one boundary.** The application, its UI and its collectors are safe
@@ -252,7 +253,7 @@ useful it looks.
 | The user's privacy | Inventory is exfiltrated or over-collected | No network; no file contents; no secrets; local storage; export only on request |
 | Trust in findings | False positives train the user to ignore the app | Evidence on every finding; a named benign explanation; expiring suppressions; no "urgent" without strong evidence |
 | The release | A compromised maintainer or asset | SHA256SUMS; signed releases when certificates exist; branch protection; no asset replacement |
-| The rule supply chain | A rule pack becomes a remote-delete primitive | Rules are data, not code; signed packs; no third-party packs before v0.5 |
+| The rule supply chain | A rule pack becomes a remote-delete primitive | Rules are data, not code; signed packs; no third-party packs before v0.1.6 |
 | The app's own persistence | Ranger becomes the hidden thing it warns about | Autostart is opt-in, visible and removable; no service; no driver; Quit really quits |
 
 **What ranger cannot do:** detect kernel rootkits, inspect firmware, scan memory,
@@ -357,7 +358,7 @@ Empty states say what was checked, not that the machine is safe.
 
 ### 5.6 What "clean" means
 
-"Clean" is something done to a cache, not a verdict on a computer. In v0.1.3:
+"Clean" is something done to a cache, not a verdict on a computer. In v0.1.4:
 
 - **Quarantine** moves a user-selected file into app-managed storage, with its hash,
   original path and reason recorded. Restore is one click.
@@ -448,7 +449,7 @@ settings.toml          user choices; human-readable
 baseline.json          the last accepted snapshot (compacted)
 journal.ndjson         append-only findings, actions and errors
 reports/               exported JSON and Markdown
-quarantine/<id>/       the file plus manifest.json (from v0.1.3)
+quarantine/<id>/       the file plus manifest.json (from v0.1.4)
 logs/                  local, rotated, no secrets
 ```
 
@@ -464,7 +465,7 @@ profile ACL. Nothing in it is secret, but paths contain usernames, so exports ca
 ### 6.5 Scheduling and residency
 
 - **Start:** a quick inventory (processes, autoruns, listeners) within a few seconds.
-- **Resident:** every six hours, with jitter. A wake-from-sleep check is v0.1.4.
+- **Resident:** every six hours, with jitter. A wake-from-sleep check is v0.1.5.
 - **Heavy work:** user-initiated. v0.1.0 has no full-disk scan.
 - **Budget:** idle CPU under 0.5% of one core, RSS under 120 MB, measured and
   published (§11).
@@ -521,7 +522,7 @@ it does not:
 - **v0.1.2:** `notify` watchers on Downloads, Desktop, the temporary directory and the
   user's startup folders. A file written and closed is queued, debounced and scanned.
   No file-open interception, no kernel hook.
-- **v0.1.4:** the watcher and the poll run while the window is closed to the tray, under
+- **v0.1.5:** the watcher and the poll run while the window is closed to the tray, under
   the same idle budget.
 - **Later, and only with a written scope:** user-mode ETW on Windows, EndpointSecurity
   with an Apple entitlement on macOS, eBPF or fanotify on Linux. None of them is a
@@ -571,11 +572,11 @@ a named gap, not a silent one.
 |---|---|---|---|
 | Processes, parent, command line | ● `sysinfo` | ● `sysinfo` | ● `sysinfo` |
 | Binary hash | ● SHA-256 | ● SHA-256 | ● SHA-256 |
-| Signature / provenance | ○ v0.2 (WinVerifyTrust, cache-only) | ○ v0.2 (`codesign` / Security framework) | ◐ package owner, later |
+| Signature / provenance | ○ v0.1.3 (WinVerifyTrust, cache-only) | ○ v0.1.3 (`codesign` / Security framework) | ◐ package owner, later |
 | Autoruns | ◐ HKCU/HKLM Run, Startup, services; tasks not yet | ◐ LaunchAgents/Daemons; login items and cron not yet | ◐ systemd units, system cron, XDG; user crontabs not yet |
 | Listeners → process | ● IP helper via `netstat2` | ○ no safe, C-free path yet | ● `/proc/net` + fd inode |
 | Installed packages | ◐ registry uninstall keys; MSIX not yet | ◐ Applications, Homebrew; receipts not yet | ◐ dpkg, pacman; Snap/Flatpak not yet |
-| File-change watch (v0.2) | ○ ReadDirectoryChangesW | ○ FSEvents | ○ inotify |
+| File-change watch (v0.1.2) | ○ ReadDirectoryChangesW | ○ FSEvents | ○ inotify |
 | Runtime file access | ○ ETW (user-mode) later | ○ EndpointSecurity (entitlement) later | ○ eBPF/auditd (root) later |
 | Kernel / rootkit | ○ | ○ | ○ |
 | Memory scanning | ○ | ○ | ○ |
@@ -657,7 +658,7 @@ compiles; it is done when the criterion is met and written down.
 tasks, macOS login items and listeners, MSIX/Snap/Flatpak packages, the real-time
 watcher, rules, cleaning. Each is a row in §7 or a milestone below, not a surprise.
 
-### M1.1 — v0.1.1, Professional interface — **shipped (UI scope)**
+### M1.1 — v0.1.1, interface pass — **shipped (UI scope)**
 
 The first release a person can leave open all day without the interface getting in the
 way. Detection work belongs to M2.
@@ -684,51 +685,84 @@ way. Detection work belongs to M2.
 The typography, responsive layout and full-tab tables shipped in v0.1.1. The open items
 above are the next interface pass, not part of this release.
 
-### M2 — v0.1.2, Watch and explain
+### M2 — v0.1.2, Watch
 
-- **Real time:** a two-second process poll and `notify` watchers on Downloads, Desktop,
-  the temporary directory and the user's startup folders, with debounce and an idle
-  budget (§6.8).
+The machine stops being a snapshot and becomes a series with a diff. Nothing is judged:
+no rules, no findings, no deletion, no journal and no tray. The release answers one
+question — *what changed since the last time this machine looked normal?*
+
+| # | Work | Where | Done when |
+|---|---|---|---|
+| 1 | A two-second poll of the process table | `native/collect/processes.rs`, `apps/vn-ranger/src/worker.rs` | A diff fixture classifies new, gone and replaced; a reused pid with a different start time is new, not changed; the poll costs under 10 ms at 300 processes. |
+| 2 | Watchers on Downloads, Desktop, temp and the user's startup folders | `native/src/watch.rs` (new) | A file written and closed once yields exactly one event after a 500 ms debounce; an unavailable watcher is `Outcome::Unavailable`, never an empty list. |
+| 3 | A timeline of session events | `core/src/timeline.rs` (new) | Ordering is stable; every event names the collector that saw it; the timeline is in memory and writes no file. |
+| 4 | An explicit baseline and a diff against it | `core/src/diff.rs` (new), `native/src/store.rs` | `baseline.json` is written only when a person accepts the current state; a schema mismatch says so and offers a re-baseline; no baseline says "no baseline yet", never "clean". |
+| 5 | A Changes view | `ui/src/views.rs` | The empty state names what was checked; a long list scrolls; a collector that could not see something shows a capability banner above the list. |
+| 6 | Budgets, and a switch for each background task | `apps/vn-ranger/src/app.rs`, Settings | Idle CPU under 0.5% and working set under 200 MB over 30 minutes, published in `docs/BENCHMARKS.md`; the poll and the watcher can each be turned off. |
+
+**Decisions owed before item 2.** `notify` 8.2 is **CC0-1.0**, which is not on the §8
+allowlist, and its macOS default backend (`fsevent-sys`) is a C dependency. Either CC0
+joins the allowlist with a written reason and the macOS build selects `macos_kqueue`
+with `default-features = false`, or the watcher is built from per-platform crates that
+meet §8 — more code and more risk. The decision is recorded in §14.2 before the
+watcher lands.
+
+**The journal stays in v0.1.4.** The 0.1.2 timeline lives in memory for the session,
+so nothing is written that looks like a journal without its guarantees.
+
+**Exit for 0.1.2:** the poll and the watcher are correct on a real machine and in
+fixtures; a new file yields exactly one scan; no view says "nothing changed" when a
+collector was unavailable; the idle budgets hold over 30 minutes and are published;
+`cargo xtask ci` is green on three operating systems.
+
+### M3 — v0.1.3, Explain
+
+Rules, findings, and the richer facts that make a finding worth reading. Signature
+verification lands here as a **fact**, not a verdict — and only if a §8-safe wrapper
+exists.
+
+- **Rules:** the TOML engine, 15–25 built-in rules, findings with evidence and a named
+  benign explanation, expiring suppressions, and a timeline that names the rule.
 - **Signature verification:** WinVerifyTrust on Windows with cached revocation data;
-  `codesign` / Security framework on macOS. The result becomes a fact and a rule input,
-  never a verdict on its own.
+  `codesign` / Security framework on macOS. The result is one more fact and one more
+  rule input, never a diagnosis on its own. The tree has no safe wrapper today, so the
+  item is blocked on a §8 decision; if none qualifies, the fact waits for 0.2.0 rather
+  than breaking `unsafe_code = "forbid"`.
 - **Close the named gaps:** scheduled tasks, macOS login items, MSIX, Snap/Flatpak.
-- **Rules:** the TOML rule engine, 15–25 built-in rules, findings with evidence and a
-  named benign explanation, expiring suppressions, baseline and diff, timeline.
 - **Exit:** every rule has a positive and a negative fixture; a false-positive trial
   against a corpus of popular applications is published; no finding exists without
-  evidence; the watcher survives a 24-hour soak inside the idle budget; the language
-  audit in §5.5 passes.
+  evidence; the language audit in §5.5 passes.
 
+### M4 — v0.1.4, Act
 
-### M3 — v0.1.3, Act
-
-- Quarantine and restore with a manifest and hash; allowlisted cleanup with preview,
-  per-item selection and dry-run; the action journal; typed confirmation for anything
-  permanent.
+- The action journal first: append-only, one entry written before the action, and a
+  killed process leaves it consistent.
+- Quarantine and restore with a manifest and a hash; allowlisted cleanup with preview,
+  per-item selection and dry-run; typed confirmation for anything permanent.
 - **Exit:** traversal, symlink, hard-link and TOCTOU tests pass; restore is verified;
   no path outside the allowlist can be reached; every deletion path has two reviewers;
   a crash mid-action leaves the journal consistent.
 
-### M4 — v0.1.4, Resident
+### M5 — v0.1.5, Resident
 
-- Tray, opt-in autostart, scheduler, single instance, close-to-tray, wake handling,
-  a 24-hour soak test.
+- Tray, opt-in autostart, scheduler, single instance, close-to-tray, wake handling.
+- A 24-hour soak with the poll and the watcher running, so the budgets are measured on
+  the configuration a person actually leaves open.
 - **Exit:** budgets in §11 hold over the soak; autostart is visible and removable in
   one click; no service or driver; tray fallback works on a desktop without
   AppIndicator.
 
-### M5 — v0.1.5, Rule packs
+### M6 — v0.1.6, Rule packs
 
 - Signed external rule packs, a rule-development guide, an optional `yara-x` feature,
   and an importer for a user-supplied subset of Sigma (licence respected).
 - **Exit:** unsigned packs are refused; signature verification has tests; the default
   build contains no YARA-X; a bad pack can be rolled back without touching data.
 
-### M6 — v0.2.0, Distribution (minor)
+### M7 — v0.2.0, Distribution (minor)
 
 This is deliberately a minor release, not another 0.1.x. It is held until the 0.1.x
-line has settled; it is not part of 0.1.1.
+line has settled; it is not part of that line.
 
 - Signed Windows binaries (Authenticode), Developer ID and notarisation on macOS, and
   a detached `minisign` signature over the archives on Linux.
@@ -738,7 +772,7 @@ line has settled; it is not part of 0.1.1.
   the application; no unsigned asset is published; the keys and the release process are
   documented.
 
-### M7 — v1.0.0, Deep and done
+### M8 — v1.0.0, Deep and done
 
 - External security audit, reproducible builds, accessibility pass, benchmarks, and
   complete documentation.
@@ -834,7 +868,7 @@ the target is revised with a reason.
 | Installed footprint | ≤ 40 MB | no models, no runtime, no database; the Windows binary measured 15.64 MB |
 | Inventory scan | ≤ 3 s typical | longer is allowed with progress; measured 1.2–1.8 s |
 | Hashing | ≥ 200 MB/s single-thread SHA-256 on NVMe | bounded, visible work; not yet measured |
-| Journal write | < 1 ms per event | no UI stalls; the journal arrives with v0.1.3 |
+| Journal write | < 1 ms per event | no UI stalls; the journal arrives with v0.1.4 |
 
 Measured on the development Windows machine: 287–291 processes, 131 startup items,
 95–102 listeners, 128 packages, a 1.2–1.8 s scan, 166 MB idle working set, 0% idle CPU,
@@ -857,7 +891,8 @@ external service, nothing to install beside it.
 - **No-network test:** `cargo deny` bans plus a `Cargo.lock` grep, as in §6.6.
 - **Cross-target clippy:** the workspace is checked against Linux and macOS targets, as
   vn-launcher does, because a Windows machine cannot see what they see.
-- **Fuzzing:** the TOML rule parser and the plist/registry parsers, from v0.2.
+- **Fuzzing:** the TOML rule parser and the plist/registry parsers, from v0.1.3 as each
+  parser lands.
 - **Manual matrix:** Windows 10 and 11; macOS 13, 14 and 15; Ubuntu 22.04 and 24.04;
   Fedora; on VMs with known-clean snapshots.
 - **Release check:** version bump, changelog, tag, checksums, the launcher's parser
@@ -905,7 +940,7 @@ and that is the launcher's, not ranger's.
 | Permission gaps look like bugs | Medium | Capability banners and "not visible" states |
 | macOS TCC and entitlements | Medium | Degrade, document, avoid private APIs |
 | Linux tray inconsistency | Low | Tray where available, window-only fallback, no hard dependency |
-| Rule-pack supply chain | High | Signed packs, no code in rules, no third-party packs before v0.5 |
+| Rule-pack supply chain | High | Signed packs, no code in rules, no third-party packs before v0.1.6 |
 | egui accessibility | Medium | Keyboard and labels now; document what remains |
 | Maintainer time and funding | High | Small scope, no server, no telemetry, MIT |
 
@@ -921,11 +956,11 @@ and that is the launcher's, not ranger's.
    (§6.9). Windows ships this in v0.1.0; macOS and Linux say "not yet".
 3. **Binary name:** `vn-ranger`, never `ranger`, which would collide with the terminal
    file manager.
-4. **Cleaning:** quarantine and an allowlisted cache/temp cleanup in v0.1.3. Registry
+4. **Cleaning:** quarantine and an allowlisted cache/temp cleanup in v0.1.4. Registry
    cleaning, "junk" scoring and RAM boosting are never.
-5. **YARA-X:** an optional feature at v0.5, never the default dependency. It is pure
+5. **YARA-X:** an optional feature at v0.1.6, never the default dependency. It is pure
    Rust and BSD-3-Clause; rules are the supply-chain risk, not the crate.
-6. **Sigma:** a user-supplied import at v0.5. The rules are DRL 1.1 and are not
+6. **Sigma:** a user-supplied import at v0.1.6. The rules are DRL 1.1 and are not
    vendored; the converter reads what the user brings.
 7. **Czkawka:** its MIT file-walking, preview and cancellation discipline informs the
    cleanup layer; its Slint interface is not used. Attribution travels with any copied
@@ -938,11 +973,15 @@ and that is the launcher's, not ranger's.
 
 1. **Code signing:** Windows EV and Apple Developer ID certificates, and who holds them.
 2. **Platform floor:** Windows 10 1809+, macOS 13+, glibc 2.35+ (Ubuntu 22.04)?
-3. **Tray:** all three platforms at v0.1.4, or a window-only first release?
+3. **Tray:** all three platforms at v0.1.5, or a window-only first release?
 4. **Localisation:** English only until v1.0?
 5. **Agent scope:** confirm the process, network and persistence boundary, with no
    prompt or content inspection.
 6. **Funding:** donations only, or no funding at all. No paywall either way.
+7. **Watcher dependency:** `notify` 8.2 is CC0-1.0 and its macOS default backend
+   (`fsevent-sys`) is a C dependency. Either CC0 joins the §8 allowlist and macOS
+   selects `macos_kqueue`, or the watcher is built from per-platform crates. Decided
+   before the 0.1.2 watcher lands.
 
 ---
 

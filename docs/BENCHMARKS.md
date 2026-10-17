@@ -1,4 +1,4 @@
-# Benchmarks — v0.1.0
+# Benchmarks
 
 Measured on 2026-10-17 on the development Windows 11 machine (x86_64). These are
 observations from one machine, not a specification: a release runner, a laptop on

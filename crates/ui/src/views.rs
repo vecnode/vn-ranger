@@ -648,7 +648,7 @@ fn signature_matches_card(ui: &mut egui::Ui, snapshot: &Snapshot) {
         ui.add_space(4.0);
         ui.label(
             RichText::new(
-                "A hash match is a fact about a file, not a diagnosis of the machine. Quarantine and removal arrive in v0.3.",
+                "A hash match is a fact about a file, not a diagnosis of the machine. Quarantine and removal arrive in v0.1.4.",
             )
             .size(11.0)
             .color(theme::muted(ui)),

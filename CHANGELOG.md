@@ -6,6 +6,15 @@ All notable changes to vn-ranger are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Release titles are `vn-ranger v<version>`. The published v0.1.1 release was retitled
+  from `v0.1.1 — Professional interface` to `vn-ranger v0.1.1`, and the workflow now
+  creates every release with that title.
+- The roadmap is one theme per release: 0.1.2 watch, 0.1.3 explain, 0.1.4 act, 0.1.5
+  resident, 0.1.6 rule packs, 0.2.0 distribution. `docs/PLAN.md` and `AGENTS.md` now
+  agree on where signature verification and quarantine land.
+
 ## [0.1.1] - 2026-10-17
 
 ### Added

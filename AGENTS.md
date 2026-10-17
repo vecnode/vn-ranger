@@ -5,10 +5,10 @@ machine, explains what is unusual, remembers a baseline, and — later, and care
 quarantines and cleans. It is written in **Rust only**: a native egui/eframe
 application, with **no Tauri, Electron, webview or JavaScript build step**.
 
-**Status:** v0.1.1 is released; 0.1.2 is the next line. The
+**Status:** v0.1.1 is released; 0.1.2 adds the watcher and the baseline. The
 read-only inventory, the local hash signature engine and the one-shot administrator
-scan work. Rules, cleaning, the real-time watcher and the tray are still ahead. This
-file is the contract for all of it, written before the features that will need it.
+scan work. Rules, findings, cleaning and the tray are still ahead. This file is the
+contract for all of it, written before the features that will need it.
 
 `docs/PLAN.md` explains the research, the scope and the architecture.
 `docs/RELEASES.md` is the distribution contract. `SECURITY.md` is the promise to the
@@ -81,7 +81,7 @@ act on — never a panic.
 ### Never delete
 
 - Read-only is the default. There is no deletion API in v0.1.1, on purpose.
-- When quarantine arrives in v0.1.3: quarantine before delete, preview before action,
+- When quarantine arrives in v0.1.4: quarantine before delete, preview before action,
   and an allowlist of cache, temporary and log locations. User documents are excluded
   by construction, not by a heuristic.
 - The deletion API takes an **id**, not a path. It resolves under the quarantine or
@@ -216,7 +216,7 @@ reads `/proc` directly, and macOS reports the collector as unavailable.
 
 ## 7. Rules and findings
 
-Not shipped yet. The contract for v0.1.2:
+Not shipped yet. The contract for v0.1.3:
 
 - A rule declares `id`, `title`, `severity`, `confidence`, `why`, `benign` and
   `remediation`.

@@ -33,7 +33,7 @@ jobs:
         run: |
           TAG="${{ github.event.inputs.tag || github.ref_name }}"
           gh release view "$TAG" >/dev/null 2>&1 || \
-            gh release create "$TAG" --draft --title "$TAG" --generate-notes
+            gh release create "$TAG" --draft --title "${STEM} ${TAG}" --generate-notes
 
   build:
     name: ${{ matrix.target }}
