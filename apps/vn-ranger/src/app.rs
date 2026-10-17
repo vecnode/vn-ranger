@@ -21,7 +21,7 @@ pub struct App {
     instance: Option<vnr_native::instance::InstanceGuard>,
     cancel: Option<Arc<AtomicBool>>,
     /// The one writer of `journal.ndjson`. Observations are written as they arrive;
-    /// an intent or a result is synced (§6.10).
+    /// an intent or a result is synced (Ã‚Â§6.10).
     journal: vnr_native::journal::Journal,
     /// Set once the journal has failed, so one broken disk is one message rather than a
     /// notice per event.
@@ -49,12 +49,14 @@ pub struct App {
     paused: bool,
     /// Whether this close is the end of the program rather than a trip to the tray.
     quitting: bool,
+    /// Whether this launch came from the login entry, and so starts out of the way.
+    background: bool,
 }
 
 impl App {
     /// Build the world from the last snapshot and start the first scan if there is
     /// nothing to show.
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>, background: bool) -> Self {
         let settings = vnr_native::store::load_ui_settings();
         let (instance, instance_error) = match vnr_native::instance::acquire() {
             Ok(guard) => (Some(guard), None),
@@ -94,6 +96,7 @@ impl App {
             tray: vnr_ui::TrayState::Unknown,
             paused: false,
             close_to_tray: settings.close_to_tray.unwrap_or(false),
+            autostart: autostart_view(vnr_native::autostart::state()),
             baseline,
             baseline_error,
             changes,
@@ -129,7 +132,7 @@ impl App {
         };
         if world.error.is_none() {
             let _ = journal.record(Draft::event("session started").with_reason(&format!(
-                "vn-ranger {} · journal schema {}",
+                "vn-ranger {} Ã‚Â· journal schema {}",
                 env!("CARGO_PKG_VERSION"),
                 vnr_core::journal::ENTRY_SCHEMA
             )));
@@ -160,6 +163,7 @@ impl App {
             tray_started: false,
             paused: false,
             quitting: false,
+            background,
         };
         if app.world.snapshot.is_none() {
             app.start_scan(&cc.egui_ctx, false);
@@ -269,7 +273,7 @@ impl App {
 
     /// Walk every allowlisted surface and put what a clean would remove into the world.
     ///
-    /// This is the dry run: it reads names, sizes and times and writes nothing — no journal
+    /// This is the dry run: it reads names, sizes and times and writes nothing Ã¢â‚¬â€ no journal
     /// line, no removal, no file of its own. The walk's items stay here rather than in the
     /// world, because the world is what the interface draws and this is the only list the
     /// action path may remove from.
@@ -353,7 +357,6 @@ impl App {
     }
 
     /// Turn a close request into a hide, when that is what was asked for.
-    ///
     /// The window is only ever hidden when there is a tray to bring it back, and the journal
     /// says so at the moment it happens: a person who closed a window and finds a process
     /// still running deserves to read why in the one file ranger keeps.
@@ -430,7 +433,7 @@ impl App {
                 ScanMessage::Done(snapshot) => {
                     let snapshot = *snapshot;
                     self.note(Draft::event("scan").with_reason(&format!(
-                        "{} processes · {} startup items · {} listeners · {} packages",
+                        "{} processes Ã‚Â· {} startup items Ã‚Â· {} listeners Ã‚Â· {} packages",
                         snapshot.processes.len(),
                         snapshot.autoruns.len(),
                         snapshot.listeners.len(),
@@ -495,7 +498,7 @@ impl App {
                 worker::WatchMessage::Events(events) => {
                     for event in events {
                         self.note(Draft::event(&event.subject).with_reason(&format!(
-                            "{} · {} · {}",
+                            "{} Ã‚Â· {} Ã‚Â· {}",
                             event.kind.label(),
                             event.source,
                             event.detail
@@ -530,7 +533,7 @@ impl App {
                     EventKind::BaselineAccepted,
                     "This scan",
                     format!(
-                        "{} processes · {} startup items",
+                        "{} processes Ã‚Â· {} startup items",
                         snapshot.processes.len(),
                         snapshot.autoruns.len()
                     ),
@@ -611,10 +614,9 @@ impl App {
                 ));
             }
             for (rule, subject, severity) in raised {
-                self.note(
-                    Draft::finding(&rule)
-                        .with_reason(&format!("{severity} · {subject} · raised from the rules engine")),
-                );
+                self.note(Draft::finding(&rule).with_reason(&format!(
+                    "{severity} Ã‚Â· {subject} Ã‚Â· raised from the rules engine"
+                )));
             }
         }
         self.world.findings = findings;
@@ -626,7 +628,7 @@ impl App {
             Action::CancelScan => {
                 if let Some(token) = &self.cancel {
                     token.store(true, Ordering::Relaxed);
-                    self.world.notice = Some("Stopping after the current collector…".to_owned());
+                    self.world.notice = Some("Stopping after the current collectorÃ¢â‚¬Â¦".to_owned());
                 }
             }
             Action::ScanElevated => self.start_scan(ctx, true),
@@ -813,6 +815,32 @@ impl App {
                 // worse than one that cannot be hidden.
                 self.quitting = true;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+            Action::SetAutostart(enabled) => {
+                let outcome = if enabled {
+                    vnr_native::autostart::enable().map(|location| {
+                        format!(
+                            "Ranger starts at login from {}. The same click removes it.",
+                            location.at
+                        )
+                    })
+                } else {
+                    vnr_native::autostart::disable().map(|()| {
+                        "Ranger no longer starts at login. Its entry is gone and nothing else \
+                         was touched."
+                            .to_owned()
+                    })
+                };
+                match outcome {
+                    Ok(message) => {
+                        self.world.error = None;
+                        self.world.notice = Some(message);
+                    }
+                    Err(error) => self.world.error = Some(error),
+                }
+                // Read the entry back rather than trusting the write: what Settings shows
+                // is what the operating system would run.
+                self.world.autostart = autostart_view(vnr_native::autostart::state());
             }
             Action::SetCloseToTray(enabled) => {
                 self.world.close_to_tray = enabled;
@@ -1057,6 +1085,18 @@ impl eframe::App for App {
         let ctx = ui.ctx().clone();
         self.world.now_unix = now_unix();
         self.start_tray(&ctx);
+        if self.background {
+            // A login launch starts in the status area rather than on top of whatever the
+            // person opened. Without a tray there is nowhere to be, so the window stays.
+            self.background = false;
+            if self.tray.is_some() {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+                self.note(
+                    Draft::event("started at login")
+                        .with_reason("the window opened in the status area; the tray icon opens it"),
+                );
+            }
+        }
         self.close_or_hide(&ctx);
         self.drain();
         self.drain_watch(&ctx);
@@ -1127,6 +1167,17 @@ impl Drop for App {
     }
 }
 
+/// The interface's mirror of the entry the operating system would run at login.
+fn autostart_view(state: vnr_native::autostart::State) -> vnr_ui::AutostartState {
+    match state {
+        vnr_native::autostart::State::On(location) => vnr_ui::AutostartState::On {
+            at: location.at,
+            command: location.command,
+        },
+        vnr_native::autostart::State::Off => vnr_ui::AutostartState::Off,
+        vnr_native::autostart::State::Unavailable(reason) => vnr_ui::AutostartState::Unavailable(reason),
+    }
+}
 fn now_unix() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)

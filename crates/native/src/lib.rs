@@ -12,6 +12,7 @@
 
 pub mod act;
 pub mod action;
+pub mod autostart;
 pub mod clean;
 pub mod collect;
 pub mod elevation;

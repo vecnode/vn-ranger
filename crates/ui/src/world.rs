@@ -268,6 +268,52 @@ impl TrayState {
     }
 }
 
+/// Whether ranger starts when the person logs in.
+///
+/// Autostart is an entry the operating system runs, so this is a mirror of what is on disk
+/// rather than a preference of the interface: the checkbox reads it and asks for a change,
+/// and the shell is the one that writes.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum AutostartState {
+    /// Nothing has been looked at yet.
+    #[default]
+    Unknown,
+    /// Ranger starts at login, from this entry.
+    On {
+        /// The registry key with its value name, the plist, or the desktop file.
+        at: String,
+        /// The command that entry runs.
+        command: String,
+    },
+    /// There is no entry.
+    Off,
+    /// This machine cannot carry an entry, and this is why.
+    Unavailable(String),
+}
+
+impl AutostartState {
+    /// Whether an entry is there now.
+    #[must_use]
+    pub fn is_on(&self) -> bool {
+        matches!(self, Self::On { .. })
+    }
+
+    /// The line Settings shows under the checkbox.
+    #[must_use]
+    pub fn sentence(&self) -> String {
+        match self {
+            Self::Unknown => "Not checked yet.".to_owned(),
+            Self::On { at, command } => {
+                format!("Starts at login from {at}, running {command}.")
+            }
+            Self::Off => "Ranger does not start at login.".to_owned(),
+            Self::Unavailable(reason) => {
+                format!("This machine has no entry ranger may write: {reason}.")
+            }
+        }
+    }
+}
+
 /// One journal line, as the interface lists it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct JournalRow {
@@ -340,6 +386,8 @@ pub struct World {
     /// Off by default. A setting that hides the program has to be one a person chose, and
     /// the only honest default for a close button is that it closes.
     pub close_to_tray: bool,
+    /// Whether ranger starts at login, as the operating system has it right now.
+    pub autostart: AutostartState,
     /// The baseline a person accepted, when there is one.
     pub baseline: Option<Snapshot>,
     /// Why a baseline file could not be used, when one exists but is unreadable.
@@ -436,6 +484,8 @@ pub enum Action {
     PauseScan,
     /// Hide the window to the tray when it is closed, or stop doing that.
     SetCloseToTray(bool),
+    /// Start ranger when the person logs in, or stop doing that.
+    SetAutostart(bool),
     /// Turn the file watcher on or off.
     SetWatch(bool),
     /// Show or hide the live poll indicator.

@@ -1,4 +1,4 @@
-//! vn-ranger — a quiet, local-only system ranger.
+﻿//! vn-ranger â€” a quiet, local-only system ranger.
 //!
 //! The binary opens one window and owns the world the interface draws. It also has a
 //! headless mode, used twice: by the person from a terminal, and by the short-lived
@@ -35,7 +35,7 @@ fn main() -> eframe::Result<()> {
 
     // The elevated copy is one operation: it scans and writes one snapshot. It does not
     // touch the journal, because a privileged process writing to the user's data
-    // directory is exactly the kind of standing privilege §6.9 refuses.
+    // directory is exactly the kind of standing privilege Â§6.9 refuses.
     if let Some(path) = arg_value("--elevated-scan") {
         write_headless_report(&path, false);
         return Ok(());
@@ -44,6 +44,10 @@ fn main() -> eframe::Result<()> {
         write_headless_report(&path, true);
         return Ok(());
     }
+
+    // A login launch carries `--background`: the window belongs in the status area rather
+    // than on top of whatever the person just opened.
+    let background = std::env::args_os().any(|argument| argument.to_string_lossy() == "--background");
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -62,7 +66,7 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "vn-ranger",
         options,
-        Box::new(|cc| Ok(Box::new(app::App::new(cc)))),
+        Box::new(move |cc| Ok(Box::new(app::App::new(cc, background)))),
     )
 }
 
@@ -86,7 +90,7 @@ fn write_headless_report(path: &Path, record: bool) {
         }
     };
     let draft = vnr_core::Draft::event("scan").with_reason(&format!(
-        "headless report to {} · {} processes · {} startup items · {} listeners · {} packages",
+        "headless report to {} Â· {} processes Â· {} startup items Â· {} listeners Â· {} packages",
         path.display(),
         snapshot.processes.len(),
         snapshot.autoruns.len(),

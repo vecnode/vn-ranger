@@ -1053,7 +1053,7 @@ part that exists):
 |---|---|---|
 | 1 Ledger | journal records, reader, rotation, crash-recovery verdicts, the typed action path with its four refusals, the `ActionIo` seam | — |
 | 2 Quarantine and cleaning | quarantine with a manifest, verified restore, irreversible purge, all four acts journaled, the allowlist walk with preview and removal, the clean preview (a dry run, per-surface totals, per-item selection, one confirmation naming them), the language audit as a check, the Actions view, the quarantine entry point, the typed-`DELETE` dialog | the data-directory size in Settings; the second reviewer on every deletion path, which is a process row and not code |
-| 3 Resident | the schedule (six hours ±10 %, seeded jitter), resume detection, a scan on resume, the tray and its menu (open, scan now, pause an hour, quit), "no tray" as a state with a reason, the pause it offers in Settings, close-to-tray off by default with a quit that still quits | opt-in autostart, activation through the `wake` file, the soak recorder, the battery preference |
+| 3 Resident | the schedule (six hours ±10 %, seeded jitter), resume detection, a scan on resume, the tray and its menu (open, scan now, pause an hour, quit), "no tray" as a state with a reason, the pause it offers in Settings, close-to-tray off by default with a quit that still quits, opt-in autostart (one `HKCU\...\Run` value, one LaunchAgent plist, one desktop file; written idempotently, removed by name only, shown with its path, a missing entry a success) and `--background` for the login launch | activation through the `wake` file, the soak recorder, the battery preference |
 | 4 Packs | — | everything |
 | 5 Coverage | — | everything |
 
