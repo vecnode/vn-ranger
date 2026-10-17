@@ -17,12 +17,13 @@ fn main() {
         "check" => run(&["check", "--workspace", "--all-targets", "--profile", CI_PROFILE]),
         "no-network" => no_network(),
         "language" => language(),
+        "packs" => packs(),
         "version" => {
             println!("{}", env!("CARGO_PKG_VERSION"));
             Ok(())
         }
         other => Err(format!(
-            "unknown xtask `{other}`; try ci, fmt-fix, lint, test, check, no-network, language or version"
+            "unknown xtask `{other}`; try ci, fmt-fix, lint, test, check, no-network, language, packs or version"
         )),
     };
     if let Err(error) = result {
@@ -31,10 +32,58 @@ fn main() {
     }
 }
 
+/// The ids of the rules that live in Rust, read from their own source.
+///
+/// A pack may not shadow a built-in, because a suppression is scoped to `(rule, subject)`
+/// and two rules with one id make it impossible to say which one a person meant. The list
+/// comes from the source rather than from a second table that could drift away from it.
+fn builtin_ids(root: &Path) -> Result<Vec<String>, String> {
+    let path = root.join("crates").join("core").join("src").join("rules.rs");
+    let rules = std::fs::read_to_string(&path)
+        .map_err(|error| format!("could not read {}: {error}", path.display()))?;
+    Ok(string_literals(&rules)
+        .into_iter()
+        .filter(|literal| vnr_core::pack::valid_id(literal))
+        .collect())
+}
+
+/// The first-party pack, read by the validator the product runs.
+///
+/// A pack that ships inside the binary is still a pack: one JSON file, checked by the same
+/// code a third-party pack is checked by, and an id it shares with a built-in is a build
+/// failure rather than a puzzle in a release.
+fn packs() -> Result<(), String> {
+    let root = workspace_root()?;
+    let text = std::fs::read_to_string(root.join("packs").join("ranger.core.json"))
+        .map_err(|error| format!("could not read the first-party pack: {error}"))?;
+    let builtins = builtin_ids(&root)?;
+    let ids: Vec<&str> = builtins.iter().map(String::as_str).collect();
+    match vnr_core::pack::parse(&text, &ids) {
+        Ok(pack) => {
+            println!(
+                "packs: {} rules in {} {}",
+                pack.rules.len(),
+                pack.header.id,
+                pack.header.version
+            );
+            Ok(())
+        }
+        Err(rejects) => {
+            let mut problems: Vec<String> = rejects.into_iter().map(|reject| reject.to_string()).collect();
+            problems.sort();
+            Err(format!(
+                "the first-party pack was refused:\n{}",
+                problems.join("\n")
+            ))
+        }
+    }
+}
+
 fn ci() -> Result<(), String> {
     run(&["fmt", "--all", "--check"])?;
     no_network()?;
     language()?;
+    packs()?;
     lint()?;
     test()
 }

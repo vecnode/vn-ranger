@@ -10,3 +10,8 @@ publish = false
 
 [lints]
 workspace = true
+
+[dependencies]
+# The same validator the product runs: the first-party pack is checked by the code that
+# will read it, not by a script that imitates it.
+vnr-core = { workspace = true }

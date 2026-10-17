@@ -1,0 +1,89 @@
+{
+  "schema": 1,
+  "pack": {
+    "id": "ranger.core",
+    "version": "2026.11.1",
+    "title": "Ranger core detections"
+  },
+  "rules": [
+    {
+      "id": "startup.under-temp",
+      "title": "A startup entry that runs something out of a temporary folder",
+      "severity": "attention",
+      "confidence": "likely",
+      "technique": "T1547.001",
+      "match": {
+        "subject": "startup",
+        "all": [
+          { "field": "path", "op": "under", "value": "{TEMP}" },
+          { "field": "scope", "op": "eq", "value": "user" }
+        ]
+      },
+      "why": "A temporary folder is emptied by the system and by cleaners, so an entry there is one that expects to be re-created rather than installed.",
+      "benign": "An installer that registers a temporary shim and removes it when it finishes.",
+      "remediation": "Quarantine the binary, then remove the startup entry."
+    },
+    {
+      "id": "startup.unsigned-user-scope",
+      "title": "An unsigned startup entry in the user's own scope",
+      "severity": "notice",
+      "confidence": "possible",
+      "technique": "T1547.001",
+      "match": {
+        "subject": "startup",
+        "all": [
+          { "field": "signed", "op": "eq", "value": false },
+          { "field": "scope", "op": "eq", "value": "user" }
+        ]
+      },
+      "why": "A signature is a fact about the file, not a verdict: unsigned means the author did not buy a certificate, and nothing more.",
+      "benign": "A small open-source launcher, or a self-built binary, that has never been signed.",
+      "remediation": "Open the folder and look at the file before removing anything. The hash is in the finding."
+    },
+    {
+      "id": "process.from-temp",
+      "title": "A process running from a temporary folder",
+      "severity": "notice",
+      "confidence": "possible",
+      "technique": "T1204.002",
+      "match": {
+        "subject": "process",
+        "all": [{ "field": "path", "op": "under", "value": "{TEMP}" }]
+      },
+      "why": "Programs are installed, not left in the folder the system empties; a process there is either passing through or hiding in it.",
+      "benign": "A portable application that unpacks itself and runs from its own extraction folder.",
+      "remediation": "Look at the process's parent and command line before acting; the details are in the panel."
+    },
+    {
+      "id": "listener.every-interface",
+      "title": "A socket waiting for a connection on every interface",
+      "severity": "notice",
+      "confidence": "possible",
+      "technique": "T1611",
+      "match": {
+        "subject": "listener",
+        "all": [{ "field": "public", "op": "eq", "value": true }]
+      },
+      "why": "A socket bound to every interface is reachable from the network, which is a decision someone made rather than a default most programs choose.",
+      "benign": "A development server or a file-sharing program the person started deliberately.",
+      "remediation": "Close the program, or bind it to loopback in its settings. The owning process is in the row."
+    },
+    {
+      "id": "agent.hook-in-config",
+      "title": "An editor or agent configuration that names a command to run",
+      "severity": "notice",
+      "confidence": "possible",
+      "technique": "T1059",
+      "match": {
+        "subject": "agent",
+        "all": [
+          { "field": "tool", "op": "exists" },
+          { "field": "config", "op": "contains", "value": "command" }
+        ]
+      },
+      "why": "A configuration that runs a command is a startup path with a different name, and it is read by a program the person trusts.",
+      "benign": "A task or hook the person wrote themselves in their own editor.",
+      "remediation": "Read the configuration file the finding names, then remove the hook if you did not write it."
+    }
+  ]
+}
