@@ -6,6 +6,20 @@ All notable changes to vn-ranger are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The roadmap compresses the act, resident and rule-pack milestones into a single
+  **v0.1.6**, built in five waves with one gate and cut through release candidates.
+  `0.2.0` is distribution and signing; `1.0.0` is the audited release.
+- `docs/PLAN.md` now specifies the action path — the journal protocol, the typed action
+  API, the four refusals, the cleanup allowlist table and crash recovery — the rule-pack
+  format (one signed JSON file, a closed vocabulary, no code, no file content, an
+  optional and separately consented content scan), and the resident shell (tray, opt-in
+  autostart, scheduler, close-to-tray off by default).
+- `docs/BENCHMARKS.md` carries the 0.1.6 budgets and the 24-hour soak that must hold
+  before the tag, and `AGENTS.md` carries the deletion and pack contracts those waves
+  have to obey.
+
 ## [0.1.5] - 2026-10-17
 
 ### Added

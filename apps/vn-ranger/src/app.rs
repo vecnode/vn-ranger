@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use vnr_core::{EventKind, Finding, Suppression, TimelineEvent};
+use vnr_core::{Draft, EventKind, Finding, Suppression, TimelineEvent};
 use vnr_ui::{Action, Live, ScanState, Ui, WatchReport, World};
 
 use crate::worker::{self, ScanMessage};
@@ -20,6 +20,12 @@ pub struct App {
     settings: vnr_native::store::UiSettings,
     instance: Option<vnr_native::instance::InstanceGuard>,
     cancel: Option<Arc<AtomicBool>>,
+    /// The one writer of `journal.ndjson`. Observations are written as they arrive;
+    /// an intent or a result is synced (§6.10).
+    journal: vnr_native::journal::Journal,
+    /// Set once the journal has failed, so one broken disk is one message rather than a
+    /// notice per event.
+    journal_reported: bool,
 }
 
 impl App {
@@ -44,7 +50,7 @@ impl App {
         let suppressions = vnr_native::store::load_suppressions(now_unix());
         let findings = findings_for(snapshot.as_ref(), baseline.as_ref(), &suppressions, now_unix());
         let watch_extra = vnr_native::store::load_watch_roots();
-        let world = World {
+        let mut world = World {
             snapshot,
             scan: ScanState::Idle,
             error: instance_error,
@@ -78,6 +84,29 @@ impl App {
             ui.set_view(view);
         }
         let watch = worker::WatchService::start(cc.egui_ctx.clone());
+        let journal_path = vnr_native::paths::journal_path();
+        let mut journal_reported = false;
+        let mut journal = match vnr_native::journal::Journal::open() {
+            Ok(journal) => journal,
+            Err(error) => {
+                journal_reported = true;
+                world.error = Some(format!(
+                    "The journal at {} could not be opened: {error}. Nothing this session does will be recorded.",
+                    journal_path.display()
+                ));
+                vnr_native::journal::Journal::unavailable(journal_path, &error.to_string())
+            }
+        };
+        if world.error.is_none() {
+            let _ = journal.record(Draft::event("session started").with_reason(&format!(
+                "vn-ranger {} · journal schema {}",
+                env!("CARGO_PKG_VERSION"),
+                vnr_core::journal::ENTRY_SCHEMA
+            )));
+            // A long-lived log is only useful if it stays small: the retention window is
+            // applied at every launch rather than on a timer nobody would notice.
+            let _ = journal.prune(now_unix());
+        }
         let mut app = Self {
             ui,
             world,
@@ -86,6 +115,8 @@ impl App {
             settings,
             instance,
             cancel: None,
+            journal,
+            journal_reported,
         };
         if app.world.snapshot.is_none() {
             app.start_scan(&cc.egui_ctx, false);
@@ -112,6 +143,36 @@ impl App {
             self.cancel = Some(Arc::clone(&token));
             worker::spawn_scan(ctx.clone(), token)
         });
+    }
+
+    /// Write one observation to the journal.
+    fn note(&mut self, draft: Draft) {
+        if let Err(error) = self.journal.record(draft) {
+            self.report_journal(&error);
+        }
+    }
+
+    /// Say once, where a person will see it, that the record has stopped.
+    fn report_journal(&mut self, error: &std::io::Error) {
+        if self.journal_reported {
+            return;
+        }
+        self.journal_reported = true;
+        self.world.error = Some(format!(
+            "The journal could not be written: {error}. Nothing from here on is recorded."
+        ));
+    }
+
+    /// Roll the journal over and drop what is past its retention window.
+    fn maintain_journal(&mut self) {
+        match self.journal.rotate_if_needed() {
+            Ok(true) => log::info!("journal rotated"),
+            Ok(false) => {}
+            Err(error) => self.report_journal(&error),
+        }
+        if let Err(error) = self.journal.prune(now_unix()) {
+            log::warn!("could not prune the journal: {error}");
+        }
     }
 
     fn drain(&mut self) {
@@ -150,6 +211,13 @@ impl App {
                 }
                 ScanMessage::Done(snapshot) => {
                     let snapshot = *snapshot;
+                    self.note(Draft::event("scan").with_reason(&format!(
+                        "{} processes · {} startup items · {} listeners · {} packages",
+                        snapshot.processes.len(),
+                        snapshot.autoruns.len(),
+                        snapshot.listeners.len(),
+                        snapshot.packages.len()
+                    )));
                     if self.instance.is_some()
                         && let Err(error) = vnr_native::store::save_last(&snapshot)
                     {
@@ -167,15 +235,18 @@ impl App {
                     self.world.notice = None;
                     self.cancel = None;
                     self.refresh_findings(true);
+                    self.maintain_journal();
                     finished = true;
                 }
                 ScanMessage::Failed(error) => {
+                    self.note(Draft::error(&error));
                     self.world.scan = ScanState::Idle;
                     self.world.error = Some(error);
                     self.cancel = None;
                     finished = true;
                 }
                 ScanMessage::Cancelled => {
+                    self.note(Draft::event("scan cancelled"));
                     self.world.scan = ScanState::Idle;
                     self.world.notice = Some("Scan cancelled between collectors.".to_owned());
                     self.cancel = None;
@@ -188,7 +259,7 @@ impl App {
         }
     }
 
-    fn drain_watch(&mut self) {
+    fn drain_watch(&mut self, ctx: &egui::Context) {
         while let Some(message) = self.watch.try_recv() {
             match message {
                 worker::WatchMessage::Processes {
@@ -201,10 +272,16 @@ impl App {
                         at_unix,
                         reason,
                     });
-                    self.ui.note_poll();
+                    self.ui.note_poll(ctx);
                 }
                 worker::WatchMessage::Events(events) => {
                     for event in events {
+                        self.note(Draft::event(&event.subject).with_reason(&format!(
+                            "{} · {} · {}",
+                            event.kind.label(),
+                            event.source,
+                            event.detail
+                        )));
                         self.world.timeline.push(event);
                     }
                 }
@@ -214,6 +291,7 @@ impl App {
                     self.world.watch.error = None;
                 }
                 worker::WatchMessage::WatchFailed(reason) => {
+                    self.note(Draft::error(&reason));
                     self.world.watch.roots.clear();
                     self.world.watch.skipped.clear();
                     self.world.watch.error = Some(reason);
@@ -295,17 +373,30 @@ impl App {
             now,
         );
         if announce {
+            let mut raised: Vec<(String, String, String)> = Vec::new();
             for finding in &findings {
                 let key = format!("{}|{}", finding.rule_id, finding.subject);
-                if !previous.contains(&key) {
-                    self.world.timeline.push(TimelineEvent::new(
-                        now,
-                        EventKind::FindingRaised,
-                        finding.title,
-                        finding.subject_label.clone(),
-                        "rules",
-                    ));
+                if previous.contains(&key) {
+                    continue;
                 }
+                self.world.timeline.push(TimelineEvent::new(
+                    now,
+                    EventKind::FindingRaised,
+                    finding.title,
+                    finding.subject_label.clone(),
+                    "rules",
+                ));
+                raised.push((
+                    finding.rule_id.to_owned(),
+                    finding.subject_label.clone(),
+                    finding.severity.label().to_owned(),
+                ));
+            }
+            for (rule, subject, severity) in raised {
+                self.note(
+                    Draft::finding(&rule)
+                        .with_reason(&format!("{severity} · {subject} · raised from the rules engine")),
+                );
             }
         }
         self.world.findings = findings;
@@ -561,13 +652,26 @@ impl eframe::App for App {
         let ctx = ui.ctx().clone();
         self.world.now_unix = now_unix();
         self.drain();
-        self.drain_watch();
+        self.drain_watch(&ctx);
         let actions = self.ui.show(ui, &self.world);
         for action in actions {
             self.apply(action, &ctx);
         }
         if self.world.busy() {
             ctx.request_repaint_after(Duration::from_millis(100));
+        }
+    }
+}
+
+impl Drop for App {
+    fn drop(&mut self) {
+        // The last line is synced: a session that ends normally belongs in the record,
+        // and this is the only chance to write it.
+        if let Err(error) = self
+            .journal
+            .record_synced(Draft::event("session stopped").with_reason("the window closed"))
+        {
+            log::warn!("could not close the journal: {error}");
         }
     }
 }

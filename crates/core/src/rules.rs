@@ -719,10 +719,20 @@ fn duplicate_commands(snapshot: &Snapshot, findings: &mut Vec<Finding>) {
         for entry in &entries {
             evidence.push(format!("{} at {}", entry.name, entry.location));
         }
+        // The label is what a person recognises. A program token with an extension names
+        // the program; a command whose path contains spaces but is not quoted tokenises to
+        // something like `C:\Program`, which names nothing, so the entry's own name is
+        // used instead. Either way the evidence carries the full command.
+        let program = first_token(&command);
+        let label = match (extension(program), entries.first()) {
+            (Some(_), _) => file_name(program),
+            (None, Some(entry)) if !entry.name.trim().is_empty() => entry.name.trim().to_lowercase(),
+            _ => command.chars().take(40).collect(),
+        };
         findings.push(make(
             &DUPLICATE_COMMAND,
             format!("autorun-group:{command}"),
-            first_token(&command).to_owned(),
+            label,
             evidence,
         ));
     }
@@ -752,12 +762,14 @@ fn file_name(path: &str) -> String {
 }
 
 fn first_token(command: &str) -> &str {
-    command
-        .trim()
-        .trim_start_matches('"')
-        .split(['"', ' '])
-        .next()
-        .unwrap_or("")
+    let trimmed = command.trim();
+    match trimmed.strip_prefix('"') {
+        // A quoted program is everything up to the closing quote. Splitting it at the
+        // first space would report `C:\Program` as the program, which is how a path with
+        // spaces turns into a false "bare command" and a useless subject.
+        Some(rest) => rest.split('"').next().unwrap_or(rest),
+        None => trimmed.split_whitespace().next().unwrap_or(""),
+    }
 }
 
 fn is_absolute(token: &str) -> bool {
@@ -1080,6 +1092,76 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn a_quoted_program_with_spaces_is_one_token() {
+        assert_eq!(
+            first_token("\"C:\\Program Files\\App\\app.exe\" --silent"),
+            "C:\\Program Files\\App\\app.exe"
+        );
+        assert_eq!(
+            first_token("C:\\Windows\\svchost.exe -k netsvcs"),
+            "C:\\Windows\\svchost.exe"
+        );
+        assert_eq!(first_token("   "), "");
+        assert_eq!(first_token("\"C:\\unclosed"), "C:\\unclosed");
+    }
+
+    #[test]
+    fn a_duplicate_group_is_labelled_with_the_program_it_duplicates() {
+        let mut snapshot = snapshot();
+        snapshot.autoruns.push(autorun(
+            "run:user:D1",
+            "D1",
+            None,
+            "\"C:\\Program Files\\Some App\\some.exe\" --update",
+        ));
+        snapshot.autoruns.push(autorun(
+            "run:user:D2",
+            "D2",
+            None,
+            "\"C:\\Program Files\\Some App\\some.exe\" --update",
+        ));
+        let findings = evaluate(&snapshot, None);
+        let duplicate = findings
+            .iter()
+            .find(|f| f.rule_id == "startup.duplicate-command")
+            .expect("the duplicate is reported");
+        assert_eq!(duplicate.subject_label, "some.exe");
+        assert!(
+            duplicate
+                .evidence
+                .iter()
+                .any(|line| line.to_lowercase().contains("some app")),
+            "the evidence still names the full command"
+        );
+    }
+
+    #[test]
+    fn a_duplicate_group_with_an_unquoted_path_falls_back_to_the_entry_name() {
+        let mut snapshot = snapshot();
+        // An unquoted path with a space really does tokenise to `C:\Program`; the finding
+        // must not be labelled with that fragment.
+        snapshot.autoruns.push(autorun(
+            "run:user:E1",
+            "Razer Synapse",
+            None,
+            "C:\\Program Files\\Razer\\RazerAppEngine.exe -startup",
+        ));
+        snapshot.autoruns.push(autorun(
+            "run:user:E2",
+            "Razer Synapse",
+            None,
+            "C:\\Program Files\\Razer\\RazerAppEngine.exe -startup",
+        ));
+        let findings = evaluate(&snapshot, None);
+        let duplicate = findings
+            .iter()
+            .find(|f| f.rule_id == "startup.duplicate-command")
+            .expect("the duplicate is reported");
+        assert_eq!(duplicate.subject_label, "razer synapse");
+        assert_ne!(duplicate.subject_label, "program");
     }
 
     #[test]

@@ -102,6 +102,29 @@ trimmed by the operating system, which would have made the memory figure meaning
 
 When these exist they belong in the table above, not in a promise.
 
+## v0.1.6 — the numbers that release owes
+
+0.1.6 is the release that can act, so its budgets are about acting. None of the rows
+below is measured yet; each is listed with the target it will be judged against, and the
+number that replaces it will carry the build and the configuration with it.
+
+| Measure | Target | What it is judging |
+|---|---:|---|
+| Journal write, median | < 1 ms | the record exists before the act, and the interface does not stall |
+| Journal write, p99 | < 10 ms | `sync_data` on a busy disk is the honest tail |
+| Quarantine move, same volume | < 10 ms for 1 GB | one rename: directory work, not bytes |
+| Quarantine move, cross volume | bounded by 200 MB/s, verified | copy → sync → verify → unlink |
+| Clean preview | 10,000 entries in ≤ 2 s | the walk is visible work |
+| Clean cancellation | within 100 ms | a person can stop it |
+| Rule pack load | ≤ 30 ms for 512 rules | startup does not wait on a pack |
+| Rule evaluation | ≤ 20 ms for 512 rules over 1,000 facts | a pack cannot make the interface feel broken |
+| Tray overhead | 0% idle CPU, ≤ 8 MB working set | an icon is not a runtime |
+| 24-hour soak, tray and poll running | CPU < 0.5%, working set ≤ 200 MB, growth ≤ +10 MB, zero errors | the configuration a person actually leaves open |
+
+The 24-hour soak is run on the **release candidate**, not on a developer build, and the
+numbers are published with the candidate they came from. A soak that does not name its
+build is a reading, not evidence.
+
 ## What is not measured yet
 
 - Cold start. The window appears quickly, but "quickly" is not a number. A timestamped
@@ -109,7 +132,8 @@ When these exist they belong in the table above, not in a promise.
 - Streaming hash throughput on a large file. The v0.1.0 scan hashes startup binaries,
   which are small; a dedicated throughput measurement arrives with the real-time
   watcher.
-- A 24-hour resident soak. v0.1.0 has no resident mode, so there is nothing to soak.
+- A 24-hour resident soak. v0.1.0 has no resident mode, so there was nothing to soak;
+  from v0.1.6 there is, and the table above says what it must hold.
 - macOS and Linux. The CI builds and tests them; the numbers above are Windows unless
   stated otherwise.
 

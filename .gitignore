@@ -15,6 +15,9 @@ desktop.ini
 /scratch/
 *.local.toml
 
+# Scratch profile for a local test run: the data directory the harness writes
+/.tmp-ci/
+
 # Release asset verification downloads
 /.release-check/
 /.ci-*.log

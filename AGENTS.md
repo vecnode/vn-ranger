@@ -5,12 +5,18 @@ machine, explains what is unusual, remembers a baseline, and — later, and care
 quarantines and cleans. It is written in **Rust only**: a native egui/eframe
 application, with **no Tauri, Electron, webview or JavaScript build step**.
 
-**Status:** v0.1.5 is released; 0.1.6 is the next line. The read-only inventory, the
-local hash signature engine, the one-shot administrator scan, the two-second process
-poll, the file watchers, the accepted baseline, fifteen rules, the Findings view, the command palette and
-keyboard navigation work, with preferences saved and one window per data directory.
-Cleaning and the tray are still ahead. This file is the contract for all of it,
-written before the features that will need it.
+**Status:** v0.1.5 is released; 0.1.6 is the next line, and it is one large release: act,
+resident and rule packs, in five waves with a single gate (`docs/PLAN.md` §9). The
+read-only inventory, the local hash signature engine, the one-shot administrator scan,
+the two-second process poll, the file watchers, the accepted baseline, fifteen rules, the
+Findings view, the command palette and keyboard navigation work, with preferences saved
+and one window per data directory.
+
+What 0.1.6 adds, and what this file is now the contract for: the journal and the typed
+action API, quarantine and allowlisted cleaning, the tray with opt-in autostart and a
+scheduler, and signed rule packs with an optional content scan. Quarantine is the
+project's first destructive capability, so §2 "Never delete" is written as an
+architecture rather than as a promise.
 
 `docs/PLAN.md` explains the research, the scope and the architecture.
 `docs/RELEASES.md` is the distribution contract. `SECURITY.md` is the promise to the
@@ -21,20 +27,25 @@ person running it.
 ```text
 crates/
   core      vnr-core     pure and IO-free: facts, snapshots, timelines, diffs, rules,
-                         findings, hash signatures, reports, time arithmetic
+                         findings, hash signatures, reports, time arithmetic,
+                         journal records, recovery verdicts, pack schema and matcher,
+                         clean policy, schedule arithmetic, the Sigma converter
   native    vnr-native   the only crate that touches the world:
-                         collect/{processes,autoruns,listeners,packages},
-                         hash, signatures, elevation, paths, store, watch, scan
-  ui        vnr-ui       egui: theme, fonts, icons, widgets, the eight views, World/Action
+                         collect/{processes,autoruns,listeners,packages,tasks,agentstack},
+                         hash, signatures, elevation, paths, store, watch, scan,
+                         journal, action, quarantine, clean, pack, tray, autostart
+  ui        vnr-ui       egui: theme, fonts, icons, widgets, the views, World/Action
 apps/
   vn-ranger              the eframe shell: owns the World, runs the worker,
-                         carries out actions, and the headless report mode
-xtask/                   cargo xtask ci | fmt-fix | lint | test | check | version
+                         scheduler and tray, carries out actions, and the headless
+                         report and soak modes
+xtask/                   cargo xtask ci | fmt-fix | lint | test | check | language | version
 assets/
   logo/                  the mark, BRAND.md, MANIFEST.toml, contact sheet
   fonts/                 Inter and JetBrains Mono, OFL texts, type notes
   screenshots/           the picture the README uses
-docs/                    PLAN, RELEASES, BENCHMARKS
+packs/                   the first-party rule pack, signed like any other (from 0.1.6)
+docs/                    PLAN, RELEASES, BENCHMARKS, and RULES (from 0.1.6)
 ```
 
 **Layering is a rule, not a suggestion.**
@@ -83,13 +94,26 @@ act on — never a panic.
 ### Never delete
 
 - Read-only is the default. There is no deletion API in v0.1.5, on purpose.
-- When quarantine arrives in v0.1.6: quarantine before delete, preview before action,
-  and an allowlist of cache, temporary and log locations. User documents are excluded
-  by construction, not by a heuristic.
-- The deletion API takes an **id**, not a path. It resolves under the quarantine or
-  cleanup root, refuses `..`, refuses a separator in an id, and refuses links.
-- Every action is journalled before it happens, so a crash leaves a record rather than
-  a mystery.
+- From v0.1.6 every destructive act goes through `native/src/action.rs`, and the order
+  is fixed: journal, then act, then result. Quarantine before delete, preview before
+  action.
+- **Nothing takes a path.** The API is `RootId` plus `EntryId`, resolved from an
+  already-open `cap_std::fs::Dir`. A function that accepts a destination `Path` for a
+  destructive act is a bug, not a style choice.
+- **Four refusals, always:** outside the root, a link (symlink, junction, reparse
+  point), a hard link (`nlink > 1`), and a file whose identity changed since it was
+  inspected. Each is an outcome with a reason, each has a test, and deleting a refusal
+  fails the suite.
+- **The allowlist is a table** (`docs/PLAN.md` §6.10), not a heuristic. A new `Surface`
+  needs a row in that table, an entry in the policy, and an adversarial test. A path
+  that is not a child of a surface root cannot be reached.
+- **A permanent delete exists only inside the quarantine**, only by id, and only after
+  `DELETE` is typed. There is no delete-this-path anywhere in the program.
+- **Every action is journalled before it happens**, with a `sync_data`, so a crash
+  leaves a record rather than a mystery. An `intent` without a `result` is a named
+  recovery state, never a silent guess.
+- A change to the action path has **two reviewers**, and the second writes the traversal
+  table from the specification without reading the first's tests.
 
 ### Never phone home
 
@@ -99,12 +123,17 @@ act on — never a panic.
   not a trade-off to be weighed; it is out of scope.
 - Rule packs and signature databases are local files. They cannot fetch, and rules are
   data, not code.
+- One local socket is allowed, and only this one: the Linux tray's status-item connection
+  to the session bus, in `native/src/tray/linux.rs`. `xtask` asserts that it is the only
+  socket use in the tree, so "local IPC" cannot quietly become something else.
 
 ### Never hide
 
 - No kernel driver, no service, no persistent privileged helper, no silent elevation.
-- Autostart, when it arrives, is opt-in, names the exact OS entry, and is removable in
-  one click.
+- Autostart is opt-in, names the exact OS entry (`docs/PLAN.md` §6.5), and is removable
+  in one click. The entry is shown with its path, not described.
+- The tray is an icon for a window that is still there. **Close-to-tray is off by
+  default**, and where no tray exists the window is the only surface and closing quits.
 - The data directory is documented and the user can open or delete it.
 - A security tool that hides is indistinguishable from the thing it hunts.
 
@@ -127,18 +156,20 @@ helper that stays alive after its report is written.
 
 The workspace forbids it. If a platform API seems to need it, the binding belongs
 behind a safe, reviewed crate — or the feature waits. The safe wrappers in use are
-`winreg`, `netstat2`, `is_elevated` and `runas`; each is a dependency, not a licence to
-write `unsafe` here.
+`winreg`, `netstat2`, `is_elevated`, `runas`, `cap-std` and `ksni`; each is a
+dependency, not a licence to write `unsafe` here.
 
 ## 3. Commands
 
 ```bash
-cargo xtask ci        # fmt --check, no-network check, clippy -D warnings, tests
+cargo xtask ci        # fmt --check, no-network, language, clippy -D warnings, tests
 cargo xtask fmt-fix   # apply formatting
 cargo xtask lint      # clippy alone
 cargo xtask test      # tests alone
+cargo xtask language  # the §5.5 language audit, as a check
 cargo run --release   # the ranger
 cargo run --release -- --report report.json   # scan without a window
+cargo run --release -- --soak soak.ndjson     # sample a 24-hour run (from 0.1.6)
 ```
 
 The first build is the slow one: egui, wgpu and winit are most of the tree. After that,
@@ -168,6 +199,10 @@ capability report.
 - Never invent a fact from a field that was absent. Optional means optional.
 - Add a sanitised fixture for every parser and a test that runs on every host.
 - A collector that needs privilege says so; it does not silently return an empty list.
+- **Surfaces are a table, not a pile of functions.** Every Windows registry persistence
+  surface is one `Surface` row read through one `KeyReader` trait, so a fixture for each
+  runs on Linux. The same shape applies to launchd keys and systemd directives: a table
+  of what to look for, and a parser that knows how to read one file.
 
 ## 5. Platform rules
 
@@ -218,19 +253,31 @@ reads `/proc` directly, and macOS reports the collector as unavailable.
 
 ## 7. Rules and findings
 
-Shipped in v0.1.4 as fifteen built-in rules. The contract every rule obeys:
+Fifteen rules shipped in v0.1.4 as Rust detectors. From v0.1.6 there are two engines and
+one contract:
 
-- A rule declares `id`, `title`, `severity`, `confidence`, `why`, `benign` and
-  `remediation`.
-- **A rule that cannot name a benign explanation may not ship as `attention`.**
-- Rule ids are stable forever; changing one is a breaking change to suppressions.
-- Rules are Rust detectors with fixtures, not data loaded at runtime. External rule
-  packs arrive at v0.1.8 with signing; until then no rule text or predicate comes from
-  outside the binary.
-- `urgent` requires an observed harm, not a suspicious-looking path. No rule uses it yet.
+- **Rust detectors** stay for the rules that need computation: a hash compared with the
+  baseline, a diff, a containment walk. They live in `core/src/rules.rs` with fixtures.
+- **Pack rules** are data, in `packs/ranger.core.json` or an imported, signed pack. A
+  pack is one JSON file plus a detached `.minisig` — never an archive, so there is no
+  extraction.
+- Both declare `id`, `title`, `severity`, `confidence`, `why`, `benign`, `remediation`
+  and, where one applies, an ATT&CK `technique`. **A rule that cannot name a benign
+  explanation may not ship as `attention`.**
+- Rule ids are stable forever; changing one is a breaking change to suppressions. A pack
+  id may not collide with a built-in, and the validator rejects it at load.
+- **A pack rule is data and cannot act.** No code, no regular expressions, no file
+  content, no socket. The vocabulary of subjects, fields and operators is closed and
+  documented in `docs/RULES.md`; an unknown field is a load error, not a rule that never
+  fires.
+- **A pack is verified before it is parsed.** Unsigned, tampered, oversized or
+  unknown-key packs are refused with a reason and a fingerprint, never partially loaded.
+- `urgent` cannot come from a pack: the ceiling is `attention`. It requires an observed
+  harm, and an observation is not a pack's to make. No rule uses it yet.
 - Suppressions are scoped to one `(rule, subject)`, carry a reason, and expire after 30
   days. There is no ignore-everything switch.
-- The language table in `docs/PLAN.md` §5.5 is part of the product, not a style guide.
+- The language table in `docs/PLAN.md` §5.5 is part of the product, not a style guide,
+  and `cargo xtask language` is now the check.
 
 ## 8. Dependencies
 
@@ -238,16 +285,24 @@ Every new dependency is a licence, a supply chain and a size decision.
 
 - Allowed: MIT, Apache-2.0 (including the LLVM exception), BSD-2-Clause,
   BSD-3-Clause, ISC, Zlib, Unicode-3.0, MPL-2.0 (file-level, unmodified), and
-  CC0-1.0 for `notify` alone: a public-domain dedication with no attribution or
-  copyleft burden. Any other CC0 crate needs its own decision.
+  public-domain dedications for `notify` (CC0-1.0) and `ksni` (Unlicense) alone: no
+  attribution, no copyleft, no burden. Another crate under either needs its own
+  decision.
 - Not allowed: GPL, AGPL, LGPL without a written exception, CDLA, SSPL, BUSL, or
   anything whose licence text has to be guessed.
 - No network crate in v0.x: `reqwest`, `ureq`, `hyper`, `h2`, `curl`, `isahc`, `surf`,
-  `attohttpc`, `socket2` and raw socket code are banned.
+  `attohttpc`, `socket2` and raw socket code are banned. The one local socket the Linux
+  tray needs is named in §2 and asserted by `xtask`.
 - No C or C++ build dependency in the default build. A crate that needs one has to
-  justify it; `netstat2` is Windows-only here for exactly that reason.
-- OS access goes through a safe wrapper (`winreg`, `netstat2`, `is_elevated`,
-  `runas`, `sysinfo`, `plist`), never through a hand-written FFI block.
+  justify it; `netstat2` is Windows-only here for exactly that reason, and the Linux tray
+  uses `ksni` rather than `tray-icon` precisely to avoid GTK3 and `libappindicator`.
+- OS access goes through a safe wrapper (`winreg`, `netstat2`, `is_elevated`, `runas`,
+  `sysinfo`, `plist`, `cap-std`), never through a hand-written FFI block.
+- **The action path's dependency is `cap-std`**, and it is not negotiable for
+  convenience: it is what makes a traversal bug unrepresentable. **Signatures use
+  `minisign-verify`**, one zero-dependency primitive for packs now and archives at 0.2.0.
+- `yara-x` is an optional feature and never a default dependency; a default build that
+  contains it fails `ci`.
 - Prefer a crate the platform already justifies, and prefer `std` over a crate.
 - Run `cargo xtask ci` after adding one, and say in the pull request what it bought.
 
@@ -268,9 +323,14 @@ A change is done when:
 
 - the behaviour has a test, and the test fails without the change;
 - a collector's parser has a fixture, and the fixture is sanitised;
-- a rule has a positive and a negative case, and a benign explanation;
-- a deletion path has two reviewers, and traversal, symlink and TOCTOU tests;
-- the docs and the UI language still tell the truth;
+- a rule has a positive and a negative case, and a benign explanation — a pack rule
+  included, and a rule without one does not ship;
+- a deletion path has two reviewers, and the §12 deletion matrix: traversal, links, hard
+  links, TOCTOU, crash and restore;
+- a new `Surface` has a row in the allowlist table and an adversarial test that fails
+  without the refusal;
+- a pack change has a signature test, and a tampered byte is refused;
+- the docs and the UI language still tell the truth, and `cargo xtask language` passes;
 - `cargo xtask ci` is green, including the cross-target clippy where it can run;
 - no new dependency has escaped §8.
 
@@ -284,9 +344,15 @@ A change is done when:
 | Hashing | `native/src/hash.rs` | One file can appear in several startup entries; hash once, cap the size, never return a partial digest. |
 | Watching files | `native/src/watch.rs`, `apps/vn-ranger/src/worker.rs` | One editor save produces several events; the debounce is pure and tested, and the hash is capped and cached per path. |
 | Rules and findings | `core/src/rules.rs` | A rule that cannot name a benign explanation is not ready; every finding carries the evidence it fired on and a stable subject for suppressions. |
+| The action path | `native/src/action.rs`, `quarantine.rs`, `clean.rs` | The only code that can destroy data. `cap-std`, four refusals, a journal line before every act, and a test seam for TOCTOU — never a race. |
+| The journal | `native/src/journal.rs`, `core/src/journal.rs` | Append-only, `sync_data`, a torn tail tolerated, a rotation that keeps seq monotone, and a recovery verdict for four on-disk states. |
+| The allowlist | `native/src/clean.rs`, `core/src/clean.rs` | A table, not a heuristic; the walk never follows a link or crosses a device, and a file changed since the preview is skipped. |
+| Packs | `core/src/pack/`, `native/src/pack/` | Verified before parsed; a closed vocabulary; an unknown field is an error; activation and rollback are journal entries. |
+| The Sigma reader | `core/src/sigma/` | YAML is user input: a restricted reader that refuses anchors, tags and multi-document files rather than guessing. |
+| The tray | `native/src/tray/` | `tray-icon` on Windows and macOS, `ksni` on Linux, an event loop per platform, and no icon is a supported state. |
 | Elevation | `native/src/elevation.rs`, `apps/vn-ranger/src/worker.rs` | The elevated copy is one-shot; the unelevated window must not hand it a path to act on. |
 | Listener ownership | `native/src/collect/listeners/` | The socket table and the fd table are read at different times; other users' sockets need privilege. |
-| Autorun parsing | `native/src/collect/autoruns/` | Registry views, 32/64-bit keys, quoted paths, binary plists, systemd user units. |
+| Autorun parsing | `native/src/collect/autoruns/` | Registry views, 32/64-bit keys, quoted paths, binary plists, systemd user units, and a surface table read through one trait. |
 | The worker | `apps/vn-ranger/src/app.rs` | A worker that sends `Done` and then closes is normal; a channel that closes without a terminal message is a failure. |
 | egui 0.37 | `crates/ui/src/lib.rs` | Panels are built from the root `Ui`, not the `Context`; `Context::style` is per-theme now. |
 | Tables | `crates/ui/src/views.rs` | `egui_extras::TableBuilder` columns are computed from the available width; a `remainder` column can expand past following columns. |
@@ -299,3 +365,6 @@ Choose the smaller, more explainable change. If a feature needs a new privilege,
 network call, or a new way to delete a file, it needs a decision from the owner (the
 decisions in `docs/PLAN.md` §14.2) before it needs code. The default answer to all
 three is no.
+
+One exception, and it is the reverse: a change that *removes* a way to delete is not a
+smaller change, it is a better one. Take it.

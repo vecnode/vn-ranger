@@ -29,8 +29,15 @@ const ICON_SIZE: u32 = 64;
 fn main() -> eframe::Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
 
-    if let Some(path) = arg_value("--elevated-scan").or_else(|| arg_value("--report")) {
-        write_headless_report(&path);
+    // The elevated copy is one operation: it scans and writes one snapshot. It does not
+    // touch the journal, because a privileged process writing to the user's data
+    // directory is exactly the kind of standing privilege §6.9 refuses.
+    if let Some(path) = arg_value("--elevated-scan") {
+        write_headless_report(&path, false);
+        return Ok(());
+    }
+    if let Some(path) = arg_value("--report") {
+        write_headless_report(&path, true);
         return Ok(());
     }
 
@@ -55,7 +62,7 @@ fn main() -> eframe::Result<()> {
     )
 }
 
-fn write_headless_report(path: &Path) {
+fn write_headless_report(path: &Path, record: bool) {
     let Some(snapshot) = vnr_native::scan(&|_| {}, &|| false) else {
         eprintln!("vn-ranger: the scan was cancelled");
         std::process::exit(1);
@@ -63,6 +70,27 @@ fn write_headless_report(path: &Path) {
     if let Err(error) = vnr_native::store::write_json(&snapshot, path) {
         eprintln!("vn-ranger: could not write {}: {error}", path.display());
         std::process::exit(1);
+    }
+    if !record {
+        return;
+    }
+    let mut journal = match vnr_native::journal::Journal::open() {
+        Ok(journal) => journal,
+        Err(error) => {
+            eprintln!("vn-ranger: the scan finished, but the journal could not be opened: {error}");
+            return;
+        }
+    };
+    let draft = vnr_core::Draft::event("scan").with_reason(&format!(
+        "headless report to {} · {} processes · {} startup items · {} listeners · {} packages",
+        path.display(),
+        snapshot.processes.len(),
+        snapshot.autoruns.len(),
+        snapshot.listeners.len(),
+        snapshot.packages.len()
+    ));
+    if let Err(error) = journal.record_synced(draft) {
+        eprintln!("vn-ranger: the scan finished, but the journal could not be written: {error}");
     }
 }
 

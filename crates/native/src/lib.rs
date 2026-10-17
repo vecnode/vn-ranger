@@ -14,6 +14,7 @@ pub mod collect;
 pub mod elevation;
 pub mod hash;
 pub mod instance;
+pub mod journal;
 pub mod paths;
 pub mod signatures;
 pub mod store;

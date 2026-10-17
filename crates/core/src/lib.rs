@@ -10,7 +10,9 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 pub mod diff;
+pub mod journal;
 pub mod model;
+pub mod recovery;
 pub mod report;
 pub mod rules;
 pub mod signature;
@@ -19,10 +21,14 @@ pub mod timeline;
 pub mod watch;
 
 pub use diff::{Change, ChangeKind, diff_processes, diff_snapshots};
+pub use journal::{
+    Action, Confirmation, Draft, JournalEntry, Kind as JournalKind, Outcome, Read as JournalRead,
+};
 pub use model::{
     AutorunFact, AutorunKind, AutorunScope, CollectorState, CollectorStatus, Counts, Host, ListenerFact,
     PackageFact, ProcessFact, Protocol, SignatureMatch, SignatureReport, SignatureStatus, Snapshot,
 };
+pub use recovery::{Phase as RecoveryPhase, Verdict as RecoveryVerdict};
 pub use rules::{
     Confidence, Finding, Severity, Suppression, apply_suppressions, evaluate, prune_suppressions,
 };

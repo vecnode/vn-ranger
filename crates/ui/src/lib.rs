@@ -6,6 +6,7 @@
 
 #![warn(missing_docs)]
 #![forbid(unsafe_code)]
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 pub mod fonts;
 pub mod icons;
@@ -24,6 +25,64 @@ const ACTION_HEIGHT: f32 = 26.0;
 
 /// Where the project lives. Shown, never fetched: ranger has no network code.
 const PROJECT_URL: &str = "https://github.com/vecnode/vn-ranger";
+
+/// How often the shell polls the process table, in seconds.
+///
+/// The interface repeats the number rather than importing it, because the interface must
+/// not know what a worker is; the two are checked against each other by the indicator's
+/// behaviour, which is the only place the number is visible.
+const POLL_INTERVAL_SECONDS: u64 = 2;
+
+/// How long the indicator may go without a beat before it says so.
+///
+/// Three missed polls: long enough that a slow scan does not look like a fault, short
+/// enough that a stopped thread is visible within a few seconds.
+const POLL_STALE_SECONDS: u64 = 3 * POLL_INTERVAL_SECONDS;
+
+/// How long the flash lasts after a poll arrives. A flash, not a fade: one extra frame is
+/// affordable, a permanent animation is not.
+const LED_FLASH_SECONDS: f64 = 0.22;
+
+/// What the live indicator is saying right now.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LedState {
+    /// The poll is off, or has not reported yet.
+    Off,
+    /// A poll arrived and the flash is still in its window.
+    Flash,
+    /// The poll is running and the last beat is recent.
+    Steady,
+    /// No beat for longer than three intervals.
+    Stalled,
+}
+
+/// Decide what the indicator should show.
+///
+/// This is a square wave's opposite: a beat is an event with a timestamp, so the lamp
+/// flashes and then goes quiet. A boolean toggled per poll would be a metronome, and a
+/// metronome cannot say that the poll has stopped — which is the one thing this lamp is
+/// for.
+#[must_use]
+pub(crate) fn led_state(
+    poll_enabled: bool,
+    live_beat_unix: Option<u64>,
+    now_unix: u64,
+    flash_age_seconds: Option<f64>,
+) -> LedState {
+    if !poll_enabled {
+        return LedState::Off;
+    }
+    let Some(beat_unix) = live_beat_unix else {
+        return LedState::Off;
+    };
+    if now_unix.saturating_sub(beat_unix) > POLL_STALE_SECONDS {
+        return LedState::Stalled;
+    }
+    match flash_age_seconds {
+        Some(age) if (0.0..LED_FLASH_SECONDS).contains(&age) => LedState::Flash,
+        _ => LedState::Steady,
+    }
+}
 
 /// How the process table is ordered.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -138,7 +197,8 @@ pub struct Ui {
     pub(crate) confirm_elevate: bool,
     pub(crate) dark: bool,
     pub(crate) open_path: Option<String>,
-    led_lit: bool,
+    /// When the last poll arrived, on egui's clock. `None` until one has.
+    led_flash: Option<f64>,
     project_open: bool,
     project_rect: egui::Rect,
     suppress_target: Option<vnr_core::Finding>,
@@ -194,7 +254,7 @@ impl Ui {
             confirm_elevate: false,
             dark: true,
             open_path: None,
-            led_lit: false,
+            led_flash: None,
             project_open: false,
             project_rect: egui::Rect::NOTHING,
             suppress_target: None,
@@ -218,13 +278,14 @@ impl Ui {
         }
     }
 
-    /// Note that a poll just arrived, so the live indicator steps.
+    /// Record that a poll just arrived, so the indicator flashes on this frame.
     ///
-    /// The step happens on the frame the poll already asks for. An animation would cost
-    /// several extra frames a second and the idle budget is one of the product's
-    /// promises, so the indicator beats rather than fades.
-    pub fn note_poll(&mut self) {
-        self.led_lit = !self.led_lit;
+    /// The flash is a timestamp rather than a toggle, and one repaint is asked for so the
+    /// flash ends even when nothing else is drawing. A toggle would read as a metronome
+    /// and would keep looking alive after the thread that feeds it had stopped.
+    pub fn note_poll(&mut self, ctx: &egui::Context) {
+        self.led_flash = Some(ctx.input(|input| input.time));
+        ctx.request_repaint_after(std::time::Duration::from_secs_f64(LED_FLASH_SECONDS));
     }
 
     /// Apply the theme loaded from the settings file.
@@ -373,7 +434,14 @@ impl Ui {
                             actions.push(Action::Scan);
                         }
                         if world.poll_enabled && world.poll_led {
-                            poll_led(ui, self.led_lit);
+                            let now = ui.input(|input| input.time);
+                            let state = led_state(
+                                world.poll_enabled,
+                                world.live.as_ref().map(|live| live.at_unix),
+                                world.now_unix,
+                                self.led_flash.map(|at| now - at),
+                            );
+                            poll_led(ui, state);
                         }
                         match &world.scan {
                             ScanState::Running(step) => {
@@ -923,17 +991,35 @@ fn project_button(ui: &mut egui::Ui) -> egui::Response {
     response.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
-fn poll_led(ui: &mut egui::Ui, lit: bool) {
+fn poll_led(ui: &mut egui::Ui, state: LedState) {
     let (rect, response) = ui.allocate_exact_size(vec2(18.0, 18.0), Sense::hover());
     let center = rect.center();
     let painter = ui.painter();
-    if lit {
-        painter.circle_filled(center, 7.5, theme::OK.gamma_multiply(0.18));
-        painter.circle_filled(center, 3.5, theme::OK);
-    } else {
-        painter.circle_filled(center, 2.5, theme::OK.gamma_multiply(0.4));
+    match state {
+        LedState::Flash => {
+            painter.circle_filled(center, 7.5, theme::OK.gamma_multiply(0.18));
+            painter.circle_filled(center, 3.5, theme::OK);
+        }
+        LedState::Steady => {
+            painter.circle_filled(center, 3.5, theme::OK.gamma_multiply(0.72));
+        }
+        LedState::Stalled => {
+            painter.circle_filled(center, 7.5, theme::ATTENTION.gamma_multiply(0.18));
+            painter.circle_filled(center, 3.5, theme::ATTENTION);
+        }
+        LedState::Off => {
+            painter.circle_filled(center, 2.5, theme::OK.gamma_multiply(0.35));
+        }
     }
-    let _ = response.on_hover_text("Ranger polls every two seconds; the dot steps as each poll arrives.");
+    let _ = response.on_hover_text(match state {
+        LedState::Flash | LedState::Steady => {
+            "The process poll is running: one beat every two seconds, and the dot flashes as each poll arrives."
+        }
+        LedState::Stalled => {
+            "No process poll for more than six seconds. The background thread may have stopped; the window still shows the last one."
+        }
+        LedState::Off => "The process poll is off, or has not reported yet.",
+    });
 }
 
 fn view_icon(view: View) -> icons::Icon {
@@ -1127,5 +1213,30 @@ mod tests {
         assert!(ui.project_open, "clicking the circle must open the project modal");
         // The modal itself draws without a panic on the next frame.
         let _ = frame(&ctx, &mut ui, &world, screen_input(Vec::new()));
+    }
+
+    #[test]
+    fn the_indicator_is_off_when_the_poll_is_off_or_has_not_reported() {
+        assert_eq!(led_state(false, Some(100), 100, Some(0.0)), LedState::Off);
+        assert_eq!(led_state(true, None, 100, None), LedState::Off);
+    }
+
+    #[test]
+    fn a_fresh_beat_flashes_and_then_goes_quiet() {
+        assert_eq!(led_state(true, Some(100), 100, Some(0.0)), LedState::Flash);
+        assert_eq!(led_state(true, Some(100), 100, Some(0.2)), LedState::Flash);
+        assert_eq!(led_state(true, Some(100), 100, Some(0.5)), LedState::Steady);
+        assert_eq!(led_state(true, Some(100), 101, None), LedState::Steady);
+    }
+
+    #[test]
+    fn three_missed_beats_are_reported_as_stalled() {
+        assert_eq!(led_state(true, Some(100), 106, Some(9.0)), LedState::Steady);
+        assert_eq!(led_state(true, Some(100), 107, Some(0.0)), LedState::Stalled);
+    }
+
+    #[test]
+    fn a_backwards_clock_is_not_a_fault() {
+        assert_eq!(led_state(true, Some(200), 100, Some(0.0)), LedState::Flash);
     }
 }

@@ -51,9 +51,10 @@ fn lint() -> Result<(), String> {
     ])
 }
 
-/// The tests live in the pure core and the native collectors. The interface and the
-/// shell have no tests yet, so they are type-checked rather than linked into an empty
-/// test binary; linking wgpu for zero tests is the slowest useful thing CI can do.
+/// The tests live in the pure core, the native collectors and the interface's own
+/// decisions. The shell has no tests yet, so it is type-checked rather than linked into
+/// an empty test binary; linking wgpu for zero tests is the slowest useful thing CI can
+/// do.
 fn test() -> Result<(), String> {
     run(&[
         "test",
@@ -61,14 +62,14 @@ fn test() -> Result<(), String> {
         "vnr-core",
         "--package",
         "vnr-native",
+        "--package",
+        "vnr-ui",
         "--all-targets",
         "--profile",
         CI_PROFILE,
     ])?;
     run(&[
         "check",
-        "--package",
-        "vnr-ui",
         "--package",
         "vn-ranger",
         "--all-targets",
