@@ -1,22 +1,49 @@
 //! The Actions view: the quarantine, and the record of what ranger did.
 //!
-//! Two lists and no dialogs of its own. A restore is one click, because a restore is
-//! reversible and the file is verified before it moves; a permanent delete is *not* here,
-//! because it needs a word typed and that is a dialog, not a row.
+//! Two lists and one small dialog of their own. A restore is one click, because a restore
+//! is reversible and the file is verified before it moves. A permanent delete is not: it
+//! asks for the word `DELETE` to be typed into the row, and the shell checks the word
+//! again before it acts, because a confirmation that only the interface enforces is a
+//! suggestion.
 
 use egui::RichText;
 
 use crate::world::{Action, JournalRow, QuarantineRow, World};
 use crate::{theme, widgets};
 
+/// The word a person types to delete a quarantined file for good.
+pub(crate) const DELETE_WORD: &str = "DELETE";
+
+/// What the purge row is asking, if anything.
+#[derive(Default)]
+pub(crate) struct PurgeAsk {
+    /// The entry waiting for its word.
+    pub target: Option<String>,
+    /// What has been typed so far.
+    pub typed: String,
+}
+
+impl PurgeAsk {
+    /// Cancel whatever was being asked.
+    fn reset(&mut self) {
+        self.target = None;
+        self.typed.clear();
+    }
+
+    /// Whether the person has typed the word for this entry.
+    fn ready(&self, id: &str) -> bool {
+        self.target.as_deref() == Some(id) && self.typed.trim() == DELETE_WORD
+    }
+}
+
 /// The whole view.
-pub(crate) fn view(ui: &mut egui::Ui, world: &World, actions: &mut Vec<Action>) {
-    quarantine(ui, world, actions);
+pub(crate) fn view(ui: &mut egui::Ui, world: &World, ask: &mut PurgeAsk, actions: &mut Vec<Action>) {
+    quarantine(ui, world, ask, actions);
     ui.add_space(14.0);
     journal(ui, world);
 }
 
-fn quarantine(ui: &mut egui::Ui, world: &World, actions: &mut Vec<Action>) {
+fn quarantine(ui: &mut egui::Ui, world: &World, ask: &mut PurgeAsk, actions: &mut Vec<Action>) {
     widgets::card(ui, |ui| {
         ui.horizontal(|ui| {
             widgets::section(
@@ -45,12 +72,12 @@ fn quarantine(ui: &mut egui::Ui, world: &World, actions: &mut Vec<Action>) {
             return;
         }
         for row in &world.quarantine {
-            row_line(ui, row, actions);
+            row_line(ui, row, ask, actions);
         }
     });
 }
 
-fn row_line(ui: &mut egui::Ui, row: &QuarantineRow, actions: &mut Vec<Action>) {
+fn row_line(ui: &mut egui::Ui, row: &QuarantineRow, ask: &mut PurgeAsk, actions: &mut Vec<Action>) {
     widget_border(ui, |ui| {
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
@@ -70,15 +97,55 @@ fn row_line(ui: &mut egui::Ui, row: &QuarantineRow, actions: &mut Vec<Action>) {
                 ui.label(RichText::new(detail).size(11.0).color(theme::muted(ui)));
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui
-                    .add(egui::Button::new(RichText::new("Restore").size(11.5)))
-                    .on_hover_text(
-                        "Put the file back where it came from. Ranger verifies its hash first \
-                         and never overwrites a file that is already there.",
-                    )
-                    .clicked()
-                {
-                    actions.push(Action::Restore(row.id.clone()));
+                if ask.target.as_deref() == Some(row.id.as_str()) {
+                    let ready = ask.ready(&row.id);
+                    if ui
+                        .add_enabled(
+                            ready,
+                            egui::Button::new(RichText::new("Delete for good").size(11.5)).fill(theme::BAD),
+                        )
+                        .on_hover_text(
+                            "There is no undo for this one. Ranger deletes the stored copy and \
+                             the manifest.",
+                        )
+                        .clicked()
+                    {
+                        actions.push(Action::Purge {
+                            id: row.id.clone(),
+                            typed: ask.typed.clone(),
+                        });
+                        ask.reset();
+                    }
+                    ui.add(
+                        egui::TextEdit::singleline(&mut ask.typed)
+                            .hint_text(DELETE_WORD)
+                            .desired_width(96.0),
+                    );
+                    if ui
+                        .add(egui::Button::new(RichText::new("Cancel").size(11.5)).frame(false))
+                        .clicked()
+                    {
+                        ask.reset();
+                    }
+                } else {
+                    if ui
+                        .add(egui::Button::new(RichText::new("Delete…").size(11.5)).frame(false))
+                        .on_hover_text("Delete the stored copy. Ranger will ask for a word.")
+                        .clicked()
+                    {
+                        ask.target = Some(row.id.clone());
+                        ask.typed.clear();
+                    }
+                    if ui
+                        .add(egui::Button::new(RichText::new("Restore").size(11.5)))
+                        .on_hover_text(
+                            "Put the file back where it came from. Ranger verifies its hash first \
+                             and never overwrites a file that is already there.",
+                        )
+                        .clicked()
+                    {
+                        actions.push(Action::Restore(row.id.clone()));
+                    }
                 }
             });
         });
@@ -210,5 +277,31 @@ mod tests {
         assert_eq!(bytes_label(1024), "1.0 KB");
         assert_eq!(bytes_label(1024 * 1024 * 3 / 2), "1.5 MB");
         assert_eq!(bytes_label(1024 * 1024 * 1024 * 2), "2.0 GB");
+    }
+
+    #[test]
+    fn the_word_has_to_hold_the_target_and_be_typed_exactly() {
+        let mut ask = PurgeAsk::default();
+        assert!(!ask.ready("abc"), "nothing is being asked yet");
+
+        ask.target = Some("abc".to_owned());
+        assert!(!ask.ready("abc"), "the target alone is not a confirmation");
+
+        ask.typed = "DELETE".to_owned();
+        assert!(ask.ready("abc"));
+        assert!(!ask.ready("def"), "the word for one entry does not open another");
+
+        ask.typed = "delete".to_owned();
+        assert!(!ask.ready("abc"), "the word is upper case");
+
+        ask.typed = "  DELETE \n".to_owned();
+        assert!(ask.ready("abc"), "surrounding space is not a security property");
+
+        ask.typed = "DELET".to_owned();
+        assert!(!ask.ready("abc"));
+
+        ask.reset();
+        assert!(ask.target.is_none());
+        assert!(ask.typed.is_empty());
     }
 }

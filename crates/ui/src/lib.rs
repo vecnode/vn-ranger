@@ -205,6 +205,8 @@ pub struct Ui {
     project_rect: egui::Rect,
     suppress_target: Option<vnr_core::Finding>,
     suppress_reason: String,
+    /// Which quarantine entry is waiting for its word, and what has been typed.
+    purge_ask: crate::act::PurgeAsk,
     finding_severity: Option<vnr_core::Severity>,
     finding_query: String,
     finding_sort: FindingSort,
@@ -261,6 +263,7 @@ impl Ui {
             project_rect: egui::Rect::NOTHING,
             suppress_target: None,
             suppress_reason: String::new(),
+            purge_ask: crate::act::PurgeAsk::default(),
             finding_severity: None,
             finding_query: String::new(),
             finding_sort: FindingSort::Severity,
@@ -387,7 +390,7 @@ impl Ui {
             View::Startup => self.startup(ui, world, actions),
             View::Listeners => self.listeners(ui, world),
             View::Changes => self.changes(ui, world, actions),
-            View::Actions => act::view(ui, world, actions),
+            View::Actions => act::view(ui, world, &mut self.purge_ask, actions),
             View::Report => self.report(ui, world, actions),
             View::Settings => self.settings(ui, world, actions),
         }

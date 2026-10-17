@@ -309,6 +309,16 @@ pub enum Action {
     Restore(String),
     /// Move a file into the quarantine, after the detail panel has shown what it is.
     Quarantine(String),
+    /// Delete a quarantined entry for good, with the word the person typed.
+    ///
+    /// The typed word travels with the action so the shell can refuse a call that did not
+    /// come from a dialog: the interface is not the only thing that may dispatch one.
+    Purge {
+        /// The entry to delete.
+        id: String,
+        /// What the person typed. It has to be `DELETE`.
+        typed: String,
+    },
     /// Read the quarantine and the journal from disk again.
     RefreshActions,
     /// Open a file or directory in the platform's file manager.

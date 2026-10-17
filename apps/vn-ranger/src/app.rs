@@ -655,6 +655,32 @@ impl App {
                 }
                 self.refresh_actions();
             }
+            Action::Purge { id, typed } => {
+                // The interface disables the button until the word is typed; this checks
+                // it again, because the interface is not the only thing that can dispatch
+                // an action.
+                if typed.trim() != "DELETE" {
+                    self.world.error =
+                        Some("Deleting for good needs the word DELETE typed exactly.".to_owned());
+                } else {
+                    match vnr_native::act::purge(
+                        &mut self.journal,
+                        &id,
+                        vnr_core::Confirmation::Typed,
+                        &vnr_native::action::RealIo,
+                    ) {
+                        Ok(purged) => {
+                            self.world.error = None;
+                            self.world.notice = Some(format!(
+                                "{} was deleted for good. The journal has the entry that says so.",
+                                purged.manifest.original_path
+                            ));
+                        }
+                        Err(error) => self.world.error = Some(error.to_string()),
+                    }
+                }
+                self.refresh_actions();
+            }
             Action::Quarantine(path) => {
                 match vnr_native::act::quarantine(
                     &mut self.journal,
