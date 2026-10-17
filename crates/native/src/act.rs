@@ -16,9 +16,11 @@ use std::fmt;
 use std::path::Path;
 
 use sha2::{Digest, Sha256};
+use vnr_core::action::Surface;
 use vnr_core::journal::{Action, Confirmation, Draft, JournalEntry, Outcome};
 
 use crate::action::{ActionError, ActionIo};
+use crate::clean::{self, Item, Removal};
 use crate::journal::Journal;
 use crate::quarantine::{self, Manifest, Purged, Quarantined, Restored};
 
@@ -200,6 +202,69 @@ pub fn purge_in(
 /// Write the intent, syncing it. If this fails the act must not happen.
 fn record(journal: &mut Journal, draft: Draft) -> std::result::Result<JournalEntry, ActError> {
     journal.record_synced(draft).map_err(ActError::Unrecorded)
+}
+
+/// Remove the items a person selected from an allowlisted surface, with both journal lines.
+///
+/// The preview has already happened: the items carry what was shown, and the removal
+/// re-checks each one. A surface with nothing selected is not an act and is not journalled,
+/// because a record of "removed nothing" is noise in the one file that has to stay
+/// readable.
+pub fn clean(
+    journal: &mut Journal,
+    surface: Surface,
+    items: &[Item],
+    now_unix: u64,
+    cancel: &dyn Fn() -> bool,
+) -> std::result::Result<Removal, ActError> {
+    if items.is_empty() {
+        return Ok(Removal::default());
+    }
+    let bytes: u64 = items.iter().map(|item| item.bytes).sum();
+    let act_id = next_act_id();
+    record(
+        journal,
+        Draft::intent(Action::Clean)
+            .with_id(&act_id)
+            .with_subject(surface.id())
+            .with_size(bytes)
+            .with_reason(&format!(
+                "{} entries, {} bytes, from {}",
+                items.len(),
+                bytes,
+                surface.label()
+            ))
+            .with_confirmation(Confirmation::Clean),
+    )?;
+
+    let removal = clean::remove_surface(surface, items, now_unix, cancel);
+    let outcome = if removal.failed.is_empty() {
+        Outcome::Ok
+    } else {
+        Outcome::Failed
+    };
+    let reason = format!(
+        "{} removed, {} bytes, {} skipped, {} refused",
+        removal.removed,
+        removal.bytes,
+        removal.skipped,
+        removal.failed.len()
+    );
+    let draft = Draft::result(Action::Clean, outcome)
+        .with_id(&act_id)
+        .with_subject(surface.id())
+        .with_size(removal.bytes)
+        .with_reason(&reason);
+    if let Err(error) = journal.record_synced(draft) {
+        log::warn!("the result of a clean could not be recorded: {error}");
+    }
+    Ok(removal)
+}
+
+/// Whether a clean would remove anything at all, for a caller that wants to ask first.
+#[must_use]
+pub fn clean_preview(surface: Surface, now_unix: u64, cancel: &dyn Fn() -> bool) -> clean::Preview {
+    clean::preview(surface, now_unix, cancel)
 }
 
 fn journal_ok(
@@ -430,6 +495,67 @@ mod tests {
         assert_eq!(ids[0], ids[1]);
         assert_eq!(ids[2], ids[3]);
         assert_ne!(ids[0], ids[2], "two acts, two ids");
+    }
+
+    #[test]
+    fn a_clean_journals_what_it_removed_under_the_surface_it_came_from() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut journal = Journal::open_at(dir.path().join("journal.ndjson")).unwrap();
+        let path = dir.path().join("old.tmp");
+        std::fs::write(&path, b"1234").unwrap();
+        let file = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+        let old = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_000);
+        file.set_times(std::fs::FileTimes::new().set_modified(old))
+            .unwrap();
+        drop(file);
+        let now = 1_000 + 48 * 60 * 60;
+
+        // The item is the one this test made, so the removal is asked for it specifically
+        // rather than for everything the machine's real temp directory holds.
+        let items = vec![Item {
+            path,
+            bytes: 4,
+            modified_unix: 1_000,
+            is_dir: false,
+        }];
+        let removal = clean(&mut journal, Surface::WinTemp, &items, now, &|| false).unwrap();
+        assert_eq!(removal.removed, 1);
+        assert_eq!(removal.bytes, 4);
+
+        let entries = journal.read().entries;
+        let intent = entries
+            .iter()
+            .find(|entry| entry.kind == JournalKind::Intent)
+            .expect("an intent");
+        assert_eq!(intent.action, Some(Action::Clean));
+        assert_eq!(intent.subject.as_deref(), Some(Surface::WinTemp.id()));
+        assert_eq!(intent.confirmation, Some(Confirmation::Clean));
+        let result = entries
+            .iter()
+            .find(|entry| entry.kind == JournalKind::Result)
+            .expect("a result");
+        assert_eq!(result.outcome, Some(Outcome::Ok));
+        assert_eq!(result.id, intent.id);
+        assert!(
+            result
+                .reason
+                .as_deref()
+                .is_some_and(|reason| reason.contains("1 removed")),
+            "the result says what happened: {:?}",
+            result.reason
+        );
+    }
+
+    #[test]
+    fn a_clean_with_nothing_selected_is_not_a_record() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut journal = Journal::open_at(dir.path().join("journal.ndjson")).unwrap();
+        let removal = clean(&mut journal, Surface::WinTemp, &[], 5, &|| false).unwrap();
+        assert_eq!(removal.removed, 0);
+        assert!(
+            journal.read().entries.is_empty(),
+            "a record of removing nothing is noise in the one file that must stay readable"
+        );
     }
 
     #[test]
