@@ -53,6 +53,12 @@ plist = "1.10.1"
 tempfile = "3.27.0"
 opener = "0.9.0"
 
+# Watching files. CC0-1.0 is a public-domain dedication with no attribution or
+# copyleft burden, added to the allowlist in AGENTS.md §8 for this crate alone.
+# Default features are off: the macOS build uses the pure-Rust kqueue backend
+# rather than fsevent-sys.
+notify = { version = "8.2.0", default-features = false }
+
 # Windows-only: each wraps an OS API behind a safe Rust interface, so the
 # workspace keeps `unsafe_code = "forbid"`. None of them is a C dependency.
 winreg = "0.56.0"

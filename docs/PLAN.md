@@ -1,8 +1,9 @@
 # The plan — vn-ranger
 
 **Status:** v0.1.1 ships the interface pass, the full-tab tables and the row footers;
-0.1.2 adds the watcher, the timeline and the baseline. The read-only inventory, the
-local hash-signature engine and the one-shot administrator scan are in the repository.
+0.1.2 builds the watcher, the timeline and the baseline, with its idle-budget soak
+still owed. The read-only inventory, the local hash-signature engine and the one-shot
+administrator scan are in the repository.
 The sections below that describe rules, cleaning, residency and deeper platform access
 are the plan for what follows.
 **Audience:** the maintainer, future contributors, and anyone deciding whether to
@@ -685,7 +686,7 @@ way. Detection work belongs to M2.
 The typography, responsive layout and full-tab tables shipped in v0.1.1. The open items
 above are the next interface pass, not part of this release.
 
-### M2 — v0.1.2, Watch
+### M2 — v0.1.2, Watch — **built; budgets owed**
 
 The machine stops being a snapshot and becomes a series with a diff. Nothing is judged:
 no rules, no findings, no deletion, no journal and no tray. The release answers one
@@ -700,12 +701,11 @@ question — *what changed since the last time this machine looked normal?*
 | 5 | A Changes view | `ui/src/views.rs` | The empty state names what was checked; a long list scrolls; a collector that could not see something shows a capability banner above the list. |
 | 6 | Budgets, and a switch for each background task | `apps/vn-ranger/src/app.rs`, Settings | Idle CPU under 0.5% and working set under 200 MB over 30 minutes, published in `docs/BENCHMARKS.md`; the poll and the watcher can each be turned off. |
 
-**Decisions owed before item 2.** `notify` 8.2 is **CC0-1.0**, which is not on the §8
-allowlist, and its macOS default backend (`fsevent-sys`) is a C dependency. Either CC0
-joins the allowlist with a written reason and the macOS build selects `macos_kqueue`
-with `default-features = false`, or the watcher is built from per-platform crates that
-meet §8 — more code and more risk. The decision is recorded in §14.2 before the
-watcher lands.
+**The watcher decision (taken).** `notify` 8.2 is **CC0-1.0**, a public-domain
+dedication with no attribution or copyleft burden, and it joins the §8 allowlist for
+this crate alone. Default features are off and the macOS build selects `macos_kqueue`,
+so no `fsevent-sys` is linked. The alternative was per-platform watchers, which is more
+code and more platform risk for the same result. The decision is recorded in §14.2.
 
 **The journal stays in v0.1.4.** The 0.1.2 timeline lives in memory for the session,
 so nothing is written that looks like a journal without its guarantees.
@@ -714,6 +714,10 @@ so nothing is written that looks like a journal without its guarantees.
 fixtures; a new file yields exactly one scan; no view says "nothing changed" when a
 collector was unavailable; the idle budgets hold over 30 minutes and are published;
 `cargo xtask ci` is green on three operating systems.
+
+The code for every item is in the tree and its unit tests pass. The 30-minute idle
+soak and its published numbers are still owed, so the milestone is built rather than
+done.
 
 ### M3 — v0.1.3, Explain
 
@@ -907,8 +911,12 @@ external service, nothing to install beside it.
 ## 13. Privacy and data
 
 **Collected:** process metadata (name, path, pid, parent, user, start time), autorun
-entries, the listener table, installed package names, signatures, and hashes of
-startup binaries. Host OS and version.
+entries, the listener table, installed package names, signatures, hashes of startup
+binaries, and hashes of files written to the watched folders (Downloads, Desktop, the
+temporary directory and the startup folders). Host OS and version.
+
+The timeline of what changed during a session is held in memory and is not written to
+disk; only the baseline a person accepts is stored.
 
 **Not collected:** file contents (only hashes), browser history, messages, documents,
 credentials, keystrokes, screenshots, microphone or camera data, and anything sent off
@@ -968,6 +976,11 @@ and that is the launcher's, not ranger's.
 8. **Network:** none in v0.x. No HTTP client, no telemetry, no update ping.
 9. **Model:** none in the application. Model-assisted triage is a possible post-1.0
    feature, local and optional, never a dependency.
+10. **Watcher:** `notify` 8.2 with `default-features = false` and `macos_kqueue` on
+    macOS. CC0-1.0 is a public-domain dedication, added to the §8 allowlist for this
+    crate alone. It is the only way to read a file event without writing `unsafe` or a
+    watcher per operating system, and the kqueue backend keeps the macOS build free of
+    `fsevent-sys`.
 
 **Still owed**
 
@@ -978,10 +991,6 @@ and that is the launcher's, not ranger's.
 5. **Agent scope:** confirm the process, network and persistence boundary, with no
    prompt or content inspection.
 6. **Funding:** donations only, or no funding at all. No paywall either way.
-7. **Watcher dependency:** `notify` 8.2 is CC0-1.0 and its macOS default backend
-   (`fsevent-sys`) is a C dependency. Either CC0 joins the §8 allowlist and macOS
-   selects `macos_kqueue`, or the watcher is built from per-platform crates. Decided
-   before the 0.1.2 watcher lands.
 
 ---
 

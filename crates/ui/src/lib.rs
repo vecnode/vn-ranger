@@ -15,7 +15,7 @@ pub mod widgets;
 
 mod world;
 
-pub use world::{Action, ScanState, View, World};
+pub use world::{Action, Live, ScanState, View, WatchReport, World};
 
 use egui::{Align2, CornerRadius, FontId, Margin, RichText, Sense, vec2};
 
@@ -100,6 +100,7 @@ impl Ui {
             View::Processes => self.processes(ui, world),
             View::Startup => self.startup(ui, world),
             View::Listeners => self.listeners(ui, world),
+            View::Changes => self.changes(ui, world, actions),
             View::Report => self.report(ui, world, actions),
             View::Settings => self.settings(ui, world, actions),
         }
@@ -148,7 +149,17 @@ impl Ui {
                                 ui.label(RichText::new(step.as_str()).size(11.5).color(theme::muted(ui)));
                             }
                             ScanState::Idle => {
-                                if let Some(snapshot) = world.snapshot() {
+                                if let Some(live) = world.live.as_ref().filter(|live| !live.items.is_empty())
+                                {
+                                    ui.label(
+                                        RichText::new(format!(
+                                            "Live · polled {}",
+                                            vnr_core::time::describe_age(world.now_unix, live.at_unix)
+                                        ))
+                                        .size(11.5)
+                                        .color(theme::muted(ui)),
+                                    );
+                                } else if let Some(snapshot) = world.snapshot() {
                                     ui.label(
                                         RichText::new(format!(
                                             "Scanned {}",
@@ -160,9 +171,9 @@ impl Ui {
                                         .size(11.5)
                                         .color(theme::muted(ui)),
                                     );
-                                    if snapshot.elevated {
-                                        widgets::badge(ui, "ADMIN", theme::ATTENTION);
-                                    }
+                                }
+                                if world.snapshot().is_some_and(|snapshot| snapshot.elevated) {
+                                    widgets::badge(ui, "ADMIN", theme::ATTENTION);
                                 }
                             }
                         }
@@ -333,7 +344,100 @@ fn view_icon(view: View) -> icons::Icon {
         View::Processes => icons::Icon::Processes,
         View::Startup => icons::Icon::Startup,
         View::Listeners => icons::Icon::Listeners,
+        View::Changes => icons::Icon::Changes,
         View::Report => icons::Icon::Report,
         View::Settings => icons::Icon::Settings,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+    use vnr_core::{EventKind, Host, ProcessFact, Snapshot, Timeline, TimelineEvent};
+
+    fn process() -> ProcessFact {
+        ProcessFact {
+            pid: 42,
+            parent: Some(1),
+            name: "agent".to_owned(),
+            exe: Some("C:\\agent.exe".to_owned()),
+            command: Some("agent.exe --quiet".to_owned()),
+            user: Some("me".to_owned()),
+            started_at_unix: Some(900),
+        }
+    }
+
+    fn base_world(snapshot: Option<Snapshot>, baseline: Option<Snapshot>) -> World {
+        let changes = match (&baseline, &snapshot) {
+            (Some(baseline), Some(snapshot)) => vnr_core::diff_snapshots(baseline, snapshot),
+            _ => Vec::new(),
+        };
+        World {
+            snapshot,
+            scan: ScanState::Idle,
+            error: None,
+            notice: None,
+            elevated: false,
+            can_elevate: false,
+            data_dir: PathBuf::from("data"),
+            signatures_dir: PathBuf::from("signatures"),
+            version: "0.1.2".to_owned(),
+            now_unix: 1_000,
+            live: None,
+            poll_enabled: true,
+            watch: WatchReport::default(),
+            baseline,
+            baseline_error: None,
+            changes,
+            timeline: Timeline::new(),
+        }
+    }
+
+    fn draw(view: View, world: &World) {
+        egui::__run_test_ui(|root| {
+            let ctx = root.ctx().clone();
+            let mut ui = Ui::new(&ctx);
+            ui.view = view;
+            let _ = ui.show(root, world);
+        });
+    }
+
+    #[test]
+    fn every_view_draws_with_an_empty_world() {
+        let world = base_world(None, None);
+        for view in View::ALL {
+            draw(view, &world);
+        }
+    }
+
+    #[test]
+    fn every_view_draws_with_a_scan_a_baseline_and_a_timeline() {
+        let mut after = Snapshot::empty(Host::default(), false);
+        after.processes.push(process());
+        let mut before = after.clone();
+        before.processes.clear();
+        let mut world = base_world(Some(after.clone()), Some(before));
+        world.live = Some(Live {
+            items: after.processes.clone(),
+            at_unix: 999,
+            reason: None,
+        });
+        world.timeline.push(TimelineEvent::new(
+            999,
+            EventKind::ProcessStarted,
+            "agent (pid 42)",
+            "C:\\agent.exe",
+            "processes",
+        ));
+        world.watch = WatchReport {
+            enabled: true,
+            roots: vec!["C:\\Users\\me\\Downloads".to_owned()],
+            skipped: Vec::new(),
+            error: None,
+        };
+        for view in View::ALL {
+            draw(view, &world);
+        }
     }
 }

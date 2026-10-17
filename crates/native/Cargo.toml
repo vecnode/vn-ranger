@@ -24,6 +24,10 @@ hex = { workspace = true }
 directories = { workspace = true }
 plist = { workspace = true }
 tempfile = { workspace = true }
+notify = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+notify = { workspace = true, features = ["macos_kqueue"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = { workspace = true }

@@ -38,6 +38,48 @@ pub fn last_snapshot_path() -> PathBuf {
     data_dir().join("last-scan.json")
 }
 
+/// Where the accepted baseline is kept.
+///
+/// The baseline is a snapshot a person chose to keep, not the newest scan. It is only
+/// written when someone asks for it.
+#[must_use]
+pub fn baseline_path() -> PathBuf {
+    data_dir().join("baseline.json")
+}
+
+/// The folders the file watcher reads.
+///
+/// Only directories that exist are returned, so the interface never claims to watch a
+/// folder the system does not have. The temporary directory is watched on every
+/// platform; the startup folders are the ones the collectors already read.
+#[must_use]
+pub fn watch_roots() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    if let Some(dirs) = directories::UserDirs::new() {
+        for dir in [dirs.download_dir(), dirs.desktop_dir()].into_iter().flatten() {
+            roots.push(dir.to_path_buf());
+        }
+        let home = dirs.home_dir();
+        roots.push(home.join(".config").join("autostart"));
+        roots.push(home.join("Library").join("LaunchAgents"));
+    }
+    if let Some(appdata) = std::env::var_os("APPDATA") {
+        roots.push(
+            PathBuf::from(appdata)
+                .join("Microsoft")
+                .join("Windows")
+                .join("Start Menu")
+                .join("Programs")
+                .join("Startup"),
+        );
+    }
+    roots.push(std::env::temp_dir());
+    roots.retain(|path| path.is_dir());
+    let mut seen = std::collections::HashSet::new();
+    roots.retain(|path| seen.insert(path.clone()));
+    roots
+}
+
 /// Create a directory and every parent that is missing.
 pub fn ensure_dir(path: &std::path::Path) -> io::Result<()> {
     std::fs::create_dir_all(path)
@@ -51,4 +93,23 @@ pub fn report_path(extension: &str) -> PathBuf {
         crate::now_unix(),
         extension.trim_start_matches('.')
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn watch_roots_exist_and_are_unique() {
+        let roots = watch_roots();
+        assert!(
+            !roots.is_empty(),
+            "the temporary directory always exists and is watched"
+        );
+        let mut unique = std::collections::HashSet::new();
+        for root in &roots {
+            assert!(root.is_dir(), "{} should be a directory", root.display());
+            assert!(unique.insert(root.clone()), "{} appears twice", root.display());
+        }
+    }
 }

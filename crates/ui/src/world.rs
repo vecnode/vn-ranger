@@ -6,7 +6,9 @@
 
 use std::path::PathBuf;
 
-use vnr_core::Snapshot;
+use vnr_core::diff::Change;
+use vnr_core::timeline::Timeline;
+use vnr_core::{ProcessFact, Snapshot};
 
 /// A surface in the application.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -19,6 +21,8 @@ pub enum View {
     Startup,
     /// Everything that is listening.
     Listeners,
+    /// What changed while ranger was watching.
+    Changes,
     /// Export and read the scan.
     Report,
     /// Preferences, elevation and privacy.
@@ -27,11 +31,12 @@ pub enum View {
 
 impl View {
     /// Every view, in navigation order.
-    pub const ALL: [View; 6] = [
+    pub const ALL: [View; 7] = [
         View::Overview,
         View::Processes,
         View::Startup,
         View::Listeners,
+        View::Changes,
         View::Report,
         View::Settings,
     ];
@@ -44,6 +49,7 @@ impl View {
             Self::Processes => "Processes",
             Self::Startup => "Startup",
             Self::Listeners => "Listeners",
+            Self::Changes => "Changes",
             Self::Report => "Report",
             Self::Settings => "Settings",
         }
@@ -57,6 +63,7 @@ impl View {
             Self::Processes => "Every process this account can see.",
             Self::Startup => "What runs without a person clicking it.",
             Self::Listeners => "Sockets waiting for a connection.",
+            Self::Changes => "What changed since ranger opened, and since the baseline.",
             Self::Report => "A record you can read, export and keep.",
             Self::Settings => "How ranger runs, and what it will not do.",
         }
@@ -78,6 +85,30 @@ impl ScanState {
     pub fn is_busy(&self) -> bool {
         matches!(self, Self::Running(_))
     }
+}
+
+/// The newest process poll, which is newer than the snapshot taken around it.
+#[derive(Clone, Debug)]
+pub struct Live {
+    /// Every process the poll could see.
+    pub items: Vec<ProcessFact>,
+    /// Seconds since the Unix epoch when the poll finished.
+    pub at_unix: u64,
+    /// Why the poll is incomplete, when it is.
+    pub reason: Option<String>,
+}
+
+/// What the file watcher is reading, and what it refused.
+#[derive(Clone, Debug, Default)]
+pub struct WatchReport {
+    /// Whether the watcher is switched on.
+    pub enabled: bool,
+    /// The folders the operating system accepted.
+    pub roots: Vec<String>,
+    /// The folders it refused, with the reason.
+    pub skipped: Vec<String>,
+    /// Why the watcher could not start, when it could not.
+    pub error: Option<String>,
 }
 
 /// Everything the interface draws from.
@@ -103,6 +134,20 @@ pub struct World {
     pub version: String,
     /// Seconds since the Unix epoch, refreshed by the shell.
     pub now_unix: u64,
+    /// The newest process poll, when the poll has run.
+    pub live: Option<Live>,
+    /// Whether the process poll is switched on.
+    pub poll_enabled: bool,
+    /// What the file watcher is reading.
+    pub watch: WatchReport,
+    /// The baseline a person accepted, when there is one.
+    pub baseline: Option<Snapshot>,
+    /// Why a baseline file could not be used, when one exists but is unreadable.
+    pub baseline_error: Option<String>,
+    /// How the snapshot differs from the baseline.
+    pub changes: Vec<Change>,
+    /// What changed since ranger opened.
+    pub timeline: Timeline,
 }
 
 impl World {
@@ -116,6 +161,19 @@ impl World {
     #[must_use]
     pub fn snapshot(&self) -> Option<&Snapshot> {
         self.snapshot.as_ref()
+    }
+
+    /// The newest process list the interface has, preferring a non-empty poll over the
+    /// scan. A poll that could read nothing leaves the last scan on screen rather than
+    /// claiming the machine has no processes.
+    #[must_use]
+    pub fn processes(&self) -> &[ProcessFact] {
+        match (&self.live, &self.snapshot) {
+            (Some(live), _) if !live.items.is_empty() => &live.items,
+            (_, Some(snapshot)) => &snapshot.processes,
+            (Some(live), None) => &live.items,
+            (None, None) => &[],
+        }
     }
 }
 
@@ -136,6 +194,14 @@ pub enum Action {
     OpenSignaturesDir,
     /// Run the EICAR self-test through the signature engine.
     SelfTest,
+    /// Keep the current scan as the baseline future scans are compared against.
+    AcceptBaseline,
+    /// Forget the baseline.
+    ClearBaseline,
+    /// Turn the two-second process poll on or off.
+    SetPoll(bool),
+    /// Turn the file watcher on or off.
+    SetWatch(bool),
     /// Open a file or directory in the platform's file manager.
     OpenPath(String),
     /// Close the application.

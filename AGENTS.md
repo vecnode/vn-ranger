@@ -18,12 +18,12 @@ person running it.
 
 ```text
 crates/
-  core      vnr-core     pure and IO-free: facts, snapshots, hash signatures,
-                         reports, time arithmetic
+  core      vnr-core     pure and IO-free: facts, snapshots, timelines, diffs,
+                         hash signatures, reports, time arithmetic
   native    vnr-native   the only crate that touches the world:
                          collect/{processes,autoruns,listeners,packages},
-                         hash, signatures, elevation, paths, store, scan
-  ui        vnr-ui       egui: theme, fonts, icons, widgets, the six views, World/Action
+                         hash, signatures, elevation, paths, store, watch, scan
+  ui        vnr-ui       egui: theme, fonts, icons, widgets, the seven views, World/Action
 apps/
   vn-ranger              the eframe shell: owns the World, runs the worker,
                          carries out actions, and the headless report mode
@@ -233,7 +233,9 @@ Not shipped yet. The contract for v0.1.3:
 Every new dependency is a licence, a supply chain and a size decision.
 
 - Allowed: MIT, Apache-2.0 (including the LLVM exception), BSD-2-Clause,
-  BSD-3-Clause, ISC, Zlib, Unicode-3.0, MPL-2.0 (file-level, unmodified).
+  BSD-3-Clause, ISC, Zlib, Unicode-3.0, MPL-2.0 (file-level, unmodified), and
+  CC0-1.0 for `notify` alone: a public-domain dedication with no attribution or
+  copyleft burden. Any other CC0 crate needs its own decision.
 - Not allowed: GPL, AGPL, LGPL without a written exception, CDLA, SSPL, BUSL, or
   anything whose licence text has to be guessed.
 - No network crate in v0.x: `reqwest`, `ureq`, `hyper`, `h2`, `curl`, `isahc`, `surf`,
@@ -276,6 +278,7 @@ A change is done when:
 | Command parsing | `native/src/collect/winutil.rs` | Quoted paths with spaces, `\SystemRoot\`, registry values with arguments. |
 | Signature checks | `native/src/signatures.rs` | A ClamAV `.hdb` / `.hsb` line can be malformed in a dozen ways; reject and count, never guess. |
 | Hashing | `native/src/hash.rs` | One file can appear in several startup entries; hash once, cap the size, never return a partial digest. |
+| Watching files | `native/src/watch.rs`, `apps/vn-ranger/src/worker.rs` | One editor save produces several events; the debounce is pure and tested, and the hash is capped and cached per path. |
 | Elevation | `native/src/elevation.rs`, `apps/vn-ranger/src/worker.rs` | The elevated copy is one-shot; the unelevated window must not hand it a path to act on. |
 | Listener ownership | `native/src/collect/listeners/` | The socket table and the fd table are read at different times; other users' sockets need privilege. |
 | Autorun parsing | `native/src/collect/autoruns/` | Registry views, 32/64-bit keys, quoted paths, binary plists, systemd user units. |

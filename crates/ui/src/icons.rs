@@ -16,6 +16,8 @@ pub enum Icon {
     Startup,
     /// A listening socket.
     Listeners,
+    /// A clock for the change timeline.
+    Changes,
     /// A report page.
     Report,
     /// Settings sliders.
@@ -58,6 +60,11 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
             painter.circle_stroke(point(0.5, 0.5), 0.12 * rect.width(), stroke);
             painter.circle_stroke(point(0.5, 0.5), 0.27 * rect.width(), stroke);
             painter.circle_filled(point(0.5, 0.5), 0.04 * rect.width(), color);
+        }
+        Icon::Changes => {
+            painter.circle_stroke(point(0.5, 0.5), 0.30 * rect.width(), stroke);
+            painter.line_segment([point(0.5, 0.5), point(0.5, 0.28)], stroke);
+            painter.line_segment([point(0.5, 0.5), point(0.67, 0.57)], stroke);
         }
         Icon::Report => {
             square(painter, point(0.22, 0.12), 0.56, stroke);

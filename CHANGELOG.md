@@ -6,6 +6,18 @@ All notable changes to vn-ranger are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A two-second process poll. New, gone and replaced processes are recorded; a reused pid
+  with a different start time is a new process, not a changed one.
+- File watchers on Downloads, Desktop, the temporary directory and the user's startup
+  folders, with a 500 ms debounce and the existing 64 MB hash cap.
+- An explicit baseline (`baseline.json`) that only a person accepts, and a diff of the
+  latest scan against it.
+- A Changes view: the session timeline and the baseline diff, with empty states that
+  name what was checked.
+- Switches for the poll and the watcher in Settings. They last for the session.
+
 ### Changed
 
 - Release titles are `vn-ranger v<version>`. The published v0.1.1 release was retitled

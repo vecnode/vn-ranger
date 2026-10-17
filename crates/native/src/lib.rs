@@ -16,6 +16,7 @@ pub mod hash;
 pub mod paths;
 pub mod signatures;
 pub mod store;
+pub mod watch;
 
 mod scan;
 

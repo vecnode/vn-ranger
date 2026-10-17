@@ -8,8 +8,55 @@ use vnr_core::Snapshot;
 /// Load the last snapshot, if it is present and this build understands its schema.
 #[must_use]
 pub fn load_last() -> Option<Snapshot> {
-    let path = crate::paths::last_snapshot_path();
-    let text = std::fs::read_to_string(&path).ok()?;
+    load(&crate::paths::last_snapshot_path())
+}
+
+/// What ranger found where the baseline should be.
+#[derive(Clone, Debug)]
+pub enum BaselineLoad {
+    /// No baseline has been accepted.
+    Missing,
+    /// A file is there, but this build cannot use it.
+    Unreadable(String),
+    /// A baseline this build can diff against.
+    Present(Box<Snapshot>),
+}
+
+/// Read the accepted baseline, saying why when it cannot be used.
+///
+/// "No baseline" and "a baseline this build cannot read" are different answers: the
+/// second one still means a person accepted something, and the interface must offer to
+/// replace it rather than pretending the file is not there.
+#[must_use]
+pub fn read_baseline() -> BaselineLoad {
+    let path = crate::paths::baseline_path();
+    if !path.exists() {
+        return BaselineLoad::Missing;
+    }
+    match load(&path) {
+        Some(snapshot) => BaselineLoad::Present(Box::new(snapshot)),
+        None => BaselineLoad::Unreadable(format!(
+            "{} exists, but this build cannot read it. Accepting a new baseline replaces it.",
+            path.display()
+        )),
+    }
+}
+
+/// Save the last snapshot, replacing the previous one atomically.
+pub fn save_last(snapshot: &Snapshot) -> std::io::Result<()> {
+    write_json(snapshot, &crate::paths::last_snapshot_path())
+}
+
+/// Save a snapshot as the accepted baseline, replacing the previous one atomically.
+///
+/// Nothing calls this except a person asking for it: a baseline that moved on its own
+/// would make every diff a comparison against the wrong day.
+pub fn save_baseline(snapshot: &Snapshot) -> std::io::Result<()> {
+    write_json(snapshot, &crate::paths::baseline_path())
+}
+
+fn load(path: &Path) -> Option<Snapshot> {
+    let text = std::fs::read_to_string(path).ok()?;
     let snapshot: Snapshot = serde_json::from_str(&text).ok()?;
     if snapshot.schema != vnr_core::model::SCHEMA_VERSION {
         log::warn!(
@@ -21,12 +68,6 @@ pub fn load_last() -> Option<Snapshot> {
         return None;
     }
     Some(snapshot)
-}
-
-/// Save the last snapshot, replacing the previous one atomically.
-pub fn save_last(snapshot: &Snapshot) -> std::io::Result<()> {
-    let path = crate::paths::last_snapshot_path();
-    write_json(snapshot, &path)
 }
 
 /// Write a snapshot as pretty JSON, replacing the target atomically.
@@ -79,5 +120,15 @@ mod tests {
         write_atomic(&path, b"one").unwrap();
         write_atomic(&path, b"two").unwrap();
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "two");
+    }
+
+    #[test]
+    fn ignores_a_snapshot_from_another_schema() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("baseline.json");
+        let mut snapshot = Snapshot::empty(Host::default(), false);
+        snapshot.schema = vnr_core::model::SCHEMA_VERSION + 1;
+        write_json(&snapshot, &path).unwrap();
+        assert!(load(&path).is_none());
     }
 }

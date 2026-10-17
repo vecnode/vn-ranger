@@ -64,6 +64,17 @@ The private-bytes figure (367 MB) is larger than the working set because wgpu re
 address space it may never touch. Working set is the number a person feels in Task
 Manager, so it is the one the budget tracks.
 
+## 0.1.2, still owed
+
+The poll and the watcher are built; their cost is not yet published:
+
+- The poll's refresh at 300 processes (target: under 10 ms).
+- Idle CPU and working set with the poll and the watcher running for 30 minutes.
+- The delay from a file being written to its hash appearing in the timeline.
+- The debounce under a burst: one editor save must produce one event, not four.
+
+When these exist they belong in the table above, not in a promise.
+
 ## What is not measured yet
 
 - Cold start. The window appears quickly, but "quickly" is not a number. A timestamped

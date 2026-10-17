@@ -34,17 +34,18 @@ impl Ui {
             return;
         };
         let counts = snapshot.counts();
+        let process_count = world.processes().len();
         let width = ui.available_width();
         if width >= 720.0 {
             ui.columns(4, |columns| {
-                widgets::statistic(&mut columns[0], counts.processes, "Processes");
+                widgets::statistic(&mut columns[0], process_count, "Processes");
                 widgets::statistic(&mut columns[1], counts.autoruns, "Startup items");
                 widgets::statistic(&mut columns[2], counts.listeners, "Listeners");
                 widgets::statistic(&mut columns[3], counts.packages, "Packages");
             });
         } else if width >= 560.0 {
             ui.columns(2, |columns| {
-                widgets::statistic(&mut columns[0], counts.processes, "Processes");
+                widgets::statistic(&mut columns[0], process_count, "Processes");
                 widgets::statistic(&mut columns[1], counts.autoruns, "Startup items");
             });
             ui.add_space(6.0);
@@ -53,7 +54,7 @@ impl Ui {
                 widgets::statistic(&mut columns[1], counts.packages, "Packages");
             });
         } else {
-            widgets::statistic(ui, counts.processes, "Processes");
+            widgets::statistic(ui, process_count, "Processes");
             ui.add_space(6.0);
             widgets::statistic(ui, counts.autoruns, "Startup items");
             ui.add_space(6.0);
@@ -92,28 +93,42 @@ impl Ui {
 
     /// The process table and its detail footer.
     pub(crate) fn processes(&mut self, ui: &mut egui::Ui, world: &crate::World) {
-        let Some(snapshot) = world.snapshot() else {
+        let processes = world.processes();
+        if processes.is_empty() && world.snapshot().is_none() {
             widgets::empty(ui, "No processes yet", "Run a scan to see what is running.");
             return;
-        };
+        }
         let needle = self.search.trim().to_lowercase();
-        let rows: Vec<&ProcessFact> = snapshot
-            .processes
+        let rows: Vec<&ProcessFact> = processes
             .iter()
             .filter(|process| filter_process(process, &needle))
             .collect();
+        let live_note = match &world.live {
+            Some(live) if !live.items.is_empty() => {
+                format!(" · live, polled {}", describe_age(world.now_unix, live.at_unix))
+            }
+            _ => String::new(),
+        };
         ui.label(
             RichText::new(format!(
-                "{} of {} processes",
+                "{} of {} processes{}",
                 rows.len(),
-                snapshot.processes.len()
+                processes.len(),
+                live_note
             ))
             .size(11.0)
             .color(theme::muted(ui)),
         );
+        if let Some(reason) = world.live.as_ref().and_then(|live| live.reason.as_ref()) {
+            ui.label(
+                RichText::new(format!("This poll could not read every process: {reason}"))
+                    .size(11.0)
+                    .color(theme::ATTENTION),
+            );
+        }
         let selected = self
             .selected_process
-            .and_then(|pid| snapshot.processes.iter().find(|process| process.pid == pid));
+            .and_then(|pid| processes.iter().find(|process| process.pid == pid));
         let gap = if selected.is_some() { 8.0 } else { 0.0 };
         let footer = if selected.is_some() { PROCESS_FOOTER } else { 0.0 };
         let table_height = (ui.available_height() - footer - gap).max(140.0);
@@ -447,6 +462,142 @@ impl Ui {
     }
 
     /// The report surface.
+    /// The session timeline and the difference from the accepted baseline.
+    pub(crate) fn changes(&mut self, ui: &mut egui::Ui, world: &crate::World, actions: &mut Vec<Action>) {
+        let mut accept = false;
+        let mut clear = false;
+        widgets::card(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Since the baseline").family(theme::semibold()));
+                if world.baseline.is_some() {
+                    widgets::badge(ui, "ACCEPTED", theme::OK);
+                }
+            });
+            ui.add_space(4.0);
+            match &world.baseline {
+                None => {
+                    if let Some(error) = &world.baseline_error {
+                        ui.label(RichText::new(error.as_str()).size(11.5).color(theme::ATTENTION));
+                    } else {
+                        ui.label(
+                            RichText::new(
+                                "No baseline yet. Accepting the current scan records this machine as normal today, so a later scan can say what changed. Ranger does not accept one on its own.",
+                            )
+                            .size(11.5)
+                            .color(theme::muted(ui)),
+                        );
+                    }
+                    ui.add_space(6.0);
+                    if world.snapshot().is_some() {
+                        accept = ui.button("Accept this scan as the baseline").clicked();
+                    } else {
+                        ui.label(
+                            RichText::new("Run a scan first; there is nothing to accept yet.")
+                                .size(11.0)
+                                .color(theme::muted(ui)),
+                        );
+                    }
+                }
+                Some(baseline) => {
+                    widgets::key_value(ui, "Accepted", &format_utc(baseline.taken_at_unix));
+                    ui.add_space(6.0);
+                    if world.changes.is_empty() {
+                        ui.label(
+                            RichText::new(
+                                "No difference from the baseline in this scan. That is a statement about the lists ranger reads, not a verdict about the machine.",
+                            )
+                            .size(11.5)
+                            .color(theme::muted(ui)),
+                        );
+                    } else {
+                        ui.label(
+                            RichText::new(format!("{} difference(s) from the baseline", world.changes.len()))
+                                .size(11.5),
+                        );
+                        ui.add_space(4.0);
+                        const SHOWN: usize = 200;
+                        for change in world.changes.iter().take(SHOWN) {
+                            change_row(ui, change);
+                        }
+                        if world.changes.len() > SHOWN {
+                            ui.label(
+                                RichText::new(format!(
+                                    "Showing the first {SHOWN} of {} differences.",
+                                    world.changes.len()
+                                ))
+                                .size(10.5)
+                                .color(theme::muted(ui)),
+                            );
+                        }
+                    }
+                    ui.add_space(8.0);
+                    ui.horizontal(|ui| {
+                        accept = ui.button("Accept this scan as the new baseline").clicked();
+                        clear = ui.button("Clear the baseline").clicked();
+                    });
+                }
+            }
+        });
+        ui.add_space(10.0);
+        widgets::card(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("This session").family(theme::semibold()));
+                widgets::badge(
+                    ui,
+                    &format!("{} EVENT(S)", world.timeline.len()),
+                    theme::muted(ui),
+                );
+            });
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new(
+                    "The two-second process poll and the file watchers write here. The list is held in memory, so closing ranger clears it.",
+                )
+                .size(11.0)
+                .color(theme::muted(ui)),
+            );
+            ui.add_space(6.0);
+            if world.timeline.is_empty() {
+                let (title, body) = if world.poll_enabled || world.watch.enabled {
+                    (
+                        "Nothing has changed yet",
+                        "Ranger is watching. A process that starts, or a file that appears in a watched folder, will be listed here.",
+                    )
+                } else {
+                    (
+                        "Watching is switched off",
+                        "Both the process poll and the file watcher are off in Settings, so this list cannot grow.",
+                    )
+                };
+                widgets::empty(ui, title, body);
+            } else {
+                const SHOWN: usize = 200;
+                let mut shown = 0;
+                for event in world.timeline.iter().rev().take(SHOWN) {
+                    event_row(ui, event);
+                    shown += 1;
+                }
+                if world.timeline.len() > shown {
+                    ui.label(
+                        RichText::new(format!(
+                            "Showing the newest {shown} of {} events.",
+                            world.timeline.len()
+                        ))
+                        .size(10.5)
+                        .color(theme::muted(ui)),
+                    );
+                }
+            }
+        });
+        if accept {
+            actions.push(Action::AcceptBaseline);
+        }
+        if clear {
+            actions.push(Action::ClearBaseline);
+        }
+    }
+
+    /// Export and read the scan.
     pub(crate) fn report(&mut self, ui: &mut egui::Ui, world: &crate::World, actions: &mut Vec<Action>) {
         let Some(snapshot) = world.snapshot() else {
             widgets::empty(ui, "No report yet", "Run a scan first.");
@@ -512,6 +663,74 @@ impl Ui {
                     .size(11.0)
                     .color(theme::muted(ui)),
             );
+        });
+        ui.add_space(10.0);
+        widgets::card(ui, |ui| {
+            ui.label(RichText::new("Watching").family(theme::semibold()));
+            ui.add_space(4.0);
+            let mut poll = world.poll_enabled;
+            if ui
+                .checkbox(&mut poll, "Poll running processes every two seconds")
+                .changed()
+            {
+                actions.push(Action::SetPoll(poll));
+            }
+            let mut watch = world.watch.enabled;
+            if ui
+                .checkbox(
+                    &mut watch,
+                    "Watch Downloads, Desktop, the temporary and startup folders",
+                )
+                .changed()
+            {
+                actions.push(Action::SetWatch(watch));
+            }
+            ui.label(
+                RichText::new(
+                    "These switches last for this session; ranger does not write a settings file yet.",
+                )
+                .size(10.5)
+                .color(theme::muted(ui)),
+            );
+            if let Some(reason) = world.live.as_ref().and_then(|live| live.reason.as_ref()) {
+                ui.label(
+                    RichText::new(format!("The last process poll was incomplete: {reason}"))
+                        .size(11.0)
+                        .color(theme::ATTENTION),
+                );
+            }
+            if world.watch.enabled {
+                if let Some(error) = &world.watch.error {
+                    ui.label(
+                        RichText::new(format!("The file watcher could not start: {error}"))
+                            .size(11.0)
+                            .color(theme::ATTENTION),
+                    );
+                } else if world.watch.roots.is_empty() {
+                    ui.label(
+                        RichText::new("The file watcher is starting.")
+                            .size(11.0)
+                            .color(theme::muted(ui)),
+                    );
+                } else {
+                    ui.add_space(4.0);
+                    ui.label(
+                        RichText::new("Reading the top level of:")
+                            .size(10.5)
+                            .color(theme::muted(ui)),
+                    );
+                    for root in &world.watch.roots {
+                        widgets::path(ui, root);
+                    }
+                    for skipped in &world.watch.skipped {
+                        ui.label(
+                            RichText::new(format!("Not watched — {skipped}"))
+                                .size(10.5)
+                                .color(theme::muted(ui)),
+                        );
+                    }
+                }
+            }
         });
         ui.add_space(10.0);
         widgets::card(ui, |ui| {
@@ -873,6 +1092,56 @@ fn startup_detail_body(
             }
         });
     }
+}
+
+fn change_row(ui: &mut egui::Ui, change: &vnr_core::Change) {
+    ui.horizontal_wrapped(|ui| {
+        widgets::badge(ui, change.kind.label(), theme::muted(ui));
+        ui.add(
+            egui::Label::new(
+                RichText::new(change.subject.as_str())
+                    .size(11.5)
+                    .family(theme::semibold()),
+            )
+            .wrap(),
+        );
+        ui.add(
+            egui::Label::new(
+                RichText::new(format!("{} · {}", change.detail, change.source))
+                    .size(10.5)
+                    .color(theme::muted(ui)),
+            )
+            .wrap(),
+        );
+    });
+}
+
+fn event_row(ui: &mut egui::Ui, event: &vnr_core::TimelineEvent) {
+    ui.horizontal_wrapped(|ui| {
+        ui.label(
+            RichText::new(format_utc(event.at_unix))
+                .size(10.5)
+                .monospace()
+                .color(theme::muted(ui)),
+        );
+        widgets::badge(ui, event.kind.label(), theme::muted(ui));
+        ui.add(
+            egui::Label::new(
+                RichText::new(event.subject.as_str())
+                    .size(11.5)
+                    .family(theme::semibold()),
+            )
+            .wrap(),
+        );
+        ui.add(
+            egui::Label::new(
+                RichText::new(event.detail.as_str())
+                    .size(10.5)
+                    .color(theme::muted(ui)),
+            )
+            .wrap(),
+        );
+    });
 }
 
 fn table_header(ui: &mut egui::Ui, text: &str) {

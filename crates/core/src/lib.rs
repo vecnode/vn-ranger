@@ -9,13 +9,19 @@
 #![forbid(unsafe_code)]
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
+pub mod diff;
 pub mod model;
 pub mod report;
 pub mod signature;
 pub mod time;
+pub mod timeline;
+pub mod watch;
 
+pub use diff::{Change, ChangeKind, diff_processes, diff_snapshots};
 pub use model::{
     AutorunFact, AutorunKind, AutorunScope, CollectorState, CollectorStatus, Counts, Host, ListenerFact,
     PackageFact, ProcessFact, Protocol, SignatureMatch, SignatureReport, SignatureStatus, Snapshot,
 };
 pub use signature::{HashAlgorithm, HashSignature, SignatureSet};
+pub use timeline::{EventKind, Timeline, TimelineEvent};
+pub use watch::{Debounce, FileTouch};
