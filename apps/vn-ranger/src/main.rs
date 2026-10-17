@@ -48,13 +48,21 @@ fn main() -> eframe::Result<()> {
     // One window per data directory. A second launch does not open a second window: it asks
     // the running one to come forward and exits.
     let instance = match vnr_native::instance::acquire() {
-        Ok(guard) => guard,
-        Err(message) => {
+        Ok(guard) => Some(guard),
+        Err(vnr_native::instance::LockError::Running(message)) => {
             eprintln!("vn-ranger: {message}");
+            record_startup(&message);
             if vnr_native::instance::wake().is_ok() {
                 eprintln!("vn-ranger: the running window has been asked to come forward");
             }
             return Ok(());
+        }
+        Err(vnr_native::instance::LockError::Unwritable(reason)) => {
+            // A lock is an optimisation, not a precondition. Opening without one is better
+            // than not opening, and the window says what happened.
+            eprintln!("vn-ranger: {reason}");
+            record_startup(&reason);
+            None
         }
     };
     // A wake file from a crash must not raise a window nobody asked for.
@@ -117,6 +125,27 @@ fn write_headless_report(path: &Path, record: bool) {
     ));
     if let Err(error) = journal.record_synced(draft) {
         eprintln!("vn-ranger: the scan finished, but the journal could not be written: {error}");
+    }
+}
+
+/// Leave a line where a person can find it when there is no window to say it in.
+///
+/// A release build on Windows is a window-subsystem binary: it has no console, so an
+/// `eprintln!` at startup goes nowhere. A failure that leaves no trace is the one thing this
+/// program must never do, so it writes beside its own data.
+fn record_startup(problem: &str) {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs());
+    let line = format!(
+        "{} vn-ranger {}: {problem}\n",
+        vnr_core::time::format_utc(now),
+        env!("CARGO_PKG_VERSION")
+    );
+    let path = vnr_native::paths::data_dir().join("startup.log");
+    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+        use std::io::Write;
+        let _ = file.write_all(line.as_bytes());
     }
 }
 

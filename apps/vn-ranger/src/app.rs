@@ -68,7 +68,7 @@ impl App {
     pub fn new(
         cc: &eframe::CreationContext<'_>,
         background: bool,
-        instance: vnr_native::instance::InstanceGuard,
+        instance: Option<vnr_native::instance::InstanceGuard>,
         soak_path: Option<std::path::PathBuf>,
     ) -> Self {
         let settings = vnr_native::store::load_ui_settings();
@@ -168,7 +168,7 @@ impl App {
             receiver: None,
             watch,
             settings,
-            instance: Some(instance),
+            instance,
             cancel: None,
             journal,
             journal_reported,
