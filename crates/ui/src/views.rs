@@ -12,6 +12,8 @@ const PROCESS_FOOTER: f32 = 190.0;
 const STARTUP_FOOTER: f32 = 210.0;
 const TABLE_HEADER: f32 = 26.0;
 const TABLE_ROW: f32 = 24.0;
+/// Breathing room below a detail footer, so the card does not merge into the window edge.
+const BOTTOM_GAP: f32 = 12.0;
 
 impl Ui {
     /// The overview: the state of the machine at a glance.
@@ -153,6 +155,7 @@ impl Ui {
             }
             return;
         }
+
         let attention = world
             .findings
             .iter()
@@ -164,21 +167,88 @@ impl Ui {
             .filter(|finding| finding.severity == vnr_core::Severity::Notice)
             .count();
         let info = world.findings.len().saturating_sub(attention + notice);
-        ui.label(
-            RichText::new(format!(
-                "{} finding(s) · {attention} attention · {notice} notice · {info} info",
-                world.findings.len()
-            ))
-            .size(11.0)
-            .color(theme::muted(ui)),
-        );
-        ui.add_space(6.0);
-        let mut target = None;
-        for finding in &world.findings {
-            if finding_card(ui, finding) {
-                target = Some(finding.clone());
+
+        // Filters stay above the list so a long scan remains navigable.
+        ui.horizontal_wrapped(|ui| {
+            for (label, value, count) in [
+                ("All", None, world.findings.len()),
+                ("Attention", Some(vnr_core::Severity::Attention), attention),
+                ("Notice", Some(vnr_core::Severity::Notice), notice),
+                ("Info", Some(vnr_core::Severity::Info), info),
+            ] {
+                let selected = self.finding_severity == value;
+                if ui
+                    .selectable_label(selected, format!("{label} ({count})"))
+                    .clicked()
+                {
+                    self.finding_severity = value;
+                }
             }
             ui.add_space(8.0);
+            ui.add(
+                egui::TextEdit::singleline(&mut self.finding_query)
+                    .hint_text("Filter by rule, subject or evidence")
+                    .desired_width(230.0)
+                    .margin(egui::Margin::symmetric(8, 4)),
+            );
+            if (self.finding_severity.is_some() || !self.finding_query.trim().is_empty())
+                && ui.button("Clear").clicked()
+            {
+                self.finding_severity = None;
+                self.finding_query.clear();
+            }
+        });
+        ui.add_space(6.0);
+
+        let needle = self.finding_query.trim().to_lowercase();
+        let matches = |finding: &vnr_core::Finding| {
+            let severity_ok = self
+                .finding_severity
+                .is_none_or(|severity| finding.severity == severity);
+            let text_ok = needle.is_empty()
+                || finding.title.to_lowercase().contains(&needle)
+                || finding.subject_label.to_lowercase().contains(&needle)
+                || finding.rule_id.contains(&needle)
+                || finding
+                    .evidence
+                    .iter()
+                    .any(|line| line.to_lowercase().contains(&needle));
+            severity_ok && text_ok
+        };
+
+        let shown: Vec<&vnr_core::Finding> =
+            world.findings.iter().filter(|finding| matches(finding)).collect();
+        ui.label(
+            RichText::new(format!(
+                "Showing {} of {} finding(s)",
+                shown.len(),
+                world.findings.len()
+            ))
+            .size(10.5)
+            .color(theme::muted(ui)),
+        );
+        ui.add_space(4.0);
+
+        let mut target = None;
+        if shown.is_empty() {
+            widgets::empty(
+                ui,
+                "No findings match this filter",
+                "Change the severity or the text to see the rest of this scan.",
+            );
+        } else {
+            egui::ScrollArea::vertical()
+                .id_salt("findings")
+                .auto_shrink([false, false])
+                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
+                .show(ui, |ui| {
+                    for finding in shown {
+                        if finding_card(ui, finding) {
+                            target = Some(finding.clone());
+                        }
+                        ui.add_space(8.0);
+                    }
+                });
         }
         if let Some(finding) = target {
             self.suppress_target = Some(finding);
@@ -229,7 +299,8 @@ impl Ui {
             .and_then(|pid| processes.iter().find(|process| process.pid == pid));
         let gap = if selected.is_some() { 8.0 } else { 0.0 };
         let footer = if selected.is_some() { PROCESS_FOOTER } else { 0.0 };
-        let table_height = (ui.available_height() - footer - gap).max(140.0);
+        let bottom = if selected.is_some() { BOTTOM_GAP } else { 0.0 };
+        let table_height = (ui.available_height() - footer - gap - bottom).max(140.0);
         let body_height = (table_height - TABLE_HEADER).max(80.0);
         let column_space = ui.spacing().item_spacing.x;
         let process_width = (ui.available_width() - 64.0 - 140.0 - 110.0 - 3.0 * column_space).max(180.0);
@@ -312,6 +383,7 @@ impl Ui {
             detail_footer(ui, PROCESS_FOOTER, |ui| {
                 process_detail_body(ui, process, world.now_unix);
             });
+            ui.add_space(BOTTOM_GAP);
         }
     }
 
@@ -346,7 +418,8 @@ impl Ui {
             .and_then(|id| snapshot.autoruns.iter().find(|autorun| autorun.id == id));
         let gap = if selected.is_some() { 8.0 } else { 0.0 };
         let footer = if selected.is_some() { STARTUP_FOOTER } else { 0.0 };
-        let table_height = (ui.available_height() - footer - gap).max(140.0);
+        let bottom = if selected.is_some() { BOTTOM_GAP } else { 0.0 };
+        let table_height = (ui.available_height() - footer - gap - bottom).max(140.0);
         let body_height = (table_height - TABLE_HEADER).max(80.0);
         let column_space = ui.spacing().item_spacing.x;
         let name_width = (ui.available_width() - 120.0 - 90.0 - 70.0 - 3.0 * column_space).max(180.0);
@@ -430,6 +503,7 @@ impl Ui {
             if let Some(path) = open_path {
                 self.open_path = Some(path);
             }
+            ui.add_space(BOTTOM_GAP);
         }
     }
 

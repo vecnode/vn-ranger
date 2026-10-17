@@ -760,13 +760,27 @@ expiry.
 
 ### M4 — v0.1.5, Act
 
-- The action journal first: append-only, one entry written before the action, and a
-  killed process leaves it consistent.
-- Quarantine and restore with a manifest and a hash; allowlisted cleanup with preview,
-  per-item selection and dry-run; typed confirmation for anything permanent.
-- **Exit:** traversal, symlink, hard-link and TOCTOU tests pass; restore is verified;
-  no path outside the allowlist can be reached; every deletion path has two reviewers;
-  a crash mid-action leaves the journal consistent.
+The release where ranger can change the machine. It is the only one in the 0.1.x line that
+can, so the order is fixed: the journal first, then quarantine, then cleanup. Every gate
+in §5.6 and in `AGENTS.md` §2 applies; a feature that cannot meet them waits.
+
+| # | Work | Where | Done when |
+|---|---|---|---|
+| 1 | The action journal: append-only NDJSON, one entry flushed **before** the action, with id, time, action, subject, path, hash, result and reason | `native/src/journal.rs` (new) | A process killed between the "started" entry and the action leaves a readable journal with no "finished" entry; a test simulates the kill; a full disk refuses the action instead of performing it unrecorded |
+| 2 | The typed action API: takes an **id**, never a path; resolves under the quarantine or cleanup root; refuses `..`, a separator in an id, symlinks and hard links (nlink > 1) | `native/src/action.rs` (new) | Traversal, symlink, hard-link and TOCTOU fixtures all pass; a path outside the root cannot be expressed |
+| 3 | Quarantine: `<data>/quarantine/<id>/` holds the file and `manifest.json` (original path, hash, size, mode, reason, time); restore verifies the hash and refuses a changed file | `native/src/quarantine.rs` (new), UI | Quarantine → restore returns the same bytes; restore refuses a hash mismatch; a same-volume move is one rename, a cross-volume move is copy → fsync → verify → unlink |
+| 4 | Cleanup preview: an allowlist of cache, temporary and log locations per OS; a cancellable walk with sizes, per-item selection and a dry run that touches nothing | `native/src/clean.rs` (new) | A test proves a path outside the allowlist is refused; home, Documents, Desktop and Pictures are unreachable by construction; dry run writes no journal and deletes nothing |
+| 5 | Typed confirmation proportional to the action, recorded in the journal | UI | A permanent action cannot be confirmed with one click; the journal names the confirmation |
+| 6 | The Act surfaces: quarantine candidates with preview, the quarantine list with restore and permanent delete, the journal newest first, and the data-directory size in Settings | `crates/ui/src/views.rs` | Every empty state says what was checked; a failure names the file and the OS error |
+| 7 | Budgets: the cleanup walk and the journal write measured, published | `docs/BENCHMARKS.md` | Journal write < 1 ms per event; a 10,000-entry preview bounded and cancellable |
+
+**Exit for 0.1.5:** every deletion path has two reviewers and traversal, symlink,
+hard-link and TOCTOU tests; no path outside the allowlist is reachable; a crash
+mid-action leaves the journal consistent; restore is verified; the language audit says
+"quarantine", never "fix"; `cargo xtask ci` is green on three platforms.
+
+**Deliberately not in 0.1.5:** registry cleaning, "junk" scoring, secure-delete claims, a
+service, and any elevated deletion. The elevated copy stays a one-shot scan.
 
 ### M5 — v0.1.6, Resident
 

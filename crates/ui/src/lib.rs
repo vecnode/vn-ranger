@@ -41,6 +41,8 @@ pub struct Ui {
     project_rect: egui::Rect,
     suppress_target: Option<vnr_core::Finding>,
     suppress_reason: String,
+    finding_severity: Option<vnr_core::Severity>,
+    finding_query: String,
     mark: egui::TextureHandle,
 }
 
@@ -67,6 +69,8 @@ impl Ui {
             project_rect: egui::Rect::NOTHING,
             suppress_target: None,
             suppress_reason: String::new(),
+            finding_severity: None,
+            finding_query: String::new(),
             mark,
         }
     }
@@ -99,7 +103,10 @@ impl Ui {
                 self.page_header(ui, world);
                 ui.add_space(10.0);
                 let view = self.view;
-                if matches!(view, View::Processes | View::Startup | View::Listeners) {
+                if matches!(
+                    view,
+                    View::Processes | View::Startup | View::Listeners | View::Findings
+                ) {
                     self.draw_view(ui, world, &mut actions, view);
                 } else {
                     let mut scroll = egui::ScrollArea::vertical()

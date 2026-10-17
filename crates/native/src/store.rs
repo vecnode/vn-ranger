@@ -116,8 +116,31 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     let mut temp = tempfile::NamedTempFile::new_in(parent)?;
     temp.write_all(bytes)?;
     temp.as_file().sync_all()?;
-    temp.persist(path).map_err(|error| error.error)?;
-    Ok(())
+    // Replacing a file can be refused for a moment on Windows while another handle —
+    // an antivirus scanner, the search indexer, a second ranger window — still has it
+    // open. A scan result is worth a few short retries rather than a lost save.
+    let mut attempt = 0_u32;
+    let mut result = temp.persist(path);
+    loop {
+        match result {
+            Ok(_) => return Ok(()),
+            Err(error) => {
+                let transient = is_transient_replace(&error.error);
+                if attempt < 3 && transient {
+                    attempt += 1;
+                    std::thread::sleep(std::time::Duration::from_millis(60 * u64::from(attempt)));
+                    result = error.file.persist(path);
+                } else {
+                    return Err(error.error);
+                }
+            }
+        }
+    }
+}
+
+fn is_transient_replace(error: &std::io::Error) -> bool {
+    matches!(error.kind(), std::io::ErrorKind::PermissionDenied)
+        || matches!(error.raw_os_error(), Some(5) | Some(32))
 }
 
 /// Write a Markdown report next to the JSON exports.
