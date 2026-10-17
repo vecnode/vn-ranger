@@ -786,19 +786,20 @@ the target is revised with a reason.
 
 | Budget | Target | Why |
 |---|---|---|
-| Cold start to first frame | ≤ 500 ms | a resident app is opened often |
+| Cold start to window | ≤ 500 ms (measured 30–116 ms; first frame not measured) | a resident app is opened often |
 | Idle CPU, resident, no scan | < 0.5% of one core | "always open" must not cost a laptop |
 | Idle working set | ≤ 200 MB in v0.1.x; 120 MB is the v1.0 goal | 166 MB was measured with the wgpu backend; glow is the next experiment |
-| Release archive | ≤ 12 MB | a small installer; the Windows zip measured 5.85 MB |
-| Installed footprint | ≤ 40 MB | no models, no runtime, no database; the binary measured 14.55 MB |
+| Release archive | ≤ 12 MB | measured 6.25 MB Windows, 8.18 MB Linux, 5.11 MB macOS |
+| Installed footprint | ≤ 40 MB | no models, no runtime, no database; the Windows binary measured 14.8 MB |
 | Inventory scan | ≤ 3 s typical | longer is allowed with progress; measured 1.2–1.8 s |
 | Hashing | ≥ 200 MB/s single-thread SHA-256 on NVMe | bounded, visible work; not yet measured |
 | Journal write | < 1 ms per event | no UI stalls; the journal arrives with v0.3.0 |
 
 Measured on the development Windows machine: 287–291 processes, 131 startup items,
 95–102 listeners, 128 packages, a 1.2–1.8 s scan, 166 MB idle working set, 0% idle CPU,
-a 14.55 MB release binary and a 5.85 MB zip. `docs/BENCHMARKS.md` has the method and the
-numbers that are still owed.
+a 14.8 MB release binary, a window in 30–116 ms, and 6.25/8.18/5.11 MB archives for
+Windows, Linux and macOS. `docs/BENCHMARKS.md` has the method and the numbers that are
+still owed.
 
 The one honest comparison to zeroclaw is shape, not bytes: one binary, no runtime, no
 external service, nothing to install beside it.
