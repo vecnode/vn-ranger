@@ -6,16 +6,20 @@ All notable changes to vn-ranger are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-17
+
+### Added
+
+- Embedded Inter Regular, Inter SemiBold and JetBrains Mono; no system-font lookup.
+
 ### Changed
 
-- The interface now uses embedded Inter and JetBrains Mono, a compact 13 px body with a
-  21 px page title and a 22 px maximum display number, full-width cards and tighter
-  spacing. The statistic and preview columns respond to the window width, so rectangles
-  do not overlap on a small window; dense tables scroll horizontally and the page has a
-  visible scrollbar. Each view keeps its own scroll position.
-- Processes, Startup and Listeners use full-tab tables with sticky headers, columns
-  computed from the available width, whole-row selection and a pinned full-width detail
-  footer for the selected process or startup item.
+- Compact type scale: 13 px body, 21 px page title and 22 px maximum display number,
+  with tighter chrome and full-width cards. Statistic and preview columns respond to
+  the window width instead of overlapping.
+- Processes, Startup and Listeners fill their tab with sticky-header tables, whole-row
+  selection and a pinned, full-width detail footer for the selected process or startup
+  item. Each view keeps its own scroll position.
 
 ## [0.1.0] - 2026-10-17
 
@@ -50,5 +54,6 @@ All notable changes to vn-ranger are recorded here. The format follows
 - vn-launcher cannot install the release until its own install path ships; ranger is
   built to the contract now.
 
-[Unreleased]: https://github.com/vecnode/vn-ranger/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/vecnode/vn-ranger/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/vecnode/vn-ranger/releases/tag/v0.1.1
 [0.1.0]: https://github.com/vecnode/vn-ranger/releases/tag/v0.1.0

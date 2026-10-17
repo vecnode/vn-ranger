@@ -99,9 +99,9 @@ for this system" is a useful answer; a Linux binary named `macos` is not.
 ## 5. Versioning
 
 - Start at `v0.1.0`.
-- Patch releases fix defects; the `0.1.x` line also carries the watch, act, resident and
-  rule-pack milestones. The `0.2.0` minor is distribution and signing; `v1.0.0` is the
-  audited release.
+- Patch releases fix defects; the `0.1.x` line also carries interface polish and the
+  watch, act, resident and rule-pack milestones. The `0.2.0` minor is distribution and
+  signing; `v1.0.0` is the audited release.
 - Pre-releases carry a semver suffix and the GitHub pre-release flag.
 - **Never replace an asset on an existing tag.** A checksum is a statement about a
   file; replacing the file invalidates every verification already made. Cut a patch.

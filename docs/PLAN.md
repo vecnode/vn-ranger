@@ -1,6 +1,7 @@
 # The plan — vn-ranger
 
-**Status:** v0.1.0. The read-only inventory, the local hash-signature engine and the
+**Status:** v0.1.1 ships the professional interface, full-tab tables and row footers.
+The read-only inventory, the local hash-signature engine and the
 one-shot administrator scan are in the repository. The sections below that describe
 rules, cleaning, residency and deeper platform access are the plan for what follows.
 **Audience:** the maintainer, future contributors, and anyone deciding whether to
@@ -656,7 +657,7 @@ compiles; it is done when the criterion is met and written down.
 tasks, macOS login items and listeners, MSIX/Snap/Flatpak packages, the real-time
 watcher, rules, cleaning. Each is a row in §7 or a milestone below, not a surprise.
 
-### M1.1 — v0.1.1, Professional interface
+### M1.1 — v0.1.1, Professional interface — **shipped (UI scope)**
 
 The first release a person can leave open all day without the interface getting in the
 way. Detection work belongs to M2.
@@ -667,20 +668,21 @@ way. Detection work belongs to M2.
 - **Layout:** compact top bar and rail, full-width cards, responsive statistic and
   preview columns, tables that fill their tab with sticky headers and a pinned
   full-width detail footer, and a visible page scrollbar. The minimum window is
-  920 × 600 logical points; the layout is checked at 920, 1280 and 1600.
-- **Behaviour:** scroll position per view, window size/position and theme remembered,
-  keyboard navigation for the rail, tables and dialog, visible focus, accessible
-  labels, Escape closes a dialog, and the first-run and empty states say what was
-  checked rather than "clean".
-- **Feedback:** a scan progress line that names the current stage, an export action
-  that says where the file went, and a copy-path action beside every path.
-- **Exit:** screenshots at 1280 × 800 and 920 × 600 with no overlapping rectangles;
-  the dense table views fill their tab at both sizes and scroll long result sets;
-  `cargo xtask ci` is green on three operating systems; the release archive stays below
-  10 MB; first painted frame is measured rather than inferred.
+  920 × 600 logical points; the layout is checked at 920, 1380 and 1600.
+- **Behaviour shipped:** scroll position per view and whole-row selection.
+- **Still open, and not claimed by this tag:** window size/position and theme
+  remembered, keyboard navigation for the rail, tables and dialog, visible focus,
+  accessible labels, Escape closes a dialog, and first-run/empty states that say what
+  was checked rather than "clean".
+- **Feedback still open:** a scan progress line that names the current stage, an export
+  action that says where the file went, and feedback on copy-path actions.
+- **Exit for 0.1.1:** no overlapping rectangles at the minimum and wide layouts; the
+  dense table views fill their tab and scroll long result sets; `cargo xtask ci` is
+  green on three operating systems; the release archive stays below 10 MB; window
+  appearance is measured (first painted frame is still owed).
 
-The typography, responsive layout and full-tab tables are in the repository now. The
-rest of M1.1 is open, and each item gets its own commit.
+The typography, responsive layout and full-tab tables shipped in v0.1.1. The open items
+above are the next interface pass, not part of this release.
 
 ### M2 — v0.1.2, Watch and explain
 
