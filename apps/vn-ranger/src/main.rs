@@ -20,7 +20,11 @@ const STARTING_SIZE: [f32; 2] = [1180.0, 780.0];
 /// The smallest the window may be made before the layout stops reflowing.
 const MINIMUM_SIZE: [f32; 2] = [920.0, 600.0];
 
-/// The application's mark, as unmultiplied RGBA.
+/// The application's mark for the window: the crystal on the suite's ink tile.
+///
+/// The tile, not the bare mark. It is what the interface draws beside the name and what
+/// Windows and macOS show in a title bar, and its ink fill is what keeps a white crystal
+/// readable on a light title bar as well as a dark one (`assets/logo/BRAND.md`).
 const ICON: &[u8] = include_bytes!("../../../assets/logo/vn-ranger-app.rgba");
 
 /// The icon is square and this many pixels on a side.

@@ -22,6 +22,7 @@ pub mod paths;
 pub mod quarantine;
 pub mod signatures;
 pub mod store;
+pub mod tray;
 pub mod watch;
 
 mod scan;

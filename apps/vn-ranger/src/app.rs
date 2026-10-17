@@ -41,6 +41,14 @@ pub struct App {
     clean_previews: Vec<(vnr_core::action::Surface, vnr_native::clean::Preview)>,
     /// Counts dry runs, so the interface can tell one from another.
     clean_run: u64,
+    /// The tray, when this desktop has one.
+    tray: Option<vnr_native::tray::Tray>,
+    /// Whether the tray has been attempted, so a machine without one tries once.
+    tray_started: bool,
+    /// Whether the scheduled scan is postponed.
+    paused: bool,
+    /// Whether this close is the end of the program rather than a trip to the tray.
+    quitting: bool,
 }
 
 impl App {
@@ -83,6 +91,9 @@ impl App {
                 enabled: settings.watch.unwrap_or(true),
                 ..WatchReport::default()
             },
+            tray: vnr_ui::TrayState::Unknown,
+            paused: false,
+            close_to_tray: settings.close_to_tray.unwrap_or(false),
             baseline,
             baseline_error,
             changes,
@@ -145,6 +156,10 @@ impl App {
             last_frame_unix: now_unix(),
             clean_previews: Vec::new(),
             clean_run: 0,
+            tray: None,
+            tray_started: false,
+            paused: false,
+            quitting: false,
         };
         if app.world.snapshot.is_none() {
             app.start_scan(&cc.egui_ctx, false);
@@ -304,6 +319,78 @@ impl App {
             self.clean_previews.push((surface, preview));
         }
         self.world.clean = Some(report);
+    }
+
+    /// Put the icon in the status area, once, on the first frame.
+    ///
+    /// A frame is the safe moment to do it: on Windows and macOS the icon needs an event
+    /// loop running on this thread, and by the time a frame is drawn there is one. A
+    /// desktop with no status area is not an error to recover from, it is a state to say
+    /// out loud, in Settings and in the journal.
+    fn start_tray(&mut self, ctx: &egui::Context) {
+        if self.tray_started {
+            return;
+        }
+        self.tray_started = true;
+        let wake = {
+            let ctx = ctx.clone();
+            move || ctx.request_repaint()
+        };
+        let started =
+            vnr_native::tray::Tray::start(vnr_native::tray::ICON.to_vec(), vnr_native::tray::ICON_SIZE, wake);
+        match started {
+            Ok(tray) => {
+                tray.set_paused(self.paused);
+                self.tray = Some(tray);
+                self.world.tray = vnr_ui::TrayState::Present;
+            }
+            Err(reason) => {
+                log::warn!("no tray: {reason}");
+                self.note(Draft::event("no tray").with_reason(&reason));
+                self.world.tray = vnr_ui::TrayState::Absent(reason);
+            }
+        }
+    }
+
+    /// Turn a close request into a hide, when that is what was asked for.
+    ///
+    /// The window is only ever hidden when there is a tray to bring it back, and the journal
+    /// says so at the moment it happens: a person who closed a window and finds a process
+    /// still running deserves to read why in the one file ranger keeps.
+    fn close_or_hide(&mut self, ctx: &egui::Context) {
+        if !ctx.input(|input| input.viewport().close_requested()) || !self.world.hide_on_close(self.quitting)
+        {
+            return;
+        }
+        ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+        self.note(
+            Draft::event("window hidden")
+                .with_reason("the window was closed while close-to-tray is on; the tray icon opens it again"),
+        );
+        self.world.notice = Some("The window is in the status area; its menu opens it again.".to_owned());
+    }
+
+    /// Carry out whatever the tray menu reported.
+    ///
+    /// The tray never gets a fifth action: everything here is an [`Action`] the window can
+    /// also produce, so the two surfaces cannot diverge.
+    fn poll_tray(&mut self, ctx: &egui::Context) {
+        let commands = match &self.tray {
+            Some(tray) => tray.poll(),
+            None => return,
+        };
+        for command in commands {
+            match command {
+                vnr_native::tray::Command::Open => {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                }
+                vnr_native::tray::Command::ScanNow => self.apply(Action::Scan, ctx),
+                vnr_native::tray::Command::Pause => self.apply(Action::PauseScan, ctx),
+                vnr_native::tray::Command::Quit => self.apply(Action::Quit, ctx),
+            }
+        }
     }
 
     fn drain(&mut self) {
@@ -592,6 +679,25 @@ impl App {
                 self.world.poll_led = enabled;
                 self.persist_settings();
             }
+            Action::PauseScan => {
+                self.paused = !self.paused;
+                let now = now_unix();
+                if self.paused {
+                    self.next_scan_unix = now.saturating_add(3600);
+                    self.world.notice = Some(
+                        "The next scheduled scan is an hour away. Scan now, or press Resume \
+                         scheduled scans, to end the postponement."
+                            .to_owned(),
+                    );
+                } else {
+                    self.next_scan_unix = vnr_core::schedule::next_at(now, self.plan, self.schedule_seed);
+                    self.world.notice = Some("Scheduled scans are back on.".to_owned());
+                }
+                self.world.paused = self.paused;
+                if let Some(tray) = &self.tray {
+                    tray.set_paused(self.paused);
+                }
+            }
             Action::SuppressFinding {
                 rule_id,
                 subject,
@@ -701,7 +807,24 @@ impl App {
                     }
                 }
             }
-            Action::Quit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
+            Action::Quit => {
+                // A quit is a quit even when close-to-tray is on: the setting is about the
+                // close button, and a program that cannot be ended from its own menu is
+                // worse than one that cannot be hidden.
+                self.quitting = true;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+            Action::SetCloseToTray(enabled) => {
+                self.world.close_to_tray = enabled;
+                self.settings.close_to_tray = Some(enabled);
+                self.persist_settings();
+                self.world.notice = Some(if enabled {
+                    "Closing the window now hides it; the tray icon brings it back. Quit still quits."
+                        .to_owned()
+                } else {
+                    "Closing the window ends ranger again.".to_owned()
+                });
+            }
             Action::RefreshActions => {
                 self.refresh_actions();
                 self.world.notice = Some("The quarantine and the journal were read again.".to_owned());
@@ -899,6 +1022,7 @@ impl App {
         self.settings.poll = Some(self.world.poll_enabled);
         self.settings.watch = Some(self.world.watch.enabled);
         self.settings.led = Some(self.world.poll_led);
+        self.settings.close_to_tray = Some(self.world.close_to_tray);
         if let Err(error) = vnr_native::store::save_ui_settings(&self.settings) {
             self.world.error = Some(format!("The interface preference could not be saved: {error}"));
         }
@@ -932,6 +1056,8 @@ impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.world.now_unix = now_unix();
+        self.start_tray(&ctx);
+        self.close_or_hide(&ctx);
         self.drain();
         self.drain_watch(&ctx);
         self.tick(&ctx);
@@ -952,6 +1078,13 @@ impl App {
     /// Both are skipped while a scan is running, and the next due time moves only when a
     /// scan actually starts, so a slow scan cannot queue a second one behind itself.
     fn tick(&mut self, ctx: &egui::Context) {
+        self.poll_tray(ctx);
+        if self.paused {
+            // A postponed schedule means the clock has nothing to say; the poll and the
+            // watcher still run, and a person can always scan by hand.
+            self.last_frame_unix = now_unix();
+            return;
+        }
         let now = now_unix();
         let gap = now.saturating_sub(self.last_frame_unix);
         // The poll beats every two seconds; three missed beats is a lid that closed.

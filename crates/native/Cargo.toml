@@ -26,6 +26,7 @@ plist = { workspace = true }
 tempfile = { workspace = true }
 notify = { workspace = true }
 cap-std = { workspace = true }
+tray-icon = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 notify = { workspace = true, features = ["macos_kqueue"] }

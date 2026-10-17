@@ -22,7 +22,7 @@ mod clean;
 
 pub use world::{
     Action, CleanChoice, CleanItem, CleanReport, CleanSurface, JournalRow, Live, QuarantineRow, ScanState,
-    View, WatchReport, World,
+    TrayState, View, WatchReport, World,
 };
 
 use egui::{Align2, CornerRadius, FontId, Margin, RichText, Sense, vec2};
@@ -67,7 +67,7 @@ pub(crate) enum LedState {
 ///
 /// This is a square wave's opposite: a beat is an event with a timestamp, so the lamp
 /// flashes and then goes quiet. A boolean toggled per poll would be a metronome, and a
-/// metronome cannot say that the poll has stopped — which is the one thing this lamp is
+/// metronome cannot say that the poll has stopped â€” which is the one thing this lamp is
 /// for.
 #[must_use]
 pub(crate) fn led_state(
@@ -229,6 +229,7 @@ pub struct Ui {
     watch_new: String,
     error_seen: Option<(String, u64)>,
     error_dismissed: Option<String>,
+    /// The application mark: the crystal on its ink tile, the same bytes the window icon uses.
     mark: egui::TextureHandle,
 }
 
@@ -247,14 +248,34 @@ enum PaletteHit {
     Action(Action),
 }
 
+/// Upload one of the embedded marks as a texture.
+///
+/// A mark that is the wrong size is a one-pixel transparent texture rather than a panic: an
+/// asset edited by hand should cost the picture, not the window.
+fn upload(ctx: &egui::Context, name: &str, rgba: &[u8]) -> egui::TextureHandle {
+    const SIDE: usize = 64;
+    let image = if rgba.len() == SIDE * SIDE * 4 {
+        egui::ColorImage::from_rgba_unmultiplied([SIDE, SIDE], rgba)
+    } else {
+        egui::ColorImage::from_rgba_unmultiplied([1, 1], &[0, 0, 0, 0])
+    };
+    ctx.load_texture(name, image, egui::TextureOptions::LINEAR)
+}
+
 impl Ui {
     /// Build the interface and upload the application mark once.
+    ///
+    /// One mark for both themes: the crystal on the suite's ink tile, which is what the
+    /// window icon is built from too. The tile reads on paper as well as on ink, so the top
+    /// bar does not have to swap artwork when the theme changes.
     #[must_use]
     pub fn new(ctx: &egui::Context) -> Self {
         fonts::install(ctx);
-        let pixels: &[u8] = include_bytes!("../../../assets/logo/vn-ranger-app.rgba");
-        let image = egui::ColorImage::from_rgba_unmultiplied([64, 64], pixels);
-        let mark = ctx.load_texture("vn-ranger-mark", image, egui::TextureOptions::LINEAR);
+        let mark = upload(
+            ctx,
+            "vn-ranger-mark",
+            include_bytes!("../../../assets/logo/vn-ranger-app.rgba"),
+        );
         Self {
             view: View::Overview,
             last_view: View::Overview,
@@ -263,7 +284,9 @@ impl Ui {
             selected_autorun: None,
             only_public: false,
             confirm_elevate: false,
-            dark: true,
+            // Paper is what a new installation opens on. Dark is one click away in the top
+            // bar, and the choice is remembered once it is made.
+            dark: false,
             open_path: None,
             led_flash: None,
             project_open: false,
@@ -509,7 +532,7 @@ impl Ui {
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
                     ui.add_space(4.0);
                     ui.label(
-                        RichText::new("No network · No telemetry")
+                        RichText::new("No network Â· No telemetry")
                             .size(10.0)
                             .color(theme::muted(ui)),
                     );
@@ -584,7 +607,7 @@ impl Ui {
                     ui.add_sized(
                         vec2(240.0, 26.0),
                         egui::TextEdit::singleline(&mut self.search)
-                            .hint_text("Filter…")
+                            .hint_text("Filterâ€¦")
                             .margin(Margin::symmetric(8, 6)),
                     );
                 });
@@ -830,21 +853,21 @@ impl Ui {
             .collect();
         for process in world.processes().iter().take(200) {
             entries.push(PaletteEntry {
-                label: format!("Process · {} (pid {})", process.name, process.pid),
+                label: format!("Process Â· {} (pid {})", process.name, process.pid),
                 hit: PaletteHit::Process(process.pid),
             });
         }
         if let Some(snapshot) = world.snapshot() {
             for autorun in snapshot.autoruns.iter().take(200) {
                 entries.push(PaletteEntry {
-                    label: format!("Startup · {} ({})", autorun.name, autorun.kind.label()),
+                    label: format!("Startup Â· {} ({})", autorun.name, autorun.kind.label()),
                     hit: PaletteHit::Autorun(autorun.id.clone()),
                 });
             }
         }
         for finding in world.findings.iter().take(100) {
             entries.push(PaletteEntry {
-                label: format!("Finding · {}", finding.title),
+                label: format!("Finding Â· {}", finding.title),
                 hit: PaletteHit::Finding(finding.title.to_owned()),
             });
         }
@@ -902,7 +925,7 @@ impl Ui {
                         ui.set_max_width(380.0);
                         ui.horizontal(|ui| {
                             ui.label(RichText::new(error.as_str()).size(11.5).color(theme::BAD));
-                            if ui.small_button("✕").clicked() {
+                            if ui.small_button("âœ•").clicked() {
                                 dismiss = true;
                             }
                         });
@@ -1098,6 +1121,9 @@ mod tests {
             poll_enabled: true,
             poll_led: true,
             watch: WatchReport::default(),
+            tray: TrayState::Present,
+            paused: false,
+            close_to_tray: false,
             baseline,
             baseline_error: None,
             changes,
@@ -1191,6 +1217,32 @@ mod tests {
             let actions = ui.show(root, &world);
             assert!(actions.is_empty(), "a confirmation is a question, not an act");
         });
+    }
+
+    #[test]
+    fn a_close_hides_only_when_it_can_be_undone() {
+        let mut world = base_world(None, None);
+        assert!(
+            !world.hide_on_close(false),
+            "off by default: a close button closes"
+        );
+
+        world.close_to_tray = true;
+        assert!(world.hide_on_close(false), "on, with a tray to come back from");
+
+        assert!(
+            !world.hide_on_close(true),
+            "a quit is a quit, even with close-to-tray on"
+        );
+
+        world.tray = TrayState::Absent("no status area".to_owned());
+        assert!(
+            !world.hide_on_close(false),
+            "a window hidden with no tray is a process nobody can reach"
+        );
+
+        world.tray = TrayState::Unknown;
+        assert!(!world.hide_on_close(false), "an unknown tray is not a tray");
     }
 
     #[test]

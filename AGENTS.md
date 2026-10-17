@@ -125,9 +125,11 @@ act on — never a panic.
   not a trade-off to be weighed; it is out of scope.
 - Rule packs and signature databases are local files. They cannot fetch, and rules are
   data, not code.
-- One local socket is allowed, and only this one: the Linux tray's status-item connection
-  to the session bus, in `native/src/tray/linux.rs`. `xtask` asserts that it is the only
-  socket use in the tree, so "local IPC" cannot quietly become something else.
+- One local socket exists anywhere near the product, and it belongs to the tray's Linux
+  backend: the status-item connection to the session bus, opened by `ksni` (pure-Rust
+  `zbus`), which is reached through `tray-icon`'s `ksni` feature. No file in this tree
+  opens a socket, `xtask` asserts that, and the dependency that does is the one named in
+  §8 — so "local IPC" cannot quietly become something else.
 
 ### Never hide
 
@@ -296,11 +298,15 @@ Every new dependency is a licence, a supply chain and a size decision.
 - Not allowed: GPL, AGPL, LGPL without a written exception, CDLA, SSPL, BUSL, or
   anything whose licence text has to be guessed.
 - No network crate in v0.x: `reqwest`, `ureq`, `hyper`, `h2`, `curl`, `isahc`, `surf`,
-  `attohttpc`, `socket2` and raw socket code are banned. The one local socket the Linux
-  tray needs is named in §2 and asserted by `xtask`.
+  `attohttpc`, `socket2` and raw socket code are banned. The one local socket the tray
+  needs is named in §2 and asserted by `xtask`.
 - No C or C++ build dependency in the default build. A crate that needs one has to
   justify it; `netstat2` is Windows-only here for exactly that reason, and the Linux tray
-  uses `ksni` rather than `tray-icon` precisely to avoid GTK3 and `libappindicator`.
+  takes `tray-icon` with `default-features = false, features = ["ksni"]` precisely so that
+  no GTK3 and no `libappindicator` is compiled in. Both halves of that are a decision:
+  `tray-icon` (MIT OR Apache-2.0) for one menu API on three platforms, and its `ksni`
+  backend, which speaks StatusNotifierItem through the pure-Rust `zbus` and needs no
+  toolkit installed on the user's machine.
 - OS access goes through a safe wrapper (`winreg`, `netstat2`, `is_elevated`, `runas`,
   `sysinfo`, `plist`, `cap-std`), never through a hand-written FFI block.
 - **The action path's dependency is `cap-std`**, and it is not negotiable for
@@ -354,7 +360,7 @@ A change is done when:
 | The allowlist | `native/src/clean.rs`, `core/src/action.rs` | A table, not a heuristic; the walk never follows a link or crosses a device, and a file changed since the preview is skipped. |
 | Packs | `core/src/pack/`, `native/src/pack/` | Verified before parsed; a closed vocabulary; an unknown field is an error; activation and rollback are journal entries. |
 | The Sigma reader | `core/src/sigma/` | YAML is user input: a restricted reader that refuses anchors, tags and multi-document files rather than guessing. |
-| The tray | `native/src/tray/` | `tray-icon` on Windows and macOS, `ksni` on Linux, an event loop per platform, and no icon is a supported state. |
+| The tray | `native/src/tray.rs` | One crate for three desktops, so the subtlety is not a per-platform module: it is that the icon must be created on the frame's thread, that a click arrives on a channel this process has to wake the interface for, and that "no status area" is a state rather than an error. |
 | Elevation | `native/src/elevation.rs`, `apps/vn-ranger/src/worker.rs` | The elevated copy is one-shot; the unelevated window must not hand it a path to act on. |
 | Listener ownership | `native/src/collect/listeners/` | The socket table and the fd table are read at different times; other users' sockets need privilege. |
 | Autorun parsing | `native/src/collect/autoruns/` | Registry views, 32/64-bit keys, quoted paths, binary plists, systemd user units, and a surface table read through one trait. |

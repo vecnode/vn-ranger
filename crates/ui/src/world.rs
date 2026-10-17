@@ -236,6 +236,38 @@ pub struct CleanChoice {
     pub paths: Vec<String>,
 }
 
+/// Whether the application has a tray icon, and why not when it has none.
+///
+/// "No tray" is a supported state, not a failure: a bare session, a container and a Linux
+/// desktop with no StatusNotifier host are all machines ranger has to be honest about.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum TrayState {
+    /// The tray has not been attempted yet.
+    #[default]
+    Unknown,
+    /// The icon is in the status area.
+    Present,
+    /// There is no tray on this desktop, and this is why.
+    Absent(String),
+}
+
+impl TrayState {
+    /// The sentence Settings shows.
+    #[must_use]
+    pub fn sentence(&self) -> String {
+        match self {
+            Self::Unknown => "Not started yet.".to_owned(),
+            Self::Present => "The icon is in the status area. Its menu opens this window, scans now, \
+                 pauses the schedule or quits — the same four things the window does."
+                .to_owned(),
+            Self::Absent(reason) => format!(
+                "None on this desktop: {reason}. Closing this window quits, and nothing is \
+                 hidden in an icon that is not there."
+            ),
+        }
+    }
+}
+
 /// One journal line, as the interface lists it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct JournalRow {
@@ -299,6 +331,15 @@ pub struct World {
     pub poll_led: bool,
     /// What the file watcher is reading.
     pub watch: WatchReport,
+    /// Whether the tray icon is on screen, and why not when it is not.
+    pub tray: TrayState,
+    /// Whether the scheduled scan is postponed.
+    pub paused: bool,
+    /// Whether closing the window hides it to the tray instead of quitting.
+    ///
+    /// Off by default. A setting that hides the program has to be one a person chose, and
+    /// the only honest default for a close button is that it closes.
+    pub close_to_tray: bool,
     /// The baseline a person accepted, when there is one.
     pub baseline: Option<Snapshot>,
     /// Why a baseline file could not be used, when one exists but is unreadable.
@@ -334,6 +375,17 @@ impl World {
     #[must_use]
     pub fn snapshot(&self) -> Option<&Snapshot> {
         self.snapshot.as_ref()
+    }
+
+    /// Whether a close request should hide the window rather than end the application.
+    ///
+    /// Three conditions, and all three matter: the person turned it on, there is a tray to
+    /// come back from, and this close is not a quit. A window hidden on a desktop with no
+    /// tray is a process nobody can reach, which is the one thing this program must never
+    /// become.
+    #[must_use]
+    pub fn hide_on_close(&self, quitting: bool) -> bool {
+        !quitting && self.close_to_tray && matches!(self.tray, TrayState::Present)
     }
 
     /// The newest process list the interface has, preferring a non-empty poll over the
@@ -377,6 +429,13 @@ pub enum Action {
     ClearBaseline,
     /// Turn the two-second process poll on or off.
     SetPoll(bool),
+    /// Postpone the next scheduled scan by an hour, or end a postponement.
+    ///
+    /// The tray's pause item and the Settings button both send this: the tray has no way to
+    /// postpone the schedule that the window does not have.
+    PauseScan,
+    /// Hide the window to the tray when it is closed, or stop doing that.
+    SetCloseToTray(bool),
     /// Turn the file watcher on or off.
     SetWatch(bool),
     /// Show or hide the live poll indicator.

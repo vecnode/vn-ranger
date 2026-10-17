@@ -75,6 +75,13 @@ runas = "1.2.0"
 # Unix-only: effective uid for the elevation status.
 nix = { version = "0.31.3", features = ["user"] }
 
+# The tray, on all three platforms, from one crate with one menu API. The default
+# backend on Linux is `libappindicator`, a GTK3 C dependency this workspace refuses
+# (AGENTS.md §8), so the feature that replaces it is the one taken: `ksni` speaks
+# StatusNotifierItem over the session bus and needs no toolkit. On Windows and macOS
+# that feature resolves to nothing, because the crate gates the dependency by target.
+tray-icon = { version = "0.26.1", default-features = false, features = ["ksni"] }
+
 [profile.dev]
 opt-level = 1
 

@@ -6,7 +6,7 @@ use egui_extras::{Column, TableBuilder};
 use vnr_core::time::{describe_age, format_utc};
 use vnr_core::{AutorunScope, ProcessFact, Snapshot};
 
-use crate::{Action, ChangeFilter, FindingSort, ProcessFilter, SortKey, Ui, View, theme, widgets};
+use crate::{Action, ChangeFilter, FindingSort, ProcessFilter, SortKey, TrayState, Ui, View, theme, widgets};
 
 const PROCESS_FOOTER: f32 = 190.0;
 const STARTUP_FOOTER: f32 = 210.0;
@@ -1288,6 +1288,63 @@ impl Ui {
                     );
                     ui.add_space(4.0);
                 }
+            }
+        });
+        ui.add_space(10.0);
+        widgets::card(ui, |ui| {
+            ui.label(RichText::new("Residency").family(theme::semibold()));
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                let (button, hint) = if world.paused {
+                    (
+                        "Resume scheduled scans",
+                        "Scheduled scans are postponed. Nothing runs on its own until you resume or scan now.",
+                    )
+                } else {
+                    (
+                        "Pause for an hour",
+                        "Scheduled scans run on their own; this postpones the next one by an hour.",
+                    )
+                };
+                if ui.button(button).clicked() {
+                    actions.push(Action::PauseScan);
+                }
+                ui.add(
+                    egui::Label::new(RichText::new(hint).size(10.5).color(theme::muted(ui)))
+                        .wrap(),
+                );
+            });
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new(world.tray.sentence())
+                    .size(10.5)
+                    .color(theme::muted(ui)),
+            );
+            ui.add_space(4.0);
+            let has_tray = matches!(world.tray, TrayState::Present);
+            let mut close_to_tray = world.close_to_tray;
+            if ui
+                .add_enabled(
+                    has_tray,
+                    egui::Checkbox::new(
+                        &mut close_to_tray,
+                        RichText::new("Hide the window to the tray when I close it").size(11.0),
+                    ),
+                )
+                .on_hover_text(
+                    "Off by default. When it is on, the tray icon brings the window back and \
+                     the journal records each time it is hidden.",
+                )
+                .changed()
+            {
+                actions.push(Action::SetCloseToTray(close_to_tray));
+            }
+            if !has_tray {
+                ui.label(
+                    RichText::new("With no tray there is nowhere to hide, so closing quits.")
+                        .size(10.5)
+                        .color(theme::muted(ui)),
+                );
             }
         });
         ui.add_space(10.0);

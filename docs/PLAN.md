@@ -520,11 +520,13 @@ uses `--background`, starts without focus, and shows the window only when a scan
 something the baseline does not explain.
 
 **The tray** is a menu, not a second interface: open, scan now, pause for an hour,
-quit. Windows and macOS use `tray-icon` (no C dependency). Linux uses `ksni`, a pure
-Rust implementation of the StatusNotifierItem protocol; the decision and its licence are
-in §14.2. A desktop with no status-notifier host (GNOME without the extension, a bare
-window manager) is a supported configuration: there is no icon, the setting says so, and
-closing the window quits. The tray is never the only way to reach a feature.
+quit. One crate holds it on all three platforms: `tray-icon` (MIT OR Apache-2.0), built
+with `default-features = false, features = ["ksni"]`, so Linux compiles the
+StatusNotifierItem backend instead of the GTK3 and `libappindicator` one. The decision and
+its licences are in §14.2. A desktop with no status-notifier host (GNOME without the
+extension, a bare window manager) is a supported configuration: there is no icon, the
+setting says so, and closing the window quits. The tray is never the only way to reach a
+feature.
 
 ### 6.6 No network, enforced
 
@@ -829,7 +831,7 @@ release turns into `●`; this table is rewritten at that tag, not before it.
 | Journal and crash recovery | ○ v0.1.6 | ○ v0.1.6 | ○ v0.1.6 |
 | Quarantine and verified restore | ○ v0.1.6 | ○ v0.1.6 | ○ v0.1.6 |
 | Allowlisted cleaning | ○ v0.1.6 | ○ v0.1.6 | ○ v0.1.6 |
-| Tray | ○ v0.1.6 (`tray-icon`) | ○ v0.1.6 (`tray-icon`) | ○ v0.1.6 (`ksni`; no icon without a host) |
+| Tray | ◐ v0.1.6 (`tray-icon`) | ◐ v0.1.6 (`tray-icon`) | ◐ v0.1.6 (`tray-icon` + its `ksni` backend; no icon without a host) |
 | Opt-in autostart | ○ v0.1.6 (HKCU `Run`) | ○ v0.1.6 (LaunchAgent) | ○ v0.1.6 (`~/.config/autostart`) |
 | Signed rule packs | ○ v0.1.6 | ○ v0.1.6 | ○ v0.1.6 |
 | Content scan (YARA-X) | ○ v0.1.6, build feature | ○ v0.1.6, build feature | ○ v0.1.6, build feature |
@@ -1051,7 +1053,7 @@ part that exists):
 |---|---|---|
 | 1 Ledger | journal records, reader, rotation, crash-recovery verdicts, the typed action path with its four refusals, the `ActionIo` seam | — |
 | 2 Quarantine and cleaning | quarantine with a manifest, verified restore, irreversible purge, all four acts journaled, the allowlist walk with preview and removal, the clean preview (a dry run, per-surface totals, per-item selection, one confirmation naming them), the language audit as a check, the Actions view, the quarantine entry point, the typed-`DELETE` dialog | the data-directory size in Settings; the second reviewer on every deletion path, which is a process row and not code |
-| 3 Resident | the schedule (six hours ±10 %, seeded jitter), resume detection, a scan on resume | tray, opt-in autostart, activation, the soak recorder |
+| 3 Resident | the schedule (six hours ±10 %, seeded jitter), resume detection, a scan on resume, the tray and its menu (open, scan now, pause an hour, quit), "no tray" as a state with a reason, the pause it offers in Settings, close-to-tray off by default with a quit that still quits | opt-in autostart, activation through the `wake` file, the soak recorder, the battery preference |
 | 4 Packs | — | everything |
 | 5 Coverage | — | everything |
 
@@ -1396,8 +1398,9 @@ external service, nothing to install beside it.
   not belong to its subject. Each is a named rejection.
 - **Golden reports:** a fixed fixture set produces a byte-stable JSON report.
 - **No-network test:** `cargo deny` bans plus a `Cargo.lock` grep, as in §6.6. From
-  v0.1.6 it also asserts the only local socket in the tree is the Linux tray's D-Bus
-  connection, in one file.
+  v0.1.6 it also asserts that no file in this tree opens a socket: the tray's one
+  session-bus connection lives in the `ksni` crate, not in ours, so the check can stay a
+  grep over our own sources rather than a claim about a dependency.
 - **No YARA-X by default:** `cargo tree -e features` proves the default build has no
   `yara-x`, and that the feature builds it in when asked.
 - **Language:** `cargo xtask language` fails on "fix", "infected", "threat score" and
@@ -1528,13 +1531,15 @@ and that is the launcher's, not ranger's.
 12. **Signatures are minisign:** `minisign-verify` (MIT, zero dependencies) verifies packs
     in v0.1.6 and the archives in v0.2.0. One primitive, one format, one public key
     story for both, and no crypto dependency tree to audit.
-13. **The tray:** `tray-icon` (Apache-2.0/MIT) on Windows and macOS; `ksni` on Linux,
-    which is **Unlicense**. Unlicense is a public-domain dedication with no attribution
-    or copyleft burden — the same class as the CC0-1.0 admitted for `notify` — and it is
-    admitted here for this crate alone. The alternative, `tray-icon` on Linux, needs GTK3
-    and `libappindicator` at build time, which §8 forbids in the default build. `ksni`
-    reaches the session bus over one local socket, in one file, with no network
-    capability, and the no-network check is narrowed to assert exactly that.
+13. **The tray:** `tray-icon` (MIT OR Apache-2.0) on all three platforms, with its `ksni`
+    feature so that Linux compiles the StatusNotifierItem backend. That backend is `ksni`,
+    which is **Unlicense** — a public-domain dedication with no attribution or
+    copyleft burden, the same class as the CC0-1.0 admitted for `notify`, and admitted
+    here for this crate alone. The reason for the feature rather than the default is in
+    the same place: `tray-icon`'s default Linux backend needs GTK3 and `libappindicator`
+    at build time, which §8 forbids in the default build. `ksni` reaches the session bus
+    through the pure-Rust `zbus`, so the socket lives in a dependency rather than in this
+    tree, and no file of ours opens one.
 14. **One file per pack:** a pack is JSON plus a detached signature, never an archive.
     Refusing to extract anything removes zip-slip, permission bits and symlink entries
     from the attack surface by construction.
