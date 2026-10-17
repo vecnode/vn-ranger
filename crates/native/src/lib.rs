@@ -17,6 +17,7 @@ pub mod hash;
 pub mod instance;
 pub mod journal;
 pub mod paths;
+pub mod quarantine;
 pub mod signatures;
 pub mod store;
 pub mod watch;

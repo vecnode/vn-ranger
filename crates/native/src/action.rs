@@ -111,6 +111,11 @@ pub trait ActionIo {
     fn exists(&self, dir: &Dir, name: &OsString) -> bool;
     /// Move an entry between two directory capabilities.
     fn rename(&self, from: &Dir, from_name: &OsString, to: &Dir, to_name: &OsString) -> io::Result<()>;
+    /// Give an existing file a second name, refusing to replace one.
+    ///
+    /// This is the portable "create only if absent": a hard link fails when the name is
+    /// already taken, where a rename would replace it.
+    fn hard_link(&self, from: &Dir, from_name: &OsString, to: &Dir, to_name: &OsString) -> io::Result<()>;
     /// Remove one file below `dir`.
     fn remove_file(&self, dir: &Dir, name: &OsString) -> io::Result<()>;
 }
@@ -152,6 +157,10 @@ impl ActionIo for RealIo {
 
     fn rename(&self, from: &Dir, from_name: &OsString, to: &Dir, to_name: &OsString) -> io::Result<()> {
         from.rename(from_name, to, to_name)
+    }
+
+    fn hard_link(&self, from: &Dir, from_name: &OsString, to: &Dir, to_name: &OsString) -> io::Result<()> {
+        from.hard_link(from_name, to, to_name)
     }
 
     fn remove_file(&self, dir: &Dir, name: &OsString) -> io::Result<()> {
@@ -594,6 +603,16 @@ mod tests {
 
         fn rename(&self, from: &Dir, from_name: &OsString, to: &Dir, to_name: &OsString) -> io::Result<()> {
             RealIo.rename(from, from_name, to, to_name)
+        }
+
+        fn hard_link(
+            &self,
+            from: &Dir,
+            from_name: &OsString,
+            to: &Dir,
+            to_name: &OsString,
+        ) -> io::Result<()> {
+            RealIo.hard_link(from, from_name, to, to_name)
         }
 
         fn remove_file(&self, dir: &Dir, name: &OsString) -> io::Result<()> {
