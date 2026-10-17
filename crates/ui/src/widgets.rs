@@ -78,15 +78,19 @@ pub fn health(ui: &mut egui::Ui, state: vnr_core::CollectorState) {
     badge(ui, state.label(), color);
 }
 
-/// A large number and its label.
+/// One number and its label, inline.
+///
+/// Inline rather than on its own card: an overview of four counts is a sentence about the
+/// machine, and four boxes made it a dashboard. The number still leads, because it is what
+/// the eye is looking for.
 pub fn statistic(ui: &mut egui::Ui, value: usize, label: &str) {
-    card(ui, |ui| {
+    ui.vertical(|ui| {
         ui.label(
             RichText::new(value.to_string())
-                .size(22.0)
+                .size(15.0)
                 .family(theme::semibold()),
         );
-        ui.label(RichText::new(label).size(11.0).color(theme::muted(ui)));
+        ui.label(RichText::new(label).size(10.0).color(theme::muted(ui)));
     });
 }
 

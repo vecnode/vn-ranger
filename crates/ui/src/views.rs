@@ -170,7 +170,7 @@ impl Ui {
         widgets::dot_line(
             ui,
             theme::OK,
-            "No network. No telemetry. Everything ranger saw stays on this machine.",
+            "Every count above is a fact read from this machine, and none of it is sent anywhere.",
         );
     }
 
@@ -1391,7 +1391,11 @@ impl Ui {
         widgets::card(ui, |ui| {
             ui.label(RichText::new("Privacy").family(theme::semibold()));
             ui.add_space(4.0);
-            widgets::dot_line(ui, theme::OK, "No network. No telemetry. No account.");
+            widgets::dot_line(
+                ui,
+                theme::OK,
+                "No network. No telemetry. No account. Everything ranger saw stays on this machine.",
+            );
             widgets::key_value(ui, "Data folder", &world.data_dir.display().to_string());
             widgets::key_value(ui, "Signatures", &world.signatures_dir.display().to_string());
             if ui.button("Open data folder").clicked() {

@@ -493,19 +493,6 @@ impl Ui {
                                 }
                             }
                             ScanState::Idle => {
-                                if let Some(snapshot) = world.snapshot() {
-                                    ui.label(
-                                        RichText::new(format!(
-                                            "Scanned {}",
-                                            vnr_core::time::describe_age(
-                                                world.now_unix,
-                                                snapshot.taken_at_unix
-                                            )
-                                        ))
-                                        .size(11.5)
-                                        .color(theme::muted(ui)),
-                                    );
-                                }
                                 if world.snapshot().is_some_and(|snapshot| snapshot.elevated) {
                                     widgets::badge(ui, "ADMIN", theme::ATTENTION);
                                 }
@@ -589,6 +576,21 @@ impl Ui {
     }
 
     fn page_header(&mut self, ui: &mut egui::Ui, world: &World) {
+        // The age of the scan belongs where a person reads about the scan, not in the
+        // window chrome where it would follow them into every other view.
+        let subtitle = world
+            .snapshot()
+            .filter(|_| self.view == View::Overview)
+            .map_or_else(
+                || self.view.subtitle().to_owned(),
+                |snapshot| {
+                    format!(
+                        "{} Last scan {}.",
+                        self.view.subtitle(),
+                        vnr_core::time::describe_age(world.now_unix, snapshot.taken_at_unix)
+                    )
+                },
+            );
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 ui.label(
@@ -596,11 +598,7 @@ impl Ui {
                         .size(21.0)
                         .family(theme::semibold()),
                 );
-                ui.label(
-                    RichText::new(self.view.subtitle())
-                        .size(11.5)
-                        .color(theme::muted(ui)),
-                );
+                ui.label(RichText::new(subtitle).size(11.5).color(theme::muted(ui)));
             });
             if matches!(self.view, View::Processes | View::Startup | View::Listeners) {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
