@@ -64,6 +64,48 @@ impl Ui {
         }
         ui.add_space(10.0);
 
+        let attention = world
+            .findings
+            .iter()
+            .filter(|finding| finding.severity == vnr_core::Severity::Attention)
+            .count();
+        let notice = world
+            .findings
+            .iter()
+            .filter(|finding| finding.severity == vnr_core::Severity::Notice)
+            .count();
+        let info = world.findings.len().saturating_sub(attention + notice);
+        widgets::card(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Findings").family(theme::semibold()));
+                if attention > 0 {
+                    widgets::badge(ui, "ATTENTION", theme::ATTENTION);
+                }
+            });
+            ui.add_space(4.0);
+            if world.findings.is_empty() {
+                ui.label(
+                    RichText::new(
+                        "No rule fired on this scan. That is what ranger saw, not a verdict that the machine is clean.",
+                    )
+                    .size(11.0)
+                    .color(theme::muted(ui)),
+                );
+            } else {
+                ui.label(
+                    RichText::new(format!(
+                        "{} finding(s) · {attention} attention · {notice} notice · {info} info",
+                        world.findings.len()
+                    ))
+                    .size(11.5),
+                );
+                if ui.button("Open Findings").clicked() {
+                    self.view = View::Findings;
+                }
+            }
+        });
+        ui.add_space(10.0);
+
         if snapshot.has_matches() {
             signature_matches_card(ui, snapshot);
         } else {
@@ -89,6 +131,59 @@ impl Ui {
             theme::OK,
             "No network. No telemetry. Everything ranger saw stays on this machine.",
         );
+    }
+
+    /// The rules' findings, with the evidence behind each one.
+    pub(crate) fn findings(&mut self, ui: &mut egui::Ui, world: &crate::World, _actions: &mut Vec<Action>) {
+        if world.findings.is_empty() {
+            widgets::empty(
+                ui,
+                "No findings",
+                "None of the 15 rules fired on this scan. That is a statement about the facts ranger could see, not a verdict that the machine is clean.",
+            );
+            if !world.suppressions.is_empty() {
+                ui.label(
+                    RichText::new(format!(
+                        "{} suppression(s) are active and may be hiding a finding.",
+                        world.suppressions.len()
+                    ))
+                    .size(11.0)
+                    .color(theme::muted(ui)),
+                );
+            }
+            return;
+        }
+        let attention = world
+            .findings
+            .iter()
+            .filter(|finding| finding.severity == vnr_core::Severity::Attention)
+            .count();
+        let notice = world
+            .findings
+            .iter()
+            .filter(|finding| finding.severity == vnr_core::Severity::Notice)
+            .count();
+        let info = world.findings.len().saturating_sub(attention + notice);
+        ui.label(
+            RichText::new(format!(
+                "{} finding(s) · {attention} attention · {notice} notice · {info} info",
+                world.findings.len()
+            ))
+            .size(11.0)
+            .color(theme::muted(ui)),
+        );
+        ui.add_space(6.0);
+        let mut target = None;
+        for finding in &world.findings {
+            if finding_card(ui, finding) {
+                target = Some(finding.clone());
+            }
+            ui.add_space(8.0);
+        }
+        if let Some(finding) = target {
+            self.suppress_target = Some(finding);
+            self.suppress_reason.clear();
+        }
     }
 
     /// The process table and its detail footer.
@@ -811,6 +906,24 @@ impl Ui {
         });
         ui.add_space(10.0);
         widgets::card(ui, |ui| {
+            ui.label(RichText::new("Suppressions").family(theme::semibold()));
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new(format!("{} active suppression(s).", world.suppressions.len())).size(11.5),
+            );
+            ui.label(
+                RichText::new(
+                    "A suppression covers one rule and one subject, carries a reason, and expires after 30 days. There is no ignore-everything switch.",
+                )
+                .size(10.5)
+                .color(theme::muted(ui)),
+            );
+            if !world.suppressions.is_empty() && ui.button("Clear all suppressions").clicked() {
+                actions.push(Action::ClearSuppressions);
+            }
+        });
+        ui.add_space(10.0);
+        widgets::card(ui, |ui| {
             ui.label(RichText::new("Privacy").family(theme::semibold()));
             ui.add_space(4.0);
             widgets::dot_line(ui, theme::OK, "No network. No telemetry. No account.");
@@ -1097,6 +1210,53 @@ fn startup_detail_body(
             }
         });
     }
+}
+
+fn finding_card(ui: &mut egui::Ui, finding: &vnr_core::Finding) -> bool {
+    let mut suppress = false;
+    let colour = match finding.severity {
+        vnr_core::Severity::Attention => theme::ATTENTION,
+        vnr_core::Severity::Notice => theme::EMBER,
+        vnr_core::Severity::Info => theme::muted(ui),
+    };
+    widgets::card(ui, |ui| {
+        ui.horizontal(|ui| {
+            widgets::badge(ui, finding.severity.label(), colour);
+            ui.label(RichText::new(finding.title).size(12.5).family(theme::semibold()));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button("Suppress…").clicked() {
+                    suppress = true;
+                }
+                widgets::badge(ui, finding.confidence.label(), theme::muted(ui));
+            });
+        });
+        ui.add_space(2.0);
+        ui.label(
+            RichText::new(finding.subject_label.as_str())
+                .size(10.5)
+                .color(theme::muted(ui)),
+        );
+        ui.add_space(6.0);
+        for line in &finding.evidence {
+            widgets::dot_line(ui, theme::muted(ui), line);
+        }
+        ui.add_space(6.0);
+        ui.label(RichText::new("Why").size(10.0).color(theme::muted(ui)));
+        ui.add(egui::Label::new(RichText::new(finding.why).size(11.5)).wrap());
+        ui.add_space(4.0);
+        ui.label(RichText::new("Likely benign").size(10.0).color(theme::OK));
+        ui.add(egui::Label::new(RichText::new(finding.benign).size(11.0).color(theme::muted(ui))).wrap());
+        ui.add_space(4.0);
+        ui.label(RichText::new("What to do").size(10.0).color(theme::muted(ui)));
+        ui.add(egui::Label::new(RichText::new(finding.remediation).size(11.0)).wrap());
+        ui.add_space(4.0);
+        ui.label(
+            RichText::new(format!("{} · {}", finding.rule_id, finding.subject))
+                .size(9.5)
+                .color(theme::muted(ui)),
+        );
+    });
+    suppress
 }
 
 fn change_row(ui: &mut egui::Ui, change: &vnr_core::Change) {

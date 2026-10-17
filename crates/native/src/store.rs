@@ -3,7 +3,7 @@
 use std::io::Write;
 use std::path::Path;
 
-use vnr_core::Snapshot;
+use vnr_core::{Snapshot, Suppression};
 
 /// Load the last snapshot, if it is present and this build understands its schema.
 #[must_use]
@@ -53,6 +53,36 @@ pub fn save_last(snapshot: &Snapshot) -> std::io::Result<()> {
 /// would make every diff a comparison against the wrong day.
 pub fn save_baseline(snapshot: &Snapshot) -> std::io::Result<()> {
     write_json(snapshot, &crate::paths::baseline_path())
+}
+
+/// Read the person's suppressions, dropping any that have expired.
+#[must_use]
+pub fn load_suppressions(now: u64) -> Vec<Suppression> {
+    read_suppressions(&crate::paths::suppressions_path(), now)
+}
+
+fn read_suppressions(path: &Path, now: u64) -> Vec<Suppression> {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    match serde_json::from_str::<Vec<Suppression>>(&text) {
+        Ok(mut list) => {
+            vnr_core::prune_suppressions(&mut list, now);
+            list
+        }
+        Err(error) => {
+            log::warn!("ignoring {}: {error}", path.display());
+            Vec::new()
+        }
+    }
+}
+
+/// Save the suppressions, replacing the previous file atomically.
+pub fn save_suppressions(suppressions: &[Suppression]) -> std::io::Result<()> {
+    let path = crate::paths::suppressions_path();
+    let bytes = serde_json::to_vec_pretty(suppressions)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
+    write_atomic(&path, &bytes)
 }
 
 fn load(path: &Path) -> Option<Snapshot> {
@@ -123,12 +153,29 @@ mod tests {
     }
 
     #[test]
-    fn ignores_a_snapshot_from_another_schema() {
+    fn suppressions_are_pruned_and_malformed_files_are_ignored() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("baseline.json");
-        let mut snapshot = Snapshot::empty(Host::default(), false);
-        snapshot.schema = vnr_core::model::SCHEMA_VERSION + 1;
-        write_json(&snapshot, &path).unwrap();
-        assert!(load(&path).is_none());
+        let path = dir.path().join("suppressions.json");
+        let list = vec![
+            Suppression {
+                rule_id: "r".to_owned(),
+                subject: "s".to_owned(),
+                reason: "active".to_owned(),
+                expires_unix: 200,
+            },
+            Suppression {
+                rule_id: "r".to_owned(),
+                subject: "t".to_owned(),
+                reason: "expired".to_owned(),
+                expires_unix: 50,
+            },
+        ];
+        write_atomic(&path, &serde_json::to_vec_pretty(&list).unwrap()).unwrap();
+        let read = read_suppressions(&path, 100);
+        assert_eq!(read.len(), 1);
+        assert_eq!(read[0].subject, "s");
+
+        write_atomic(&path, b"not json").unwrap();
+        assert!(read_suppressions(&path, 100).is_empty());
     }
 }

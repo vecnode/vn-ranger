@@ -23,6 +23,8 @@ pub enum EventKind {
     FileAppeared,
     /// A watched file changed.
     FileChanged,
+    /// A rule raised a new finding.
+    FindingRaised,
     /// A person accepted the current scan as the baseline.
     BaselineAccepted,
 }
@@ -37,6 +39,7 @@ impl EventKind {
             Self::ProcessChanged => "Process changed",
             Self::FileAppeared => "File appeared",
             Self::FileChanged => "File changed",
+            Self::FindingRaised => "Finding raised",
             Self::BaselineAccepted => "Baseline accepted",
         }
     }
@@ -193,6 +196,7 @@ mod tests {
             EventKind::ProcessChanged,
             EventKind::FileAppeared,
             EventKind::FileChanged,
+            EventKind::FindingRaised,
             EventKind::BaselineAccepted,
         ] {
             assert!(!kind.label().is_empty());

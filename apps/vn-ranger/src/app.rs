@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use vnr_core::{EventKind, TimelineEvent};
+use vnr_core::{EventKind, Finding, Suppression, TimelineEvent};
 use vnr_ui::{Action, Live, ScanState, Ui, WatchReport, World};
 
 use crate::worker::{self, ScanMessage};
@@ -31,6 +31,8 @@ impl App {
             (Some(baseline), Some(snapshot)) => vnr_core::diff_snapshots(baseline, snapshot),
             _ => Vec::new(),
         };
+        let suppressions = vnr_native::store::load_suppressions(now_unix());
+        let findings = findings_for(snapshot.as_ref(), baseline.as_ref(), &suppressions, now_unix());
         let world = World {
             snapshot,
             scan: ScanState::Idle,
@@ -53,6 +55,8 @@ impl App {
             baseline_error,
             changes,
             timeline: vnr_core::Timeline::new(),
+            findings,
+            suppressions,
         };
         let ui = Ui::new(&cc.egui_ctx);
         let watch = worker::WatchService::start(cc.egui_ctx.clone());
@@ -135,6 +139,7 @@ impl App {
                     self.world.snapshot = Some(snapshot);
                     self.world.scan = ScanState::Idle;
                     self.world.notice = None;
+                    self.refresh_findings(true);
                     finished = true;
                 }
                 ScanMessage::Failed(error) => {
@@ -204,6 +209,7 @@ impl App {
                 self.world.baseline = Some(snapshot);
                 self.world.baseline_error = None;
                 self.world.changes.clear();
+                self.refresh_findings(false);
                 self.world.error = None;
                 self.world.notice =
                     Some("This scan is now the baseline. Later scans are compared against it.".to_owned());
@@ -227,11 +233,48 @@ impl App {
         self.world.baseline = None;
         self.world.baseline_error = None;
         self.world.changes.clear();
+        self.refresh_findings(false);
         self.world.error = None;
         self.world.notice = Some(
             "The baseline was cleared. Ranger has nothing to compare against until you accept one."
                 .to_owned(),
         );
+    }
+
+    /// Re-evaluate the rules against the current scan, baseline and suppressions.
+    ///
+    /// When `announce` is set, findings that were not on screen before are written to the
+    /// session timeline. The first evaluation of a launch is silent: it is what was already
+    /// true, not something that just happened.
+    fn refresh_findings(&mut self, announce: bool) {
+        let now = now_unix();
+        let previous: std::collections::HashSet<String> = self
+            .world
+            .findings
+            .iter()
+            .map(|finding| format!("{}|{}", finding.rule_id, finding.subject))
+            .collect();
+        let findings = findings_for(
+            self.world.snapshot.as_ref(),
+            self.world.baseline.as_ref(),
+            &self.world.suppressions,
+            now,
+        );
+        if announce {
+            for finding in &findings {
+                let key = format!("{}|{}", finding.rule_id, finding.subject);
+                if !previous.contains(&key) {
+                    self.world.timeline.push(TimelineEvent::new(
+                        now,
+                        EventKind::FindingRaised,
+                        finding.title,
+                        finding.subject_label.clone(),
+                        "rules",
+                    ));
+                }
+            }
+        }
+        self.world.findings = findings;
     }
 
     fn apply(&mut self, action: Action, ctx: &egui::Context) {
@@ -272,6 +315,51 @@ impl App {
                 }
             }
             Action::SetPollLed(enabled) => self.world.poll_led = enabled,
+            Action::SuppressFinding {
+                rule_id,
+                subject,
+                reason,
+            } => {
+                let now = now_unix();
+                let expires = now.saturating_add(Suppression::DEFAULT_DAYS.saturating_mul(24 * 60 * 60));
+                self.world.suppressions.push(Suppression {
+                    rule_id,
+                    subject,
+                    reason,
+                    expires_unix: expires,
+                });
+                vnr_core::prune_suppressions(&mut self.world.suppressions, now);
+                match vnr_native::store::save_suppressions(&self.world.suppressions) {
+                    Ok(()) => {
+                        self.world.error = None;
+                        self.world.notice = Some(format!(
+                            "Suppressed until {}.",
+                            vnr_core::time::format_utc(expires)
+                        ));
+                    }
+                    Err(error) => {
+                        self.world.error = Some(format!(
+                            "The suppression applies for this session but could not be saved: {error}"
+                        ));
+                    }
+                }
+                self.refresh_findings(false);
+            }
+            Action::ClearSuppressions => {
+                self.world.suppressions.clear();
+                match vnr_native::store::save_suppressions(&self.world.suppressions) {
+                    Ok(()) => {
+                        self.world.error = None;
+                        self.world.notice = Some("Suppressions cleared.".to_owned());
+                    }
+                    Err(error) => {
+                        self.world.error = Some(format!(
+                            "The suppressions are cleared for this session but the file could not be written: {error}"
+                        ));
+                    }
+                }
+                self.refresh_findings(false);
+            }
             Action::Quit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
         }
     }
@@ -336,4 +424,17 @@ fn now_unix() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |duration| duration.as_secs())
+}
+
+fn findings_for(
+    snapshot: Option<&vnr_core::Snapshot>,
+    baseline: Option<&vnr_core::Snapshot>,
+    suppressions: &[Suppression],
+    now: u64,
+) -> Vec<Finding> {
+    let Some(snapshot) = snapshot else {
+        return Vec::new();
+    };
+    let findings = vnr_core::evaluate(snapshot, baseline);
+    vnr_core::apply_suppressions(findings, suppressions, now)
 }

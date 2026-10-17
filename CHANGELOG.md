@@ -6,6 +6,32 @@ All notable changes to vn-ranger are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-10-17
+
+### Added
+
+- Fifteen built-in rules over the collected facts: startup items in temporary, Downloads
+  or Desktop folders, script startup entries, bare commands, shell interpreters,
+  machine-wide entries pointing into a user folder, startup binaries that changed since
+  the baseline, startup entries new since the baseline, processes running from temporary
+  or download locations, processes whose parent exited, recently started public
+  listeners, public sockets with no visible owner, persistent programs waiting for
+  connections, and duplicate startup commands.
+- A Findings view: every finding carries the evidence it fired on, why it matters, the
+  most likely benign explanation and what to do. The overview summarises the counts, and
+  a new finding appears in the session timeline.
+- Suppressions: scoped to one rule and one subject, carrying a reason, expiring after 30
+  days, saved in `suppressions.json`. Settings shows the count and can clear them.
+- `Finding`, `Severity`, `Confidence`, `Suppression` and `evaluate` in `vnr-core`, with a
+  positive and a negative fixture per rule.
+
+### Not in this release
+
+- Signature verification. No safe wrapper meets the dependency rules, so it waits for
+  0.2.0 rather than breaking `unsafe_code = "forbid"`.
+- Scheduled tasks, macOS login items, MSIX, Snap and Flatpak remain named gaps in the
+  platform matrix.
+
 ## [0.1.3] - 2026-10-17
 
 ### Fixed
@@ -94,7 +120,8 @@ All notable changes to vn-ranger are recorded here. The format follows
 - vn-launcher cannot install the release until its own install path ships; ranger is
   built to the contract now.
 
-[Unreleased]: https://github.com/vecnode/vn-ranger/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/vecnode/vn-ranger/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/vecnode/vn-ranger/releases/tag/v0.1.4
 [0.1.3]: https://github.com/vecnode/vn-ranger/releases/tag/v0.1.3
 [0.1.2]: https://github.com/vecnode/vn-ranger/releases/tag/v0.1.2
 [0.1.1]: https://github.com/vecnode/vn-ranger/releases/tag/v0.1.1

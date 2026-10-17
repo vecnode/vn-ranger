@@ -5,11 +5,11 @@ machine, explains what is unusual, remembers a baseline, and — later, and care
 quarantines and cleans. It is written in **Rust only**: a native egui/eframe
 application, with **no Tauri, Electron, webview or JavaScript build step**.
 
-**Status:** v0.1.3 is released; 0.1.4 is the next line. The read-only inventory, the
+**Status:** v0.1.4 is released; 0.1.5 is the next line. The read-only inventory, the
 local hash signature engine, the one-shot administrator scan, the two-second process
-poll, the file watchers and the accepted baseline work. Rules, findings, cleaning and
-the tray are still ahead. This file is the contract for all of it, written before the
-features that will need it.
+poll, the file watchers, the accepted baseline, fifteen rules and the Findings view
+work. Cleaning and the tray are still ahead. This file is the contract for all of it,
+written before the features that will need it.
 
 `docs/PLAN.md` explains the research, the scope and the architecture.
 `docs/RELEASES.md` is the distribution contract. `SECURITY.md` is the promise to the
@@ -19,12 +19,12 @@ person running it.
 
 ```text
 crates/
-  core      vnr-core     pure and IO-free: facts, snapshots, timelines, diffs,
-                         hash signatures, reports, time arithmetic
+  core      vnr-core     pure and IO-free: facts, snapshots, timelines, diffs, rules,
+                         findings, hash signatures, reports, time arithmetic
   native    vnr-native   the only crate that touches the world:
                          collect/{processes,autoruns,listeners,packages},
                          hash, signatures, elevation, paths, store, watch, scan
-  ui        vnr-ui       egui: theme, fonts, icons, widgets, the seven views, World/Action
+  ui        vnr-ui       egui: theme, fonts, icons, widgets, the eight views, World/Action
 apps/
   vn-ranger              the eframe shell: owns the World, runs the worker,
                          carries out actions, and the headless report mode
@@ -81,7 +81,7 @@ act on — never a panic.
 
 ### Never delete
 
-- Read-only is the default. There is no deletion API in v0.1.3, on purpose.
+- Read-only is the default. There is no deletion API in v0.1.4, on purpose.
 - When quarantine arrives in v0.1.5: quarantine before delete, preview before action,
   and an allowlist of cache, temporary and log locations. User documents are excluded
   by construction, not by a heuristic.
@@ -217,16 +217,18 @@ reads `/proc` directly, and macOS reports the collector as unavailable.
 
 ## 7. Rules and findings
 
-Not shipped yet. The contract for v0.1.4:
+Shipped in v0.1.4 as fifteen built-in rules. The contract every rule obeys:
 
 - A rule declares `id`, `title`, `severity`, `confidence`, `why`, `benign` and
   `remediation`.
 - **A rule that cannot name a benign explanation may not ship as `attention`.**
 - Rule ids are stable forever; changing one is a breaking change to suppressions.
-- Rules are data, not code. No shell, no unbounded regex, no network, no file path
-  arithmetic that can escape an allowlist.
-- `urgent` requires an observed harm, not a suspicious-looking path.
-- Suppressions are scoped to one `(rule, subject)`, carry a reason, and expire.
+- Rules are Rust detectors with fixtures, not data loaded at runtime. External rule
+  packs arrive at v0.1.7 with signing; until then no rule text or predicate comes from
+  outside the binary.
+- `urgent` requires an observed harm, not a suspicious-looking path. No rule uses it yet.
+- Suppressions are scoped to one `(rule, subject)`, carry a reason, and expire after 30
+  days. There is no ignore-everything switch.
 - The language table in `docs/PLAN.md` §5.5 is part of the product, not a style guide.
 
 ## 8. Dependencies
@@ -280,6 +282,7 @@ A change is done when:
 | Signature checks | `native/src/signatures.rs` | A ClamAV `.hdb` / `.hsb` line can be malformed in a dozen ways; reject and count, never guess. |
 | Hashing | `native/src/hash.rs` | One file can appear in several startup entries; hash once, cap the size, never return a partial digest. |
 | Watching files | `native/src/watch.rs`, `apps/vn-ranger/src/worker.rs` | One editor save produces several events; the debounce is pure and tested, and the hash is capped and cached per path. |
+| Rules and findings | `core/src/rules.rs` | A rule that cannot name a benign explanation is not ready; every finding carries the evidence it fired on and a stable subject for suppressions. |
 | Elevation | `native/src/elevation.rs`, `apps/vn-ranger/src/worker.rs` | The elevated copy is one-shot; the unelevated window must not hand it a path to act on. |
 | Listener ownership | `native/src/collect/listeners/` | The socket table and the fd table are read at different times; other users' sockets need privilege. |
 | Autorun parsing | `native/src/collect/autoruns/` | Registry views, 32/64-bit keys, quoted paths, binary plists, systemd user units. |

@@ -39,6 +39,8 @@ pub struct Ui {
     led_lit: bool,
     project_open: bool,
     project_rect: egui::Rect,
+    suppress_target: Option<vnr_core::Finding>,
+    suppress_reason: String,
     mark: egui::TextureHandle,
 }
 
@@ -63,6 +65,8 @@ impl Ui {
             led_lit: false,
             project_open: false,
             project_rect: egui::Rect::NOTHING,
+            suppress_target: None,
+            suppress_reason: String::new(),
             mark,
         }
     }
@@ -113,12 +117,14 @@ impl Ui {
         }
         self.modal(&ctx, &mut actions);
         self.project_modal(&ctx);
+        self.suppress_modal(&ctx, &mut actions);
         actions
     }
 
     fn draw_view(&mut self, ui: &mut egui::Ui, world: &World, actions: &mut Vec<Action>, view: View) {
         match view {
             View::Overview => self.overview(ui, world, actions),
+            View::Findings => self.findings(ui, world, actions),
             View::Processes => self.processes(ui, world),
             View::Startup => self.startup(ui, world),
             View::Listeners => self.listeners(ui, world),
@@ -422,6 +428,69 @@ impl Ui {
             self.project_open = false;
         }
     }
+
+    fn suppress_modal(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
+        let Some(finding) = self.suppress_target.clone() else {
+            return;
+        };
+        let mut open = true;
+        egui::Window::new("Suppress a finding")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0))
+            .open(&mut open)
+            .show(ctx, |ui| {
+                ui.set_max_width(440.0);
+                ui.label(
+                    RichText::new(finding.title)
+                        .size(12.5)
+                        .family(theme::semibold()),
+                );
+                ui.label(
+                    RichText::new(finding.subject_label.as_str())
+                        .size(10.5)
+                        .color(theme::muted(ui)),
+                );
+                ui.add_space(6.0);
+                ui.label(
+                    RichText::new(
+                        "This hides one rule for one subject until it expires. It carries your reason, expires after 30 days, and hides nothing else.",
+                    )
+                    .size(11.0)
+                    .color(theme::muted(ui)),
+                );
+                ui.add_space(6.0);
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.suppress_reason)
+                        .hint_text("Why is this expected?")
+                        .margin(Margin::symmetric(8, 6)),
+                );
+                ui.add_space(6.0);
+                let valid = self.suppress_reason.trim().len() >= 4;
+                ui.horizontal(|ui| {
+                    if ui
+                        .add_enabled(valid, egui::Button::new("Suppress for 30 days"))
+                        .clicked()
+                    {
+                        actions.push(Action::SuppressFinding {
+                            rule_id: finding.rule_id.to_owned(),
+                            subject: finding.subject.clone(),
+                            reason: self.suppress_reason.trim().to_owned(),
+                        });
+                        self.suppress_target = None;
+                        self.suppress_reason.clear();
+                    }
+                    if ui.button("Cancel").clicked() {
+                        self.suppress_target = None;
+                        self.suppress_reason.clear();
+                    }
+                });
+            });
+        if !open {
+            self.suppress_target = None;
+            self.suppress_reason.clear();
+        }
+    }
 }
 
 fn project_button(ui: &mut egui::Ui) -> egui::Response {
@@ -467,6 +536,7 @@ fn poll_led(ui: &mut egui::Ui, lit: bool) {
 fn view_icon(view: View) -> icons::Icon {
     match view {
         View::Overview => icons::Icon::Overview,
+        View::Findings => icons::Icon::Shield,
         View::Processes => icons::Icon::Processes,
         View::Startup => icons::Icon::Startup,
         View::Listeners => icons::Icon::Listeners,
@@ -518,6 +588,8 @@ mod tests {
             baseline_error: None,
             changes,
             timeline: Timeline::new(),
+            findings: Vec::new(),
+            suppressions: Vec::new(),
         }
     }
 
@@ -563,6 +635,24 @@ mod tests {
             skipped: Vec::new(),
             error: None,
         };
+        world.findings.push(vnr_core::Finding {
+            rule_id: "startup.temp-path",
+            title: "A startup item runs from a temporary folder",
+            severity: vnr_core::Severity::Attention,
+            confidence: vnr_core::Confidence::Observed,
+            subject: "autorun:run:user:Agent".to_owned(),
+            subject_label: "Agent (Run key)".to_owned(),
+            evidence: vec!["Executable: C:\\Temp\\agent.exe".to_owned()],
+            why: "Temporary folders are cleaned by the system.",
+            benign: "An installer registered a helper.",
+            remediation: "Check the file's publisher.",
+        });
+        world.suppressions.push(vnr_core::Suppression {
+            rule_id: "startup.temp-path".to_owned(),
+            subject: "autorun:run:user:Other".to_owned(),
+            reason: "Known updater".to_owned(),
+            expires_unix: 2_000,
+        });
         for view in View::ALL {
             draw(view, &world);
         }

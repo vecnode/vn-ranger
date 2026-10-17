@@ -12,6 +12,7 @@
 pub mod diff;
 pub mod model;
 pub mod report;
+pub mod rules;
 pub mod signature;
 pub mod time;
 pub mod timeline;
@@ -21,6 +22,9 @@ pub use diff::{Change, ChangeKind, diff_processes, diff_snapshots};
 pub use model::{
     AutorunFact, AutorunKind, AutorunScope, CollectorState, CollectorStatus, Counts, Host, ListenerFact,
     PackageFact, ProcessFact, Protocol, SignatureMatch, SignatureReport, SignatureStatus, Snapshot,
+};
+pub use rules::{
+    Confidence, Finding, Severity, Suppression, apply_suppressions, evaluate, prune_suppressions,
 };
 pub use signature::{HashAlgorithm, HashSignature, SignatureSet};
 pub use timeline::{EventKind, Timeline, TimelineEvent};

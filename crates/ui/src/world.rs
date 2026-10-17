@@ -8,13 +8,15 @@ use std::path::PathBuf;
 
 use vnr_core::diff::Change;
 use vnr_core::timeline::Timeline;
-use vnr_core::{ProcessFact, Snapshot};
+use vnr_core::{Finding, ProcessFact, Snapshot, Suppression};
 
 /// A surface in the application.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum View {
     /// The state of the machine at a glance.
     Overview,
+    /// What the rules observed, with the evidence.
+    Findings,
     /// Everything that is running.
     Processes,
     /// Everything that starts on its own.
@@ -31,8 +33,9 @@ pub enum View {
 
 impl View {
     /// Every view, in navigation order.
-    pub const ALL: [View; 7] = [
+    pub const ALL: [View; 8] = [
         View::Overview,
+        View::Findings,
         View::Processes,
         View::Startup,
         View::Listeners,
@@ -46,6 +49,7 @@ impl View {
     pub fn label(self) -> &'static str {
         match self {
             Self::Overview => "Overview",
+            Self::Findings => "Findings",
             Self::Processes => "Processes",
             Self::Startup => "Startup",
             Self::Listeners => "Listeners",
@@ -60,6 +64,7 @@ impl View {
     pub fn subtitle(self) -> &'static str {
         match self {
             Self::Overview => "What is on this machine, right now.",
+            Self::Findings => "What the rules observed, and what they do not mean.",
             Self::Processes => "Every process this account can see.",
             Self::Startup => "What runs without a person clicking it.",
             Self::Listeners => "Sockets waiting for a connection.",
@@ -150,6 +155,10 @@ pub struct World {
     pub changes: Vec<Change>,
     /// What changed since ranger opened.
     pub timeline: Timeline,
+    /// What the rules say about the latest scan, after suppressions.
+    pub findings: Vec<Finding>,
+    /// The person's active suppressions.
+    pub suppressions: Vec<Suppression>,
 }
 
 impl World {
@@ -206,6 +215,17 @@ pub enum Action {
     SetWatch(bool),
     /// Show or hide the live poll indicator.
     SetPollLed(bool),
+    /// Suppress one finding, carrying the reason the person gave.
+    SuppressFinding {
+        /// The rule to suppress.
+        rule_id: String,
+        /// The subject to suppress it for.
+        subject: String,
+        /// Why the person accepted it.
+        reason: String,
+    },
+    /// Forget every suppression.
+    ClearSuppressions,
     /// Open a file or directory in the platform's file manager.
     OpenPath(String),
     /// Close the application.

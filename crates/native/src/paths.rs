@@ -47,6 +47,12 @@ pub fn baseline_path() -> PathBuf {
     data_dir().join("baseline.json")
 }
 
+/// Where the person's suppressions are kept.
+#[must_use]
+pub fn suppressions_path() -> PathBuf {
+    data_dir().join("suppressions.json")
+}
+
 /// The folders the file watcher reads.
 ///
 /// Only directories that exist are returned, so the interface never claims to watch a

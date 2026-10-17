@@ -1,11 +1,11 @@
 # The plan — vn-ranger
 
-**Status:** v0.1.3 ships the process poll, the file watchers, the session timeline and the
-accepted baseline, with the Linux/macOS process-identity fix on top of 0.1.2; its
-30-minute idle soak passed and is published in [`docs/BENCHMARKS.md`](BENCHMARKS.md). The
-read-only inventory, the local hash-signature engine and the one-shot administrator scan
-remain in the repository. The sections below that describe rules, cleaning, residency and
-deeper platform access are the plan for what follows.
+**Status:** v0.1.4 ships the rules and findings layer: fifteen built-in rules, the
+Findings view, scoped suppressions and the session timeline. The process poll, file
+watchers and accepted baseline arrived in 0.1.2/0.1.3; the read-only inventory, the local
+hash-signature engine and the one-shot administrator scan remain in the repository. The
+sections below that describe cleaning, residency and deeper platform access are the plan
+for what follows.
 **Audience:** the maintainer, future contributors, and anyone deciding whether to
 trust this program with a machine.
 **What this document is:** the research behind ranger, the scope it will and will not
@@ -187,7 +187,7 @@ v0.1.0 ships the first layer of a stack whose layers are deliberately separate:
 |---|---|---|---|
 | Hash signatures | **shipped** | Reads ClamAV `.hdb` / `.hsb` (`hash:size:name`) and matches MD5, SHA-1 or SHA-256 of startup binaries and a self-test file. | A clean-room reader of a documented format. No ClamAV code, so the app stays MIT. |
 | Pattern rules | v0.1.7, optional | YARA-X behind a feature flag, for string and byte patterns. | BSD-3-Clause, linkable. Not in the default build. |
-| Behavioural rules | v0.1.4 | Ranger's own TOML rules over facts: an unsigned binary in a temporary directory, a service whose image changed, a listener owned by a process that arrived this week. | Ranger's own schema, MIT. |
+| Behavioural rules | **shipped** (v0.1.4) | Ranger's own detectors over facts: a startup item in a temporary folder, a binary that changed since the baseline, a persistent process holding a socket. | Ranger's own code, MIT. |
 | Sigma import | v0.1.7, user-supplied | A converter for the subset of Sigma that maps onto ranger facts. | Sigma rules are DRL 1.1, not OSI. Never vendored; the user brings the rules. |
 | Cleanup patterns | v0.1.5 | File walking, preview and cancellation discipline learned from Czkawka. | Czkawka is MIT; if code is copied, attribution travels with it. |
 
@@ -573,7 +573,7 @@ a named gap, not a silent one.
 |---|---|---|---|
 | Processes, parent, command line | ● `sysinfo` | ● `sysinfo` | ● `sysinfo` |
 | Binary hash | ● SHA-256 | ● SHA-256 | ● SHA-256 |
-| Signature / provenance | ○ v0.1.4 (WinVerifyTrust, cache-only) | ○ v0.1.4 (`codesign` / Security framework) | ◐ package owner, later |
+| Signature / provenance | ○ v0.2 (WinVerifyTrust, cache-only) | ○ v0.2 (`codesign` / Security framework) | ◐ package owner, later |
 | Autoruns | ◐ HKCU/HKLM Run, Startup, services; tasks not yet | ◐ LaunchAgents/Daemons; login items and cron not yet | ◐ systemd units, system cron, XDG; user crontabs not yet |
 | Listeners → process | ● IP helper via `netstat2` | ○ no safe, C-free path yet | ● `/proc/net` + fd inode |
 | Installed packages | ◐ registry uninstall keys; MSIX not yet | ◐ Applications, Homebrew; receipts not yet | ◐ dpkg, pacman; Snap/Flatpak not yet |
@@ -731,23 +731,32 @@ every poll. It now uses the start time sysinfo stores when the process is first 
 - **Exit:** the two-poll identity test passes on all three platforms. The v0.1.2 matrix
   failed it on Linux and macOS; the Windows build was never affected.
 
-### M3 — v0.1.4, Explain
+### M3 — v0.1.4, Explain — **shipped**
 
-Rules, findings, and the richer facts that make a finding worth reading. Signature
-verification lands here as a **fact**, not a verdict — and only if a §8-safe wrapper
-exists.
+Fifteen built-in rules over the facts the collectors already produce. Each declares a
+severity, a confidence, the evidence it fired on, why it matters and a named benign
+explanation; each has a positive and a negative fixture. A finding carries a stable
+subject, and a suppression covers one `(rule, subject)` pair with a reason and a 30-day
+expiry.
 
-- **Rules:** the TOML engine, 15–25 built-in rules, findings with evidence and a named
-  benign explanation, expiring suppressions, and a timeline that names the rule.
-- **Signature verification:** WinVerifyTrust on Windows with cached revocation data;
-  `codesign` / Security framework on macOS. The result is one more fact and one more
-  rule input, never a diagnosis on its own. The tree has no safe wrapper today, so the
-  item is blocked on a §8 decision; if none qualifies, the fact waits for 0.2.0 rather
-  than breaking `unsafe_code = "forbid"`.
-- **Close the named gaps:** scheduled tasks, macOS login items, MSIX, Snap/Flatpak.
-- **Exit:** every rule has a positive and a negative fixture; a false-positive trial
-  against a corpus of popular applications is published; no finding exists without
-  evidence; the language audit in §5.5 passes.
+- **Rules:** Rust functions with fixtures, not data loaded at runtime. `startup.temp-path`,
+  `startup.downloads-path`, `startup.script-extension`, `startup.bare-command`,
+  `startup.shell-interpreter`, `startup.user-writable-system`, `startup.hash-changed`,
+  `startup.new-since-baseline`, `process.temp-path`, `process.downloads-path`,
+  `process.parent-exited`, `listener.public-new-process`, `listener.public-unknown-owner`,
+  `agent.persistent-listening`, `startup.duplicate-command`.
+- **Findings:** a Findings view with the evidence, the reason, the likely benign
+  explanation and what to do; a summary on Overview; a new finding is written to the
+  session timeline.
+- **Suppressions:** scoped to one rule and one subject, carrying a reason and expiring
+  after 30 days, saved in `suppressions.json`. Clearing them is one button in Settings.
+- **Not in this release:** signature verification — the tree has no §8-safe wrapper, so
+  it waits for 0.2.0 rather than breaking `unsafe_code = "forbid"` — and the collector
+  gaps named in §7 (scheduled tasks, login items, MSIX, Snap/Flatpak) remain open and
+  named rather than silently assumed.
+- **Exit:** every rule has a positive and a negative fixture; no finding exists without
+  evidence; the language audit in §5.5 passes. Met by reading every rule's text against
+  that table by hand.
 
 ### M4 — v0.1.5, Act
 

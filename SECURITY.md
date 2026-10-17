@@ -65,7 +65,7 @@ are no backports to older 0.x lines.
 Process metadata, startup entries, listening sockets, installed package names, hashes of
 startup binaries and of files written to the watched folders (Downloads, Desktop, the
 temporary directory and the startup folders), and, once signature verification lands in
-v0.1.4, signatures. It does not read file contents apart from hashing, and it does not
+v0.2, signatures. It does not read file contents apart from hashing, and it does not
 read credentials, messages, browser data or keystrokes.
 
 ### Adversaries considered
