@@ -1371,6 +1371,21 @@ impl Ui {
                     .size(10.5)
                     .color(theme::muted(ui)),
             );
+            ui.add_space(6.0);
+            let mut skip = world.skip_on_battery;
+            if ui
+                .checkbox(
+                    &mut skip,
+                    RichText::new("Wait while the machine is on battery").size(11.0),
+                )
+                .on_hover_text(
+                    "Off by default. The scheduled scan is the only thing that waits; a scan \
+                     you ask for always runs.",
+                )
+                .changed()
+            {
+                actions.push(Action::SetSkipOnBattery(skip));
+            }
         });
         ui.add_space(10.0);
         widgets::card(ui, |ui| {

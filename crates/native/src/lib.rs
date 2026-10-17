@@ -20,6 +20,7 @@ pub mod hash;
 pub mod instance;
 pub mod journal;
 pub mod paths;
+pub mod power;
 pub mod quarantine;
 pub mod signatures;
 pub mod soak;

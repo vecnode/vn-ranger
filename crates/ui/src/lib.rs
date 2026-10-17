@@ -1125,6 +1125,7 @@ mod tests {
             paused: false,
             close_to_tray: false,
             autostart: AutostartState::Off,
+            skip_on_battery: false,
             baseline,
             baseline_error: None,
             changes,

@@ -115,6 +115,7 @@ impl App {
             paused: false,
             close_to_tray: settings.close_to_tray.unwrap_or(false),
             autostart: autostart_view(vnr_native::autostart::state()),
+            skip_on_battery: settings.skip_on_battery.unwrap_or(false),
             baseline,
             baseline_error,
             changes,
@@ -881,6 +882,17 @@ impl App {
                 self.quitting = true;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
+            Action::SetSkipOnBattery(enabled) => {
+                self.world.skip_on_battery = enabled;
+                self.persist_settings();
+                self.world.notice = Some(if enabled {
+                    "A scheduled scan now waits while the machine is on battery. A scan you ask \
+                     for always runs."
+                        .to_owned()
+                } else {
+                    "Scheduled scans run whether the machine is on battery or not.".to_owned()
+                });
+            }
             Action::SetAutostart(enabled) => {
                 let outcome = if enabled {
                     vnr_native::autostart::enable().map(|location| {
@@ -1116,6 +1128,7 @@ impl App {
         self.settings.watch = Some(self.world.watch.enabled);
         self.settings.led = Some(self.world.poll_led);
         self.settings.close_to_tray = Some(self.world.close_to_tray);
+        self.settings.skip_on_battery = Some(self.world.skip_on_battery);
         if let Err(error) = vnr_native::store::save_ui_settings(&self.settings) {
             self.world.error = Some(format!("The interface preference could not be saved: {error}"));
         }
@@ -1211,6 +1224,18 @@ impl App {
             && !self.world.busy()
             && vnr_core::schedule::is_due(now, self.next_scan_unix)
         {
+            if self.world.skip_on_battery && vnr_native::power::source().is_battery() {
+                // Postponed, not cancelled: the next interval is scheduled as usual, and the
+                // journal says why nothing ran, so a quiet day is not mistaken for a clean
+                // one.
+                self.next_scan_unix = vnr_core::schedule::next_at(now, self.plan, self.schedule_seed);
+                self.note(
+                    Draft::event("scheduled scan waited").with_reason(
+                        "the machine is on battery and the person asked scheduled scans to wait",
+                    ),
+                );
+                return;
+            }
             self.note(Draft::event("scheduled scan").with_reason(&format!(
                 "the {}-hour interval came round",
                 self.plan.every_secs / 3600

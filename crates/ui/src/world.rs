@@ -388,6 +388,8 @@ pub struct World {
     pub close_to_tray: bool,
     /// Whether ranger starts at login, as the operating system has it right now.
     pub autostart: AutostartState,
+    /// Whether a scheduled scan waits while the machine is on battery.
+    pub skip_on_battery: bool,
     /// The baseline a person accepted, when there is one.
     pub baseline: Option<Snapshot>,
     /// Why a baseline file could not be used, when one exists but is unreadable.
@@ -486,6 +488,8 @@ pub enum Action {
     SetCloseToTray(bool),
     /// Start ranger when the person logs in, or stop doing that.
     SetAutostart(bool),
+    /// Let a scheduled scan wait while the machine is on battery, or stop letting it.
+    SetSkipOnBattery(bool),
     /// Turn the file watcher on or off.
     SetWatch(bool),
     /// Show or hide the live poll indicator.
