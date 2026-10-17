@@ -281,6 +281,7 @@ A change is done when:
 | Autorun parsing | `native/src/collect/autoruns/` | Registry views, 32/64-bit keys, quoted paths, binary plists, systemd user units. |
 | The worker | `apps/vn-ranger/src/app.rs` | A worker that sends `Done` and then closes is normal; a channel that closes without a terminal message is a failure. |
 | egui 0.37 | `crates/ui/src/lib.rs` | Panels are built from the root `Ui`, not the `Context`; `Context::style` is per-theme now. |
+| Tables | `crates/ui/src/views.rs` | `egui_extras::TableBuilder` columns are computed from the available width; a `remainder` column can expand past following columns. |
 | The mark | `assets/logo/BRAND.md` | The geometry is a suite identifier; only the inlay changes. |
 | Type | `crates/ui/src/fonts.rs`, `assets/fonts/` | Fonts are embedded with `include_bytes!` and installed before the first frame; Semibold is a real family, not synthesised. |
 

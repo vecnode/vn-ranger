@@ -35,55 +35,6 @@ cargo xtask lint                 # clippy over the workspace, warnings denied
 cargo xtask test                 # the test suite
 ```
 
-v0.1.0 is a read-only inventory. It collects processes, startup items, listening
-sockets and installed packages, loads ClamAV-format `.hdb` / `.hsb` hash databases
-from the data directory, and can ask Windows for one administrator scan. It does not
-quarantine, clean or modify anything yet.
-
-## Run
-
-The same binary runs on Windows, macOS and Linux. There is no runtime to install.
-
-From a checkout, on any of the three:
-
-```bash
-cargo run --release
-```
-
-Or run the built binary:
-
-```powershell
-# Windows (PowerShell or cmd)
-.\target\release\vn-ranger.exe
-```
-
-```bash
-# macOS and Linux
-./target/release/vn-ranger
-```
-
-From a downloaded release archive, after extracting the single
-`vn-ranger-<version>/` directory:
-
-```powershell
-# Windows
-.\vn-ranger.exe
-```
-
-```bash
-# macOS and Linux
-./vn-ranger
-```
-
-Scan without opening a window:
-
-```bash
-cargo run --release -- --report report.json
-```
-
-The macOS build is not notarised yet; on first launch, right-click the binary and
-choose **Open**.
-
 ## Documentation
 
 | Document | What it answers |

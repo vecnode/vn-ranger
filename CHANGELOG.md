@@ -13,6 +13,9 @@ All notable changes to vn-ranger are recorded here. The format follows
   spacing. The statistic and preview columns respond to the window width, so rectangles
   do not overlap on a small window; dense tables scroll horizontally and the page has a
   visible scrollbar. Each view keeps its own scroll position.
+- Processes, Startup and Listeners use full-tab tables with sticky headers, columns
+  computed from the available width, whole-row selection and a pinned full-width detail
+  footer for the selected process or startup item.
 
 ## [0.1.0] - 2026-10-17
 

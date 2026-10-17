@@ -1,11 +1,17 @@
 //! The six surfaces. Each one is a function of the [`World`] and the interface state,
 //! and returns nothing but the actions a person asked for.
 
-use egui::{Color32, RichText};
+use egui::{Align, Color32, Layout, RichText, Sense};
+use egui_extras::{Column, TableBuilder};
 use vnr_core::time::{describe_age, format_utc};
 use vnr_core::{AutorunScope, ProcessFact, Snapshot};
 
 use crate::{Action, Ui, View, theme, widgets};
+
+const PROCESS_FOOTER: f32 = 190.0;
+const STARTUP_FOOTER: f32 = 210.0;
+const TABLE_HEADER: f32 = 26.0;
+const TABLE_ROW: f32 = 24.0;
 
 impl Ui {
     /// The overview: the state of the machine at a glance.
@@ -84,7 +90,7 @@ impl Ui {
         );
     }
 
-    /// The process table and its detail card.
+    /// The process table and its detail footer.
     pub(crate) fn processes(&mut self, ui: &mut egui::Ui, world: &crate::World) {
         let Some(snapshot) = world.snapshot() else {
             widgets::empty(ui, "No processes yet", "Run a scan to see what is running.");
@@ -105,60 +111,98 @@ impl Ui {
             .size(11.0)
             .color(theme::muted(ui)),
         );
+        let selected = self
+            .selected_process
+            .and_then(|pid| snapshot.processes.iter().find(|process| process.pid == pid));
+        let gap = if selected.is_some() { 8.0 } else { 0.0 };
+        let footer = if selected.is_some() { PROCESS_FOOTER } else { 0.0 };
+        let table_height = (ui.available_height() - footer - gap).max(140.0);
+        let body_height = (table_height - TABLE_HEADER).max(80.0);
+        let column_space = ui.spacing().item_spacing.x;
+        let process_width = (ui.available_width() - 64.0 - 140.0 - 110.0 - 3.0 * column_space).max(180.0);
         let mut clicked = None;
-        egui::ScrollArea::both()
-            .auto_shrink([false, false])
-            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
-            .max_height(380.0)
-            .show(ui, |ui| {
-                egui::Grid::new("process-table")
-                    .num_columns(4)
-                    .spacing([16.0, 6.0])
+        ui.allocate_ui_with_layout(
+            egui::vec2(ui.available_width(), table_height),
+            Layout::top_down(Align::Min),
+            |ui| {
+                ui.set_min_height(table_height);
+                TableBuilder::new(ui)
+                    .id_salt("process-table")
                     .striped(true)
-                    .show(ui, |ui| {
-                        header(ui, "PID");
-                        header(ui, "Process");
-                        header(ui, "User");
-                        header(ui, "Started");
-                        ui.end_row();
-                        for process in rows.iter().take(600) {
-                            let selected = self.selected_process == Some(process.pid);
-                            if ui.selectable_label(selected, process.pid.to_string()).clicked() {
-                                clicked = Some(process.pid);
-                            }
-                            if ui.selectable_label(selected, process.name.as_str()).clicked() {
-                                clicked = Some(process.pid);
-                            }
-                            ui.label(
-                                RichText::new(process.user.as_deref().unwrap_or("—"))
+                    .sense(Sense::click())
+                    .cell_layout(Layout::left_to_right(Align::Center))
+                    .auto_shrink([false, false])
+                    .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
+                    .max_scroll_height(body_height)
+                    .min_scrolled_height(body_height)
+                    .column(Column::exact(64.0))
+                    .column(Column::exact(process_width).clip(true))
+                    .column(Column::exact(140.0).clip(true))
+                    .column(Column::exact(110.0))
+                    .header(TABLE_HEADER, |mut head| {
+                        head.col(|ui| table_header(ui, "PID"));
+                        head.col(|ui| table_header(ui, "Process"));
+                        head.col(|ui| table_header(ui, "User"));
+                        head.col(|ui| table_header(ui, "Started"));
+                    })
+                    .body(|body| {
+                        body.rows(TABLE_ROW, rows.len(), |mut row| {
+                            let process = rows[row.index()];
+                            row.set_selected(self.selected_process == Some(process.pid));
+                            let mut row_clicked = false;
+                            let (_, response) = row.col(|ui| {
+                                ui.label(RichText::new(process.pid.to_string()).size(11.5).monospace());
+                            });
+                            row_clicked |= response.clicked();
+                            let (_, response) = row.col(|ui| {
+                                ui.add(
+                                    egui::Label::new(RichText::new(process.name.as_str()).size(11.5))
+                                        .truncate(),
+                                );
+                            });
+                            row_clicked |= response.clicked();
+                            let (_, response) = row.col(|ui| {
+                                ui.add(
+                                    egui::Label::new(
+                                        RichText::new(process.user.as_deref().unwrap_or("—"))
+                                            .size(11.5)
+                                            .color(theme::muted(ui)),
+                                    )
+                                    .truncate(),
+                                );
+                            });
+                            row_clicked |= response.clicked();
+                            let (_, response) = row.col(|ui| {
+                                ui.label(
+                                    RichText::new(process.started_at_unix.map_or_else(
+                                        || "—".to_owned(),
+                                        |then| describe_age(world.now_unix, then),
+                                    ))
                                     .size(11.5)
                                     .color(theme::muted(ui)),
-                            );
-                            ui.label(
-                                RichText::new(process.started_at_unix.map_or_else(
-                                    || "—".to_owned(),
-                                    |then| describe_age(world.now_unix, then),
-                                ))
-                                .size(11.5)
-                                .color(theme::muted(ui)),
-                            );
-                            ui.end_row();
-                        }
+                                );
+                            });
+                            row_clicked |= response.clicked();
+                            if row_clicked || row.response().clicked() {
+                                clicked = Some(process.pid);
+                            }
+                        });
                     });
-            });
+            },
+        );
         if let Some(pid) = clicked {
             self.selected_process = Some(pid);
+            ui.ctx().request_repaint();
         }
-        if let Some(process) = self
-            .selected_process
-            .and_then(|pid| snapshot.processes.iter().find(|process| process.pid == pid))
-        {
-            ui.add_space(10.0);
-            process_detail(ui, process, world.now_unix);
+        if let Some(process) = selected {
+            ui.add_space(8.0);
+            detail_footer(ui, PROCESS_FOOTER, |ui| {
+                process_detail_body(ui, process, world.now_unix);
+            });
         }
     }
 
-    /// The startup table and its detail card.
+    /// The startup table and its detail footer.
     pub(crate) fn startup(&mut self, ui: &mut egui::Ui, world: &crate::World) {
         let Some(snapshot) = world.snapshot() else {
             widgets::empty(
@@ -183,82 +227,92 @@ impl Ui {
             .size(11.0)
             .color(theme::muted(ui)),
         );
-        let mut clicked = None;
-        egui::ScrollArea::both()
-            .auto_shrink([false, false])
-            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
-            .max_height(420.0)
-            .show(ui, |ui| {
-                egui::Grid::new("startup-table")
-                    .num_columns(4)
-                    .spacing([16.0, 6.0])
-                    .striped(true)
-                    .show(ui, |ui| {
-                        header(ui, "Name");
-                        header(ui, "Kind");
-                        header(ui, "Scope");
-                        header(ui, "Enabled");
-                        ui.end_row();
-                        for autorun in &rows {
-                            let selected = self.selected_autorun.as_deref() == Some(autorun.id.as_str());
-                            if ui.selectable_label(selected, autorun.name.as_str()).clicked() {
-                                clicked = Some(autorun.id.clone());
-                            }
-                            ui.label(
-                                RichText::new(autorun.kind.label())
-                                    .size(11.5)
-                                    .color(theme::muted(ui)),
-                            );
-                            widgets::badge(ui, autorun.scope.label(), scope_color(autorun.scope));
-                            ui.label(if autorun.enabled { "yes" } else { "no" });
-                            ui.end_row();
-                        }
-                    });
-            });
-        if let Some(id) = clicked {
-            self.selected_autorun = Some(id);
-        }
-        if let Some(autorun) = self
+        let selected = self
             .selected_autorun
             .as_deref()
-            .and_then(|id| snapshot.autoruns.iter().find(|autorun| autorun.id == id))
-        {
-            ui.add_space(10.0);
-            let mut open_path = None;
-            widgets::card(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(
-                        RichText::new(autorun.name.as_str())
-                            .size(14.0)
-                            .family(theme::semibold()),
-                    );
-                    widgets::badge(ui, autorun.kind.label(), theme::EMBER);
-                    if snapshot
-                        .signatures
-                        .matches
-                        .iter()
-                        .any(|hit| hit.subject == autorun.id)
-                    {
-                        widgets::badge(ui, "SIGNATURE MATCH", theme::BAD);
-                    }
-                });
-                ui.add_space(4.0);
-                widgets::key_value(ui, "Location", &autorun.location);
-                widgets::key_value(ui, "Command", &autorun.command);
-                widgets::key_value(ui, "Path", autorun.exe.as_deref().unwrap_or("not resolved"));
-                widgets::key_value(ui, "SHA-256", autorun.sha256.as_deref().unwrap_or("not hashed"));
-                if let Some(path) = &autorun.exe {
-                    ui.horizontal(|ui| {
-                        if ui.button("Open folder").clicked()
-                            && let Some(parent) = std::path::Path::new(path).parent()
-                        {
-                            open_path = Some(parent.display().to_string());
-                        }
-                        if ui.button("Copy path").clicked() {
-                            ui.ctx().copy_text(path.clone());
-                        }
+            .and_then(|id| snapshot.autoruns.iter().find(|autorun| autorun.id == id));
+        let gap = if selected.is_some() { 8.0 } else { 0.0 };
+        let footer = if selected.is_some() { STARTUP_FOOTER } else { 0.0 };
+        let table_height = (ui.available_height() - footer - gap).max(140.0);
+        let body_height = (table_height - TABLE_HEADER).max(80.0);
+        let column_space = ui.spacing().item_spacing.x;
+        let name_width = (ui.available_width() - 120.0 - 90.0 - 70.0 - 3.0 * column_space).max(180.0);
+        let mut clicked = None;
+        ui.allocate_ui_with_layout(
+            egui::vec2(ui.available_width(), table_height),
+            Layout::top_down(Align::Min),
+            |ui| {
+                ui.set_min_height(table_height);
+                TableBuilder::new(ui)
+                    .id_salt("startup-table")
+                    .striped(true)
+                    .sense(Sense::click())
+                    .cell_layout(Layout::left_to_right(Align::Center))
+                    .auto_shrink([false, false])
+                    .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
+                    .max_scroll_height(body_height)
+                    .min_scrolled_height(body_height)
+                    .column(Column::exact(name_width).clip(true))
+                    .column(Column::exact(120.0).clip(true))
+                    .column(Column::exact(90.0))
+                    .column(Column::exact(70.0))
+                    .header(TABLE_HEADER, |mut head| {
+                        head.col(|ui| table_header(ui, "Name"));
+                        head.col(|ui| table_header(ui, "Kind"));
+                        head.col(|ui| table_header(ui, "Scope"));
+                        head.col(|ui| table_header(ui, "Enabled"));
+                    })
+                    .body(|body| {
+                        body.rows(TABLE_ROW, rows.len(), |mut row| {
+                            let autorun = rows[row.index()];
+                            row.set_selected(self.selected_autorun.as_deref() == Some(autorun.id.as_str()));
+                            let mut row_clicked = false;
+                            let (_, response) = row.col(|ui| {
+                                ui.add(
+                                    egui::Label::new(RichText::new(autorun.name.as_str()).size(11.5))
+                                        .truncate(),
+                                );
+                            });
+                            row_clicked |= response.clicked();
+                            let (_, response) = row.col(|ui| {
+                                ui.add(
+                                    egui::Label::new(
+                                        RichText::new(autorun.kind.label())
+                                            .size(11.5)
+                                            .color(theme::muted(ui)),
+                                    )
+                                    .truncate(),
+                                );
+                            });
+                            row_clicked |= response.clicked();
+                            let (_, response) = row.col(|ui| {
+                                widgets::badge(ui, autorun.scope.label(), scope_color(autorun.scope));
+                            });
+                            row_clicked |= response.clicked();
+                            let (_, response) = row.col(|ui| {
+                                ui.label(
+                                    RichText::new(if autorun.enabled { "yes" } else { "no" })
+                                        .size(11.5)
+                                        .color(theme::muted(ui)),
+                                );
+                            });
+                            row_clicked |= response.clicked();
+                            if row_clicked || row.response().clicked() {
+                                clicked = Some(autorun.id.clone());
+                            }
+                        });
                     });
-                }
+            },
+        );
+        if let Some(id) = clicked {
+            self.selected_autorun = Some(id);
+            ui.ctx().request_repaint();
+        }
+        if let Some(autorun) = selected {
+            ui.add_space(8.0);
+            let mut open_path = None;
+            detail_footer(ui, STARTUP_FOOTER, |ui| {
+                startup_detail_body(ui, autorun, snapshot, &mut open_path);
             });
             if let Some(path) = open_path {
                 self.open_path = Some(path);
@@ -285,63 +339,110 @@ impl Ui {
                 .size(11.0)
                 .color(theme::muted(ui)),
         );
+        let table_height = ui.available_height().max(140.0);
+        let body_height = (table_height - TABLE_HEADER).max(80.0);
+        let column_space = ui.spacing().item_spacing.x;
+        let address_width =
+            (ui.available_width() - 70.0 - 64.0 - 170.0 - 80.0 - 70.0 - 5.0 * column_space).max(160.0);
         let mut clicked_pid = None;
-        egui::ScrollArea::both()
-            .auto_shrink([false, false])
-            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
-            .max_height(480.0)
-            .show(ui, |ui| {
-                egui::Grid::new("listener-table")
-                    .num_columns(6)
-                    .spacing([16.0, 6.0])
+        ui.allocate_ui_with_layout(
+            egui::vec2(ui.available_width(), table_height),
+            Layout::top_down(Align::Min),
+            |ui| {
+                ui.set_min_height(table_height);
+                TableBuilder::new(ui)
+                    .id_salt("listener-table")
                     .striped(true)
-                    .show(ui, |ui| {
-                        header(ui, "Protocol");
-                        header(ui, "Address");
-                        header(ui, "Port");
-                        header(ui, "Process");
-                        header(ui, "PID");
-                        header(ui, "State");
-                        ui.end_row();
-                        for listener in &rows {
-                            ui.label(
-                                RichText::new(listener.protocol.label())
-                                    .size(11.5)
-                                    .family(theme::semibold()),
-                            );
-                            ui.horizontal(|ui| {
-                                if listener.public {
-                                    widgets::badge(ui, "PUBLIC", theme::ATTENTION);
-                                }
-                                ui.label(RichText::new(listener.address.as_str()).size(11.5).monospace());
+                    .sense(Sense::click())
+                    .cell_layout(Layout::left_to_right(Align::Center))
+                    .auto_shrink([false, false])
+                    .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
+                    .max_scroll_height(body_height)
+                    .min_scrolled_height(body_height)
+                    .column(Column::exact(70.0))
+                    .column(Column::exact(address_width).clip(true))
+                    .column(Column::exact(64.0))
+                    .column(Column::exact(170.0).clip(true))
+                    .column(Column::exact(80.0))
+                    .column(Column::exact(70.0))
+                    .header(TABLE_HEADER, |mut head| {
+                        head.col(|ui| table_header(ui, "Protocol"));
+                        head.col(|ui| table_header(ui, "Address"));
+                        head.col(|ui| table_header(ui, "Port"));
+                        head.col(|ui| table_header(ui, "Process"));
+                        head.col(|ui| table_header(ui, "PID"));
+                        head.col(|ui| table_header(ui, "State"));
+                    })
+                    .body(|body| {
+                        body.rows(TABLE_ROW, rows.len(), |mut row| {
+                            let listener = rows[row.index()];
+                            let mut row_clicked = false;
+                            let (_, response) = row.col(|ui| {
+                                ui.label(
+                                    RichText::new(listener.protocol.label())
+                                        .size(11.5)
+                                        .family(theme::semibold()),
+                                );
                             });
-                            ui.label(RichText::new(listener.port.to_string()).size(11.5).monospace());
-                            if ui
-                                .selectable_label(false, listener.process.as_deref().unwrap_or("unknown"))
-                                .clicked()
-                            {
+                            row_clicked |= response.clicked();
+                            let (_, response) = row.col(|ui| {
+                                ui.horizontal(|ui| {
+                                    if listener.public {
+                                        widgets::badge(ui, "PUBLIC", theme::ATTENTION);
+                                    }
+                                    ui.add(
+                                        egui::Label::new(
+                                            RichText::new(listener.address.as_str()).size(11.5).monospace(),
+                                        )
+                                        .truncate(),
+                                    );
+                                });
+                            });
+                            row_clicked |= response.clicked();
+                            let (_, response) = row.col(|ui| {
+                                ui.label(RichText::new(listener.port.to_string()).size(11.5).monospace());
+                            });
+                            row_clicked |= response.clicked();
+                            let (_, response) = row.col(|ui| {
+                                ui.add(
+                                    egui::Label::new(
+                                        RichText::new(listener.process.as_deref().unwrap_or("unknown"))
+                                            .size(11.5),
+                                    )
+                                    .truncate(),
+                                );
+                            });
+                            row_clicked |= response.clicked();
+                            let (_, response) = row.col(|ui| {
+                                ui.label(
+                                    RichText::new(
+                                        listener.pid.map_or_else(|| "—".to_owned(), |pid| pid.to_string()),
+                                    )
+                                    .size(11.5)
+                                    .color(theme::muted(ui)),
+                                );
+                            });
+                            row_clicked |= response.clicked();
+                            let (_, response) = row.col(|ui| {
+                                ui.label(
+                                    RichText::new(listener.state.as_str())
+                                        .size(11.5)
+                                        .color(theme::muted(ui)),
+                                );
+                            });
+                            row_clicked |= response.clicked();
+                            if row_clicked || row.response().clicked() {
                                 clicked_pid = listener.pid;
                             }
-                            ui.label(
-                                RichText::new(
-                                    listener.pid.map_or_else(|| "—".to_owned(), |pid| pid.to_string()),
-                                )
-                                .size(11.5)
-                                .color(theme::muted(ui)),
-                            );
-                            ui.label(
-                                RichText::new(listener.state.as_str())
-                                    .size(11.0)
-                                    .color(theme::muted(ui)),
-                            );
-                            ui.end_row();
-                        }
+                        });
                     });
-            });
+            },
+        );
         if let Some(pid) = clicked_pid {
             self.selected_process = Some(pid);
             self.view = View::Processes;
             self.search.clear();
+            ui.ctx().request_repaint();
         }
     }
 
@@ -664,43 +765,117 @@ fn collectors_card(ui: &mut egui::Ui, snapshot: &Snapshot) {
     });
 }
 
-fn process_detail(ui: &mut egui::Ui, process: &ProcessFact, now: u64) {
-    widgets::card(ui, |ui| {
-        ui.horizontal(|ui| {
-            ui.label(
-                RichText::new(process.name.as_str())
-                    .size(14.0)
-                    .family(theme::semibold()),
-            );
-            widgets::badge(ui, &format!("PID {}", process.pid), theme::EMBER);
+fn detail_footer(ui: &mut egui::Ui, height: f32, add: impl FnOnce(&mut egui::Ui)) {
+    let inner_height = (height - 28.0).max(80.0);
+    egui::Frame::new()
+        .fill(theme::surface(ui))
+        .stroke(egui::Stroke::new(1.0, theme::border(ui)))
+        .corner_radius(egui::CornerRadius::same(10))
+        .inner_margin(egui::Margin::same(14))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.set_min_height(inner_height);
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
+                .max_height(inner_height)
+                .show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    add(ui);
+                });
         });
-        ui.add_space(4.0);
-        widgets::key_value(ui, "Path", process.exe.as_deref().unwrap_or("not visible"));
-        widgets::key_value(ui, "Command", process.command.as_deref().unwrap_or("not visible"));
-        widgets::key_value(ui, "User", process.user.as_deref().unwrap_or("—"));
+}
+
+fn process_detail_body(ui: &mut egui::Ui, process: &ProcessFact, now: u64) {
+    ui.horizontal(|ui| {
+        ui.label(
+            RichText::new(process.name.as_str())
+                .size(14.0)
+                .family(theme::semibold()),
+        );
+        widgets::badge(ui, &format!("PID {}", process.pid), theme::EMBER);
+    });
+    ui.add_space(4.0);
+    widgets::key_value(ui, "Path", process.exe.as_deref().unwrap_or("not visible"));
+    widgets::key_value(ui, "Command", process.command.as_deref().unwrap_or("not visible"));
+    ui.columns(3, |columns| {
+        widgets::key_value(&mut columns[0], "User", process.user.as_deref().unwrap_or("—"));
         widgets::key_value(
-            ui,
+            &mut columns[1],
             "Parent",
             &process
                 .parent
                 .map_or_else(|| "—".to_owned(), |pid| pid.to_string()),
         );
         widgets::key_value(
-            ui,
+            &mut columns[2],
             "Started",
             &process
                 .started_at_unix
                 .map_or_else(|| "—".to_owned(), |then| describe_age(now, then)),
         );
-        if let Some(path) = &process.exe
-            && ui.button("Copy path").clicked()
-        {
-            ui.ctx().copy_text(path.clone());
-        }
     });
+    if let Some(path) = &process.exe
+        && ui.button("Copy path").clicked()
+    {
+        ui.ctx().copy_text(path.clone());
+    }
 }
 
-fn header(ui: &mut egui::Ui, text: &str) {
+fn startup_detail_body(
+    ui: &mut egui::Ui,
+    autorun: &vnr_core::AutorunFact,
+    snapshot: &Snapshot,
+    open_path: &mut Option<String>,
+) {
+    ui.horizontal(|ui| {
+        ui.label(
+            RichText::new(autorun.name.as_str())
+                .size(14.0)
+                .family(theme::semibold()),
+        );
+        widgets::badge(ui, autorun.kind.label(), theme::EMBER);
+        if snapshot
+            .signatures
+            .matches
+            .iter()
+            .any(|hit| hit.subject == autorun.id)
+        {
+            widgets::badge(ui, "SIGNATURE MATCH", theme::BAD);
+        }
+    });
+    ui.add_space(4.0);
+    ui.columns(2, |columns| {
+        widgets::key_value(&mut columns[0], "Location", &autorun.location);
+        widgets::key_value(
+            &mut columns[1],
+            "Path",
+            autorun.exe.as_deref().unwrap_or("not resolved"),
+        );
+    });
+    ui.columns(2, |columns| {
+        widgets::key_value(&mut columns[0], "Command", &autorun.command);
+        widgets::key_value(
+            &mut columns[1],
+            "SHA-256",
+            autorun.sha256.as_deref().unwrap_or("not hashed"),
+        );
+    });
+    if let Some(path) = &autorun.exe {
+        ui.horizontal(|ui| {
+            if ui.button("Open folder").clicked()
+                && let Some(parent) = std::path::Path::new(path).parent()
+            {
+                *open_path = Some(parent.display().to_string());
+            }
+            if ui.button("Copy path").clicked() {
+                ui.ctx().copy_text(path.clone());
+            }
+        });
+    }
+}
+
+fn table_header(ui: &mut egui::Ui, text: &str) {
     ui.label(
         RichText::new(text)
             .size(10.0)

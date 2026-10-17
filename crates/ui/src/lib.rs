@@ -73,27 +73,36 @@ impl Ui {
             .show(root, |ui| {
                 self.page_header(ui, world);
                 ui.add_space(10.0);
-                let mut scroll = egui::ScrollArea::vertical()
-                    .auto_shrink([false, false])
-                    .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
-                    .id_salt(self.view.label());
-                if view_changed {
-                    scroll = scroll.vertical_scroll_offset(0.0);
+                let view = self.view;
+                if matches!(view, View::Processes | View::Startup | View::Listeners) {
+                    self.draw_view(ui, world, &mut actions, view);
+                } else {
+                    let mut scroll = egui::ScrollArea::vertical()
+                        .auto_shrink([false, false])
+                        .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
+                        .id_salt(self.view.label());
+                    if view_changed {
+                        scroll = scroll.vertical_scroll_offset(0.0);
+                    }
+                    scroll.show(ui, |ui| self.draw_view(ui, world, &mut actions, view));
                 }
-                scroll.show(ui, |ui| match self.view {
-                    View::Overview => self.overview(ui, world, &mut actions),
-                    View::Processes => self.processes(ui, world),
-                    View::Startup => self.startup(ui, world),
-                    View::Listeners => self.listeners(ui, world),
-                    View::Report => self.report(ui, world, &mut actions),
-                    View::Settings => self.settings(ui, world, &mut actions),
-                });
             });
         if let Some(path) = self.open_path.take() {
             actions.push(Action::OpenPath(path));
         }
         self.modal(&ctx, &mut actions);
         actions
+    }
+
+    fn draw_view(&mut self, ui: &mut egui::Ui, world: &World, actions: &mut Vec<Action>, view: View) {
+        match view {
+            View::Overview => self.overview(ui, world, actions),
+            View::Processes => self.processes(ui, world),
+            View::Startup => self.startup(ui, world),
+            View::Listeners => self.listeners(ui, world),
+            View::Report => self.report(ui, world, actions),
+            View::Settings => self.settings(ui, world, actions),
+        }
     }
 
     fn top_bar(&self, root: &mut egui::Ui, world: &World, actions: &mut Vec<Action>) {
