@@ -94,7 +94,10 @@ fn collect_systemd(items: &mut Vec<AutorunFact>, enabled: &HashSet<String>) {
                 continue;
             };
             let description = unit_value(&body, "Description").unwrap_or_else(|| file_name.clone());
-            let command = exec.trim().trim_start_matches(['-', '+', '!', '@']).to_owned();
+            let command = exec
+                .trim()
+                .trim_start_matches(|character| matches!(character, '-' | '+' | '!' | '@'))
+                .to_owned();
             let exe = unixutil::executable_from_command(&command).map(|path| path.display().to_string());
             items.push(AutorunFact {
                 id: format!("systemd:{}:{file_name}", scope.label()),

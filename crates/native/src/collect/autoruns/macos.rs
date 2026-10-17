@@ -101,7 +101,7 @@ fn read_plist(path: &Path, scope: AutorunScope) -> Option<AutorunFact> {
     let kind = if path
         .parent()
         .and_then(Path::file_name)
-        .is_some_and(|name| name.to_string_lossy() == "LaunchDaemons")
+        .is_some_and(|name| name.to_str() == Some("LaunchDaemons"))
     {
         AutorunKind::LaunchDaemon
     } else {

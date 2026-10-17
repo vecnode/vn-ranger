@@ -19,31 +19,6 @@
 </div>
 
 
-## What it is for
-
-- **See.** Processes and their ancestry, what starts on its own, what is listening,
-  what is installed — and the agents, MCP servers and local model runners that now sit
-  in that list.
-- **Explain.** Every finding carries its subject, the observation that produced it, the
-  rule that fired, and what the finding does *not* mean. No score without a reason.
-- **Remember.** A baseline of what was true on a good day. Later checks report the
-  difference, not a vague "threat found".
-- **Act.** Quarantine and cleanup arrive in v0.3.0: previewed first, journalled,
-  reversible. Never in the background, never silently.
-
-## What it will never do
-
-- **No telemetry, no account, no network.** The binary links no HTTP client at all,
-  and CI fails if one appears in the dependency tree. Nothing about the machine leaves
-  it.
-- **No silent privilege, no kernel driver, no hidden service.** Ranger runs as you. An
-  administrator scan is a separate, one-shot copy that the operating system asks you
-  to approve; it writes one report and exits. There is no service and no standing
-  administrator process.
-- **No silent deletion, no registry cleaning, no "boost".** Every action is previewed
-  and reversible; the snake-oil half of this category is out of scope on purpose.
-- **No paywall, no ads, no upsell.** MIT, free forever.
-
 ## Build
 
 The workspace uses the same commands as vn-launcher:
