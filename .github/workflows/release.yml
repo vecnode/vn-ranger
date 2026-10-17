@@ -99,8 +99,10 @@ jobs:
           if [ "${{ matrix.os_name }}" = "windows" ]; then
             cp "target/${{ matrix.target }}/release/vn-ranger.exe" "dist/${NAME}/"
             cp README.md LICENSE "dist/${NAME}/"
-            powershell -NoProfile -Command \
-              "Compress-Archive -Path 'dist/${NAME}' -DestinationPath 'dist/${NAME}.zip'"
+            # bsdtar writes forward-slash entries; Compress-Archive on Windows
+            # PowerShell 5.1 can write backslashes, which other unzip tools treat as
+            # part of the filename rather than a separator.
+            tar -a -c -f "dist/${NAME}.zip" -C dist "${NAME}"
           else
             cp "target/${{ matrix.target }}/release/vn-ranger" "dist/${NAME}/"
             cp README.md LICENSE "dist/${NAME}/"

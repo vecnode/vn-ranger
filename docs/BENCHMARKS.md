@@ -36,8 +36,8 @@ which is the layout vn-launcher expects.
   with the window open on the Overview.
 - **Idle CPU:** two samples of `TotalProcessorTime` five seconds apart, divided by the
   elapsed time. The window repaints on demand, so the expected answer is zero.
-- **Binary and zip:** `target/release/vn-ranger.exe`, and `Compress-Archive` of the
-  binary with the README and licence.
+- **Binary and zip:** `target/release/vn-ranger.exe`, and a zip of the binary with the
+  README and licence in one top-level directory.
 
 ## What was revised, and why
 
