@@ -99,10 +99,9 @@ jobs:
           if [ "${{ matrix.os_name }}" = "windows" ]; then
             cp "target/${{ matrix.target }}/release/vn-ranger.exe" "dist/${NAME}/"
             cp README.md LICENSE "dist/${NAME}/"
-            # bsdtar writes forward-slash entries; Compress-Archive on Windows
-            # PowerShell 5.1 can write backslashes, which other unzip tools treat as
-            # part of the filename rather than a separator.
-            tar -a -c -f "dist/${NAME}.zip" -C dist "${NAME}"
+            # bsdtar writes forward-slash entries; the GNU tar in Git Bash does not
+            # make a zip at all, so the Windows bsdtar is called explicitly.
+            "/c/Windows/System32/tar.exe" -a -c -f "dist/${NAME}.zip" -C dist "${NAME}"
           else
             cp "target/${{ matrix.target }}/release/vn-ranger" "dist/${NAME}/"
             cp README.md LICENSE "dist/${NAME}/"
