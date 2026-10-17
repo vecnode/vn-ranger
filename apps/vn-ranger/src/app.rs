@@ -34,6 +34,13 @@ pub struct App {
     next_scan_unix: u64,
     /// The clock as the previous frame saw it, which is how a resume is noticed.
     last_frame_unix: u64,
+    /// What the last dry run walked, per surface. The interface holds the list for display
+    /// and returns a selection by path; this is the list a path has to be in before it can
+    /// become an item, so the interface never hands the action path something it did not
+    /// see itself.
+    clean_previews: Vec<(vnr_core::action::Surface, vnr_native::clean::Preview)>,
+    /// Counts dry runs, so the interface can tell one from another.
+    clean_run: u64,
 }
 
 impl App {
@@ -84,6 +91,7 @@ impl App {
             suppressions,
             watch_extra,
             quarantine: Vec::new(),
+            clean: None,
             journal: Vec::new(),
             journal_damaged: false,
         };
@@ -135,6 +143,8 @@ impl App {
             schedule_seed,
             next_scan_unix,
             last_frame_unix: now_unix(),
+            clean_previews: Vec::new(),
+            clean_run: 0,
         };
         if app.world.snapshot.is_none() {
             app.start_scan(&cc.egui_ctx, false);
@@ -240,6 +250,60 @@ impl App {
                 "{unreadable} folder in the quarantine could not be read, so the list above is incomplete."
             ));
         }
+    }
+
+    /// Walk every allowlisted surface and put what a clean would remove into the world.
+    ///
+    /// This is the dry run: it reads names, sizes and times and writes nothing — no journal
+    /// line, no removal, no file of its own. The walk's items stay here rather than in the
+    /// world, because the world is what the interface draws and this is the only list the
+    /// action path may remove from.
+    ///
+    /// `fresh` says whether this is a new list or the same one after a clean. A new list
+    /// resets the person's ticks; keeping them after a clean is what lets an entry they had
+    /// unticked stay unticked instead of quietly returning to a default.
+    fn refresh_clean(&mut self, fresh: bool) {
+        let now = now_unix();
+        let cancel = || false;
+        if fresh {
+            self.clean_run = self.clean_run.saturating_add(1);
+        }
+        self.clean_previews.clear();
+        let mut report = vnr_ui::CleanReport {
+            run: self.clean_run,
+            ..vnr_ui::CleanReport::default()
+        };
+        for surface in vnr_core::action::Surface::ALL {
+            let roots = vnr_native::clean::roots(surface);
+            if roots.is_empty() {
+                // A surface with no folder on this machine is not offered: the list is
+                // what exists here, not what the table names.
+                continue;
+            }
+            let preview = vnr_native::clean::preview_roots(surface, &roots, now, &cancel);
+            report.cancelled |= preview.cancelled;
+            report.surfaces.push(vnr_ui::CleanSurface {
+                id: surface.id().to_owned(),
+                label: surface.label().to_owned(),
+                roots: roots.len(),
+                opt_in: surface.is_opt_in(),
+                items: preview
+                    .items
+                    .iter()
+                    .map(|item| vnr_ui::CleanItem {
+                        path: item.path.display().to_string(),
+                        bytes: item.bytes,
+                        is_dir: item.is_dir,
+                    })
+                    .collect(),
+                skipped_young: preview.skipped_young,
+                skipped_links: preview.skipped_links,
+                skipped_devices: preview.skipped_devices,
+                skipped_excluded: preview.skipped_excluded,
+            });
+            self.clean_previews.push((surface, preview));
+        }
+        self.world.clean = Some(report);
     }
 
     fn drain(&mut self) {
@@ -698,6 +762,95 @@ impl App {
                     Err(error) => self.world.error = Some(error.to_string()),
                 }
                 self.refresh_actions();
+            }
+            Action::PreviewClean => {
+                let started = std::time::Instant::now();
+                self.refresh_clean(true);
+                let (entries, bytes) = self.world.clean.as_ref().map_or((0, 0), |report| {
+                    report
+                        .surfaces
+                        .iter()
+                        .fold((0_usize, 0_u64), |(entries, bytes), surface| {
+                            (
+                                entries.saturating_add(surface.entries()),
+                                bytes.saturating_add(surface.bytes()),
+                            )
+                        })
+                });
+                let elapsed = started.elapsed().as_millis();
+                self.world.error = None;
+                self.world.notice = Some(if entries == 0 {
+                    format!(
+                        "A dry run walked every allowlisted folder in {elapsed} ms and found \
+                         nothing past the age each surface keeps. It wrote nothing."
+                    )
+                } else {
+                    format!(
+                        "A dry run counted {entries} entries, {}, in {elapsed} ms. Nothing was \
+                         removed and nothing was recorded.",
+                        vnr_ui::widgets::bytes(bytes)
+                    )
+                });
+            }
+            Action::CleanSelected(choices) => {
+                let now = now_unix();
+                let cancel = || false;
+                let mut removed = 0_usize;
+                let mut bytes = 0_u64;
+                let mut skipped = 0_usize;
+                let mut refused = 0_usize;
+                let mut surfaces = 0_usize;
+                let mut failure: Option<String> = None;
+                for choice in &choices {
+                    let Some(surface) = vnr_core::action::Surface::from_id(&choice.surface) else {
+                        continue;
+                    };
+                    // The selection is matched against this process's own walk, so a path
+                    // the dry run did not offer is dropped rather than resolved.
+                    let items = match self.clean_previews.iter().find(|(walked, _)| *walked == surface) {
+                        Some((_, preview)) => vnr_native::clean::select(&preview.items, &choice.paths),
+                        None => continue,
+                    };
+                    if items.is_empty() {
+                        continue;
+                    }
+                    surfaces = surfaces.saturating_add(1);
+                    match vnr_native::act::clean(&mut self.journal, surface, &items, now, &cancel) {
+                        Ok(removal) => {
+                            removed = removed.saturating_add(removal.removed);
+                            bytes = bytes.saturating_add(removal.bytes);
+                            skipped = skipped.saturating_add(removal.skipped);
+                            refused = refused.saturating_add(removal.failed.len());
+                            if let Some((path, reason)) = removal.failed.first()
+                                && failure.is_none()
+                            {
+                                failure = Some(format!("{} could not be removed: {reason}", path.display()));
+                            }
+                        }
+                        Err(error) => {
+                            if failure.is_none() {
+                                failure = Some(error.to_string());
+                            }
+                        }
+                    }
+                }
+                // What is left is what is shown, as the same list rather than a new one:
+                // the person's ticks stay where they put them.
+                self.refresh_clean(false);
+                self.world.error = failure;
+                self.world.notice = Some(if removed == 0 && refused == 0 {
+                    format!(
+                        "Nothing was removed: every selected entry had changed, vanished or \
+                         become a link since the dry run. All {skipped} are still in place."
+                    )
+                } else {
+                    format!(
+                        "Removed {removed} entries, {}, from {surfaces} surfaces. {skipped} \
+                         skipped, {refused} refused. The journal has the record, and the list \
+                         below was walked again.",
+                        vnr_ui::widgets::bytes(bytes)
+                    )
+                });
             }
         }
     }

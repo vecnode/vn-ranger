@@ -134,6 +134,108 @@ pub struct QuarantineRow {
     pub hash_short: String,
 }
 
+/// One thing a clean would remove, as the interface lists it.
+///
+/// The path is the key a selection is made by. It is not a capability: the shell removes
+/// only what its own walk offered, and a path that was not in that walk is dropped rather
+/// than resolved.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CleanItem {
+    /// Where it is.
+    pub path: String,
+    /// Its size in bytes; zero for a directory.
+    pub bytes: u64,
+    /// Whether it is an empty directory waiting to be pruned.
+    pub is_dir: bool,
+}
+
+/// What one allowlisted surface would give back.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CleanSurface {
+    /// The surface's stable id, which is what an act names.
+    pub id: String,
+    /// What a person calls it.
+    pub label: String,
+    /// How many folders on this machine belong to it.
+    pub roots: usize,
+    /// Whether removing this surface's contents is a choice the person makes explicitly.
+    pub opt_in: bool,
+    /// The things it would remove.
+    pub items: Vec<CleanItem>,
+    /// How many entries were left alone because they are newer than the surface's age.
+    pub skipped_young: usize,
+    /// How many links were left alone.
+    pub skipped_links: usize,
+    /// How many entries on another filesystem were left alone.
+    pub skipped_devices: usize,
+    /// How many entries this surface keeps by name.
+    pub skipped_excluded: usize,
+}
+
+impl CleanSurface {
+    /// Everything the surface would give back, summed.
+    #[must_use]
+    pub fn bytes(&self) -> u64 {
+        self.items.iter().map(|item| item.bytes).sum()
+    }
+
+    /// How many entries would be removed.
+    #[must_use]
+    pub fn entries(&self) -> usize {
+        self.items.len()
+    }
+
+    /// How many entries were left alone, and why, in the surface's own words.
+    #[must_use]
+    pub fn kept_sentence(&self) -> String {
+        let mut parts = Vec::new();
+        if self.skipped_young > 0 {
+            parts.push(format!("{} too new", self.skipped_young));
+        }
+        if self.skipped_links > 0 {
+            parts.push(format!("{} links", self.skipped_links));
+        }
+        if self.skipped_devices > 0 {
+            parts.push(format!("{} on another filesystem", self.skipped_devices));
+        }
+        if self.skipped_excluded > 0 {
+            parts.push(format!("{} the system keeps", self.skipped_excluded));
+        }
+        if parts.is_empty() {
+            return String::new();
+        }
+        format!("Kept {}", parts.join(", "))
+    }
+}
+
+/// What one dry run found across every surface that exists on this machine.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CleanReport {
+    /// Which dry run this is. The interface resets a selection when this changes.
+    pub run: u64,
+    /// One row per surface that resolved to at least one folder.
+    pub surfaces: Vec<CleanSurface>,
+    /// Whether the walk stopped because it was asked to.
+    pub cancelled: bool,
+}
+
+impl CleanReport {
+    /// Whether there is anything to remove at all.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.surfaces.iter().all(|surface| surface.items.is_empty())
+    }
+}
+
+/// One surface's share of what a person chose to remove.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CleanChoice {
+    /// The surface's stable id.
+    pub surface: String,
+    /// The paths that were selected, as the dry run listed them.
+    pub paths: Vec<String>,
+}
+
 /// One journal line, as the interface lists it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct JournalRow {
@@ -213,6 +315,8 @@ pub struct World {
     pub watch_extra: Vec<String>,
     /// The quarantine, newest first.
     pub quarantine: Vec<QuarantineRow>,
+    /// What the last clean dry run found, and nothing else: the walk writes no file.
+    pub clean: Option<CleanReport>,
     /// The journal's newest entries, newest first.
     pub journal: Vec<JournalRow>,
     /// Whether the journal reports a damaged line or a torn tail.
@@ -309,6 +413,16 @@ pub enum Action {
     Restore(String),
     /// Move a file into the quarantine, after the detail panel has shown what it is.
     Quarantine(String),
+    /// Walk the allowlisted surfaces and report what a clean would remove.
+    ///
+    /// This is a dry run: it reads names, sizes and times, and writes nothing — no journal
+    /// line, no removal, not even a file of its own.
+    PreviewClean,
+    /// Remove the entries a person selected, one surface at a time.
+    ///
+    /// The paths are what the shell's own dry run listed; it drops any that were not, so a
+    /// path assembled somewhere else cannot arrive here as an instruction.
+    CleanSelected(Vec<CleanChoice>),
     /// Delete a quarantined entry for good, with the word the person typed.
     ///
     /// The typed word travels with the action so the shell can refuse a call that did not

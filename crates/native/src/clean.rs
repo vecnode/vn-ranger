@@ -277,6 +277,24 @@ fn walk(
     }
 }
 
+/// Keep the items a person selected, matched by the path the preview showed.
+///
+/// The selection arrives from the interface as text. An item is kept only when the walk
+/// that produced it offered that exact path, so a string assembled somewhere else — by a
+/// stale window, a future caller, or a mistake — cannot become an instruction to remove a
+/// file the walk never saw. Everything kept is still re-checked by [`remove`], because the
+/// preview is a photograph and the disk is not.
+#[must_use]
+pub fn select(items: &[Item], paths: &[String]) -> Vec<Item> {
+    let wanted: std::collections::HashSet<&std::ffi::OsStr> =
+        paths.iter().map(std::ffi::OsStr::new).collect();
+    items
+        .iter()
+        .filter(|item| wanted.contains(item.path.as_os_str()))
+        .cloned()
+        .collect()
+}
+
 /// Remove what the preview offered, re-checking each item first.
 ///
 /// An item that changed since the preview is skipped rather than deleted: the preview is a
@@ -714,5 +732,42 @@ mod tests {
         );
         assert_eq!(removal.removed, 0);
         assert_eq!(removal.skipped, 1);
+    }
+
+    #[test]
+    fn a_selection_can_only_reach_what_the_walk_offered() {
+        let dir = tempfile::tempdir().unwrap();
+        let offered = old_file(dir.path(), "offered.tmp", b"yes");
+        let unoffered = old_file(dir.path(), "unoffered.tmp", b"no");
+        let preview = preview_roots(Surface::WinTemp, &[dir.path().to_path_buf()], now(), &never);
+        assert_eq!(preview.items.len(), 2, "both files are old enough");
+
+        // A selection is text that arrives from the interface, so it may name anything at
+        // all. Only a path the walk itself offered becomes an item.
+        let asked = vec![
+            offered.display().to_string(),
+            unoffered
+                .with_file_name("not-in-the-walk.tmp")
+                .display()
+                .to_string(),
+            "..".to_owned(),
+            String::new(),
+        ];
+        let selected = select(&preview.items, &asked);
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].path, offered);
+        assert!(
+            selected.iter().all(|item| item.path != unoffered),
+            "a path the walk saw but the person did not select is not removed"
+        );
+    }
+
+    #[test]
+    fn an_empty_selection_selects_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        old_file(dir.path(), "kept.tmp", b"keep");
+        let preview = preview_roots(Surface::WinTemp, &[dir.path().to_path_buf()], now(), &never);
+        assert!(select(&preview.items, &[]).is_empty());
+        assert!(select(&[], &["anything".to_owned()]).is_empty());
     }
 }

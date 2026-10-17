@@ -19,6 +19,43 @@ pub fn card<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
         .inner
 }
 
+/// A bordered row inside a card, for a list of things a person can act on.
+pub fn border<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    egui::Frame::new()
+        .fill(ui.visuals().faint_bg_color)
+        .corner_radius(CornerRadius::same(6))
+        .inner_margin(Margin::symmetric(10, 8))
+        .outer_margin(Margin {
+            bottom: 6,
+            ..Margin::ZERO
+        })
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            add(ui)
+        })
+        .inner
+}
+
+/// A byte count in the units a person uses.
+///
+/// Bytes are rounded to one decimal above a kilobyte: the difference between 312.4 MB and
+/// 312.44 MB is not a fact anyone acts on, and a long number invites comparison instead of
+/// a decision.
+pub fn bytes(bytes: u64) -> String {
+    const UNITS: [&str; 4] = ["B", "KB", "MB", "GB"];
+    let mut value = bytes as f64;
+    let mut unit = 0;
+    while value >= 1024.0 && unit + 1 < UNITS.len() {
+        value /= 1024.0;
+        unit += 1;
+    }
+    if unit == 0 {
+        format!("{bytes} B")
+    } else {
+        format!("{value:.1} {}", UNITS[unit])
+    }
+}
+
 /// A small coloured label.
 pub fn badge(ui: &mut egui::Ui, text: &str, color: Color32) {
     let galley = ui
@@ -117,4 +154,23 @@ pub fn dot_line(ui: &mut egui::Ui, color: Color32, text: &str) {
         ui.painter().circle_filled(rect.center(), 4.0, color);
         ui.label(RichText::new(text).size(11.5).color(theme::muted(ui)));
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sizes_read_in_the_units_a_person_uses() {
+        assert_eq!(bytes(0), "0 B");
+        assert_eq!(bytes(999), "999 B");
+        assert_eq!(bytes(1024), "1.0 KB");
+        assert_eq!(bytes(1024 * 1024 * 3 / 2), "1.5 MB");
+        assert_eq!(bytes(1024 * 1024 * 1024 * 2), "2.0 GB");
+        assert_eq!(
+            bytes(1024 * 1024 * 1024 * 1024),
+            "1024.0 GB",
+            "the largest unit is the largest one shown"
+        );
+    }
 }

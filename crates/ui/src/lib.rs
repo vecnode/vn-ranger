@@ -18,7 +18,12 @@ mod world;
 
 mod act;
 
-pub use world::{Action, JournalRow, Live, QuarantineRow, ScanState, View, WatchReport, World};
+mod clean;
+
+pub use world::{
+    Action, CleanChoice, CleanItem, CleanReport, CleanSurface, JournalRow, Live, QuarantineRow, ScanState,
+    View, WatchReport, World,
+};
 
 use egui::{Align2, CornerRadius, FontId, Margin, RichText, Sense, vec2};
 
@@ -207,6 +212,8 @@ pub struct Ui {
     suppress_reason: String,
     /// Which quarantine entry is waiting for its word, and what has been typed.
     purge_ask: crate::act::PurgeAsk,
+    /// What the clean card has ticked, and against which dry run.
+    clean: crate::clean::CleanState,
     finding_severity: Option<vnr_core::Severity>,
     finding_query: String,
     finding_sort: FindingSort,
@@ -264,6 +271,7 @@ impl Ui {
             suppress_target: None,
             suppress_reason: String::new(),
             purge_ask: crate::act::PurgeAsk::default(),
+            clean: crate::clean::CleanState::default(),
             finding_severity: None,
             finding_query: String::new(),
             finding_sort: FindingSort::Severity,
@@ -390,7 +398,7 @@ impl Ui {
             View::Startup => self.startup(ui, world, actions),
             View::Listeners => self.listeners(ui, world),
             View::Changes => self.changes(ui, world, actions),
-            View::Actions => act::view(ui, world, &mut self.purge_ask, actions),
+            View::Actions => act::view(ui, world, &mut self.purge_ask, &mut self.clean, actions),
             View::Report => self.report(ui, world, actions),
             View::Settings => self.settings(ui, world, actions),
         }
@@ -1098,8 +1106,49 @@ mod tests {
             suppressions: Vec::new(),
             watch_extra: Vec::new(),
             quarantine: Vec::new(),
+            clean: None,
             journal: Vec::new(),
             journal_damaged: false,
+        }
+    }
+
+    fn clean_report() -> CleanReport {
+        CleanReport {
+            run: 7,
+            surfaces: vec![
+                CleanSurface {
+                    id: "win.temp".to_owned(),
+                    label: "Temporary files".to_owned(),
+                    roots: 2,
+                    opt_in: false,
+                    items: vec![
+                        CleanItem {
+                            path: "C:\\Temp\\a.tmp".to_owned(),
+                            bytes: 4_096,
+                            is_dir: false,
+                        },
+                        CleanItem {
+                            path: "C:\\Temp\\empty".to_owned(),
+                            bytes: 0,
+                            is_dir: true,
+                        },
+                    ],
+                    ..CleanSurface::default()
+                },
+                CleanSurface {
+                    id: "mac.logs".to_owned(),
+                    label: "User logs".to_owned(),
+                    roots: 1,
+                    opt_in: true,
+                    items: vec![CleanItem {
+                        path: "C:\\Logs\\old.log".to_owned(),
+                        bytes: 9_000,
+                        is_dir: false,
+                    }],
+                    ..CleanSurface::default()
+                },
+            ],
+            cancelled: false,
         }
     }
 
@@ -1109,6 +1158,38 @@ mod tests {
             let mut ui = Ui::new(&ctx);
             ui.view = view;
             let _ = ui.show(root, world);
+        });
+    }
+
+    #[test]
+    fn the_clean_card_draws_its_list() {
+        let mut world = base_world(None, None);
+        let report = clean_report();
+        world.clean = Some(report.clone());
+        egui::__run_test_ui(|root| {
+            let ctx = root.ctx().clone();
+            let mut ui = Ui::new(&ctx);
+            ui.view = View::Actions;
+            ui.clean.begin(&report);
+            ui.clean.toggle_open("win.temp");
+            let actions = ui.show(root, &world);
+            assert!(actions.is_empty(), "drawing a list asks for nothing on its own");
+        });
+    }
+
+    #[test]
+    fn the_clean_confirmation_draws_and_dispatches_nothing_until_clicked() {
+        let mut world = base_world(None, None);
+        let report = clean_report();
+        world.clean = Some(report.clone());
+        egui::__run_test_ui(|root| {
+            let ctx = root.ctx().clone();
+            let mut ui = Ui::new(&ctx);
+            ui.view = View::Actions;
+            ui.clean.begin(&report);
+            ui.clean.ask();
+            let actions = ui.show(root, &world);
+            assert!(actions.is_empty(), "a confirmation is a question, not an act");
         });
     }
 

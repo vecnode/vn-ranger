@@ -559,6 +559,29 @@ mod tests {
     }
 
     #[test]
+    fn a_dry_run_writes_no_journal_and_removes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let journal = Journal::open_at(dir.path().join("journal.ndjson")).unwrap();
+        let path = dir.path().join("old.tmp");
+        std::fs::write(&path, b"still here").unwrap();
+        let file = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+        let old = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_000);
+        file.set_times(std::fs::FileTimes::new().set_modified(old))
+            .unwrap();
+        drop(file);
+        let now = 1_000 + 48 * 60 * 60;
+
+        let preview = clean::preview_roots(Surface::WinTemp, &[dir.path().to_path_buf()], now, &|| false);
+        assert_eq!(preview.items.len(), 1, "the walk offers the old file");
+        assert!(path.exists(), "and leaves it where it is");
+        assert_eq!(std::fs::read(&path).unwrap(), b"still here");
+        assert!(
+            journal.read().entries.is_empty(),
+            "a dry run is not an act, so it is not a record"
+        );
+    }
+
+    #[test]
     fn an_act_id_is_sixteen_hex_and_two_acts_differ() {
         let first = next_act_id();
         let second = next_act_id();
