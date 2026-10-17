@@ -16,7 +16,9 @@ pub mod widgets;
 
 mod world;
 
-pub use world::{Action, Live, ScanState, View, WatchReport, World};
+mod act;
+
+pub use world::{Action, JournalRow, Live, QuarantineRow, ScanState, View, WatchReport, World};
 
 use egui::{Align2, CornerRadius, FontId, Margin, RichText, Sense, vec2};
 
@@ -385,6 +387,7 @@ impl Ui {
             View::Startup => self.startup(ui, world),
             View::Listeners => self.listeners(ui, world),
             View::Changes => self.changes(ui, world, actions),
+            View::Actions => act::view(ui, world, actions),
             View::Report => self.report(ui, world, actions),
             View::Settings => self.settings(ui, world, actions),
         }
@@ -1030,6 +1033,7 @@ fn view_icon(view: View) -> icons::Icon {
         View::Startup => icons::Icon::Startup,
         View::Listeners => icons::Icon::Listeners,
         View::Changes => icons::Icon::Changes,
+        View::Actions => icons::Icon::Shield,
         View::Report => icons::Icon::Report,
         View::Settings => icons::Icon::Settings,
     }
@@ -1090,6 +1094,9 @@ mod tests {
             findings: Vec::new(),
             suppressions: Vec::new(),
             watch_extra: Vec::new(),
+            quarantine: Vec::new(),
+            journal: Vec::new(),
+            journal_damaged: false,
         }
     }
 

@@ -75,6 +75,9 @@ impl App {
             findings,
             suppressions,
             watch_extra,
+            quarantine: Vec::new(),
+            journal: Vec::new(),
+            journal_damaged: false,
         };
         let mut ui = Ui::new(&cc.egui_ctx);
         if let Some(dark) = settings.dark {
@@ -121,6 +124,7 @@ impl App {
         if app.world.snapshot.is_none() {
             app.start_scan(&cc.egui_ctx, false);
         }
+        app.refresh_actions();
         app
     }
 
@@ -172,6 +176,54 @@ impl App {
         }
         if let Err(error) = self.journal.prune(now_unix()) {
             log::warn!("could not prune the journal: {error}");
+        }
+    }
+
+    /// Read the quarantine and the journal from disk into the world.
+    ///
+    /// Both are files, and the interface draws a `World`; this is the only place that
+    /// turns one into the other, so a stale list is a bug in one function rather than a
+    /// missing refresh in five.
+    fn refresh_actions(&mut self) {
+        let read = self.journal.read();
+        let open: std::collections::HashSet<String> = vnr_core::journal::interrupted(&read.entries)
+            .into_iter()
+            .filter_map(|entry| entry.id.clone())
+            .collect();
+        self.world.journal_damaged = read.is_damaged();
+        self.world.journal = read
+            .entries
+            .iter()
+            .rev()
+            .take(200)
+            .map(|entry| vnr_ui::JournalRow {
+                seq: entry.seq,
+                at_label: vnr_core::time::format_utc(entry.at),
+                kind: entry.kind.label(),
+                action: entry.action.map(|action| action.label()),
+                subject: entry.subject.clone().unwrap_or_default(),
+                detail: entry.reason.clone().unwrap_or_default(),
+                interrupted: entry.kind == vnr_core::JournalKind::Intent
+                    && entry.id.as_ref().is_some_and(|id| open.contains(id)),
+            })
+            .collect();
+
+        let (summaries, unreadable) = vnr_native::quarantine::list(&vnr_native::action::RealIo);
+        self.world.quarantine = summaries
+            .into_iter()
+            .map(|summary| vnr_ui::QuarantineRow {
+                id: summary.id,
+                original_path: summary.manifest.original_path,
+                bytes: summary.manifest.size,
+                at_label: vnr_core::time::format_utc(summary.manifest.quarantined_at),
+                reason: summary.manifest.reason,
+                hash_short: summary.manifest.sha256.chars().take(12).collect(),
+            })
+            .collect();
+        if unreadable > 0 {
+            self.world.error = Some(format!(
+                "{unreadable} folder in the quarantine could not be read, so the list above is incomplete."
+            ));
         }
     }
 
@@ -571,6 +623,23 @@ impl App {
                 }
             }
             Action::Quit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
+            Action::RefreshActions => {
+                self.refresh_actions();
+                self.world.notice = Some("The quarantine and the journal were read again.".to_owned());
+            }
+            Action::Restore(id) => {
+                match vnr_native::act::restore(&mut self.journal, &id, &vnr_native::action::RealIo) {
+                    Ok(restored) => {
+                        self.world.error = None;
+                        self.world.notice = Some(format!(
+                            "Put back at {}. Its bytes were checked first.",
+                            restored.manifest.original_path
+                        ));
+                    }
+                    Err(error) => self.world.error = Some(error.to_string()),
+                }
+                self.refresh_actions();
+            }
         }
     }
 

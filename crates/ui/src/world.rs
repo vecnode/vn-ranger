@@ -25,6 +25,8 @@ pub enum View {
     Listeners,
     /// What changed while ranger was watching.
     Changes,
+    /// What ranger can act on: the quarantine and the journal.
+    Actions,
     /// Export and read the scan.
     Report,
     /// Preferences, elevation and privacy.
@@ -33,13 +35,14 @@ pub enum View {
 
 impl View {
     /// Every view, in navigation order.
-    pub const ALL: [View; 8] = [
+    pub const ALL: [View; 9] = [
         View::Overview,
         View::Findings,
         View::Processes,
         View::Startup,
         View::Listeners,
         View::Changes,
+        View::Actions,
         View::Report,
         View::Settings,
     ];
@@ -54,6 +57,7 @@ impl View {
             Self::Startup => "Startup",
             Self::Listeners => "Listeners",
             Self::Changes => "Changes",
+            Self::Actions => "Actions",
             Self::Report => "Report",
             Self::Settings => "Settings",
         }
@@ -78,6 +82,7 @@ impl View {
             Self::Startup => "What runs without a person clicking it.",
             Self::Listeners => "Sockets waiting for a connection.",
             Self::Changes => "What changed since ranger opened, and since the baseline.",
+            Self::Actions => "What ranger has done, and what it can put back.",
             Self::Report => "A record you can read, export and keep.",
             Self::Settings => "How ranger runs, and what it will not do.",
         }
@@ -110,6 +115,42 @@ pub struct Live {
     pub at_unix: u64,
     /// Why the poll is incomplete, when it is.
     pub reason: Option<String>,
+}
+
+/// One quarantined file, as the interface lists it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct QuarantineRow {
+    /// The entry id, which is what every act takes.
+    pub id: String,
+    /// Where the file came from.
+    pub original_path: String,
+    /// Its size in bytes.
+    pub bytes: u64,
+    /// When it was taken, already formatted by the shell.
+    pub at_label: String,
+    /// Why it was taken.
+    pub reason: String,
+    /// The first twelve characters of its hash, which is enough to compare two rows.
+    pub hash_short: String,
+}
+
+/// One journal line, as the interface lists it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct JournalRow {
+    /// Its sequence number in the journal.
+    pub seq: u64,
+    /// When it was written, already formatted.
+    pub at_label: String,
+    /// What kind of line it is.
+    pub kind: &'static str,
+    /// The operation, when the line is about one.
+    pub action: Option<&'static str>,
+    /// What it is about.
+    pub subject: String,
+    /// Why, in the entry's own words.
+    pub detail: String,
+    /// Whether this line is an intent that never got a result.
+    pub interrupted: bool,
 }
 
 /// What the file watcher is reading, and what it refused.
@@ -170,6 +211,12 @@ pub struct World {
     pub suppressions: Vec<Suppression>,
     /// Folders the person added to the watcher.
     pub watch_extra: Vec<String>,
+    /// The quarantine, newest first.
+    pub quarantine: Vec<QuarantineRow>,
+    /// The journal's newest entries, newest first.
+    pub journal: Vec<JournalRow>,
+    /// Whether the journal reports a damaged line or a torn tail.
+    pub journal_damaged: bool,
 }
 
 impl World {
@@ -258,6 +305,10 @@ pub enum Action {
     AddWatchRoot(String),
     /// Stop watching a folder the person added.
     RemoveWatchRoot(String),
+    /// Put a quarantined file back where it came from.
+    Restore(String),
+    /// Read the quarantine and the journal from disk again.
+    RefreshActions,
     /// Open a file or directory in the platform's file manager.
     OpenPath(String),
     /// Close the application.

@@ -263,6 +263,67 @@ fn write_manifest(dir: &cap_std::fs::Dir, manifest: &Manifest, io: &dyn ActionIo
     Ok(())
 }
 
+/// One entry, as a list shows it: the id the acts take, and what was recorded.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Summary {
+    /// The entry id, as hex.
+    pub id: String,
+    /// What the entry says about the file it holds.
+    pub manifest: Manifest,
+}
+
+/// Every entry in the platform quarantine, newest first.
+#[must_use]
+pub fn list(io: &dyn ActionIo) -> (Vec<Summary>, usize) {
+    list_at(&crate::paths::quarantine_dir(), io)
+}
+
+/// Every entry under a chosen root, newest first, with a count of the ones that could not
+/// be read.
+///
+/// A list does not create the root: an empty quarantine is empty, not a folder ranger
+/// makes on a machine where nothing has been quarantined.
+pub fn list_at(root_path: &Path, io: &dyn ActionIo) -> (Vec<Summary>, usize) {
+    let mut summaries = Vec::new();
+    let mut unreadable = 0_usize;
+    let Ok(root) = io.open_dir(root_path) else {
+        return (summaries, unreadable);
+    };
+    let Ok(entries) = root.entries() else {
+        return (summaries, unreadable);
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        let Some(id) = EntryId::from_hex(name) else {
+            // Not one of ours: a stray folder is left alone rather than reported as an
+            // entry with no manifest.
+            continue;
+        };
+        let Ok(dir) = root.open_dir(name) else {
+            unreadable = unreadable.saturating_add(1);
+            continue;
+        };
+        match read_manifest(&dir) {
+            Ok(manifest) => summaries.push(Summary {
+                id: id.to_hex(),
+                manifest,
+            }),
+            Err(_) => unreadable = unreadable.saturating_add(1),
+        }
+    }
+    summaries.sort_by(|left, right| {
+        right
+            .manifest
+            .quarantined_at
+            .cmp(&left.manifest.quarantined_at)
+            .then_with(|| right.id.cmp(&left.id))
+    });
+    (summaries, unreadable)
+}
+
 fn read_payload(dir: &cap_std::fs::Dir, io: &dyn ActionIo) -> Result<String> {
     let mut file = io
         .open(dir, &OsString::from(PAYLOAD_NAME))
@@ -421,6 +482,46 @@ mod tests {
             derive_id(&source, 42, 1),
             "a collision retries on the attempt number"
         );
+    }
+
+    #[test]
+    fn a_list_is_newest_first_and_survives_a_broken_entry() {
+        let (dir, root, path) = setup(b"older");
+        let older = take(&root, &path, "first", 100, &real()).unwrap();
+        let second_path = dir.path().join("second.bin");
+        std::fs::write(&second_path, b"newer").unwrap();
+        let newer = take(&root, &second_path, "second", 200, &real()).unwrap();
+
+        let (listed, unreadable) = list_at(&root, &real());
+        assert_eq!(unreadable, 0);
+        assert_eq!(listed.len(), 2);
+        assert_eq!(listed[0].id, newer.id.to_hex(), "newest first");
+        assert_eq!(listed[1].id, older.id.to_hex());
+        assert_eq!(listed[0].manifest.reason, "second");
+
+        // A folder that looks like an entry but has no manifest is counted, not listed.
+        let stray = dir.path().join("quarantine").join("ffffffffffffffff");
+        std::fs::create_dir(&stray).unwrap();
+        std::fs::write(stray.join("payload"), b"orphan").unwrap();
+        let (listed, unreadable) = list_at(&root, &real());
+        assert_eq!(listed.len(), 2);
+        assert_eq!(unreadable, 1, "the orphan is counted, not silently ignored");
+
+        // Something that is not an id is not an entry at all.
+        std::fs::create_dir(dir.path().join("quarantine").join("not-an-entry")).unwrap();
+        let (listed, unreadable) = list_at(&root, &real());
+        assert_eq!(listed.len(), 2);
+        assert_eq!(unreadable, 1);
+    }
+
+    #[test]
+    fn a_list_of_a_folder_that_does_not_exist_is_empty_and_creates_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("never-made");
+        let (listed, unreadable) = list_at(&root, &real());
+        assert!(listed.is_empty());
+        assert_eq!(unreadable, 0);
+        assert!(!root.exists(), "a list must not create the quarantine");
     }
 
     #[test]
