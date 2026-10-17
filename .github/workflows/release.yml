@@ -20,10 +20,20 @@ env:
   GH_REPO: ${{ github.repository }}
 
 jobs:
+  # A tag is a promise that the commit it names was checked on three platforms. The gate
+  # calls the same workflow a pull request runs rather than a copy of it, so the two cannot
+  # drift: a red check stops the release here, before a draft exists to be published.
+  gate:
+    name: Gate
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
   # Create the release once, as a draft. It becomes visible only after every archive
   # and SHA256SUMS.txt are attached, so a half-finished release cannot be installed.
   prepare:
     name: Prepare release
+    needs: gate
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

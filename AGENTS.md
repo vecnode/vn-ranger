@@ -29,12 +29,14 @@ crates/
   core      vnr-core     pure and IO-free: facts, snapshots, timelines, diffs, rules,
                          findings, hash signatures, reports, time arithmetic,
                          journal records, recovery verdicts, pack schema and matcher,
-                         clean policy, schedule arithmetic, the Sigma converter
+                         the allowlist table and its refusals (`action.rs`), schedule
+                         arithmetic, the Sigma converter
   native    vnr-native   the only crate that touches the world:
                          collect/{processes,autoruns,listeners,packages,tasks,agentstack},
                          hash, signatures, elevation, paths, store, watch, scan,
-                         journal, action, quarantine, clean, pack, tray, autostart
-  ui        vnr-ui       egui: theme, fonts, icons, widgets, the views, World/Action
+                         journal, act, action, quarantine, clean, pack, tray, autostart
+  ui        vnr-ui       egui: theme, fonts, icons, widgets, the views, World/Action,
+                         and the clean card's selection state
 apps/
   vn-ranger              the eframe shell: owns the World, runs the worker,
                          scheduler and tray, carries out actions, and the headless
@@ -206,8 +208,11 @@ capability report.
 
 ## 5. Platform rules
 
-CI builds on three platforms, and two of them will disagree with your machine. An
-attribute on a **statement** deletes it on the other platforms, which can leave a
+CI builds on three platforms, and two of them will disagree with your machine. A push to
+`main` checks Linux only; a pull request, the Monday run and the release gate check all
+three. So a `#[cfg]` bug can live on `main` until the next Monday or until the cut, and
+the target check below is how you find it on the day you write it rather than the day you
+tag. An attribute on a **statement** deletes it on the other platforms, which can leave a
 binding unused, a variable unread or a branch unreachable:
 
 ```rust
@@ -346,7 +351,7 @@ A change is done when:
 | Rules and findings | `core/src/rules.rs` | A rule that cannot name a benign explanation is not ready; every finding carries the evidence it fired on and a stable subject for suppressions. |
 | The action path | `native/src/action.rs`, `quarantine.rs`, `clean.rs` | The only code that can destroy data. `cap-std`, four refusals, a journal line before every act, and a test seam for TOCTOU — never a race. |
 | The journal | `native/src/journal.rs`, `core/src/journal.rs` | Append-only, `sync_data`, a torn tail tolerated, a rotation that keeps seq monotone, and a recovery verdict for four on-disk states. |
-| The allowlist | `native/src/clean.rs`, `core/src/clean.rs` | A table, not a heuristic; the walk never follows a link or crosses a device, and a file changed since the preview is skipped. |
+| The allowlist | `native/src/clean.rs`, `core/src/action.rs` | A table, not a heuristic; the walk never follows a link or crosses a device, and a file changed since the preview is skipped. |
 | Packs | `core/src/pack/`, `native/src/pack/` | Verified before parsed; a closed vocabulary; an unknown field is an error; activation and rollback are journal entries. |
 | The Sigma reader | `core/src/sigma/` | YAML is user input: a restricted reader that refuses anchors, tags and multi-document files rather than guessing. |
 | The tray | `native/src/tray/` | `tray-icon` on Windows and macOS, `ksni` on Linux, an event loop per platform, and no icon is a supported state. |

@@ -173,7 +173,10 @@ rule packs already use, so it is exercised for a release before it protects one.
 
 ## 7. Checklist before tagging
 
-- [ ] `cargo xtask ci` is green on all three runners.
+- [ ] `cargo xtask ci` is green on all three runners. The release workflow calls that
+  same check as its gate, so a tag on a red commit publishes nothing: the matrix runs at
+  the cut rather than on every commit, which is why the cut is the one place it cannot be
+  skipped.
 - [ ] The version in `Cargo.toml` matches the tag.
 - [ ] `CHANGELOG.md` has the entry.
 - [ ] `README.md` and `docs/PLAN.md` still describe what the binary does.

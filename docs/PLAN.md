@@ -1050,7 +1050,7 @@ part that exists):
 | Wave | In the tree | Still to do |
 |---|---|---|
 | 1 Ledger | journal records, reader, rotation, crash-recovery verdicts, the typed action path with its four refusals, the `ActionIo` seam | — |
-| 2 Quarantine and cleaning | quarantine with a manifest, verified restore, irreversible purge, all four acts journaled, the allowlist walk with preview and removal, the language audit as a check, the Actions view, the quarantine entry point, the typed-`DELETE` dialog | the clean preview surface |
+| 2 Quarantine and cleaning | quarantine with a manifest, verified restore, irreversible purge, all four acts journaled, the allowlist walk with preview and removal, the clean preview (a dry run, per-surface totals, per-item selection, one confirmation naming them), the language audit as a check, the Actions view, the quarantine entry point, the typed-`DELETE` dialog | the data-directory size in Settings; the second reviewer on every deletion path, which is a process row and not code |
 | 3 Resident | the schedule (six hours ±10 %, seeded jitter), resume detection, a scan on resume | tray, opt-in autostart, activation, the soak recorder |
 | 4 Packs | — | everything |
 | 5 Coverage | — | everything |
@@ -1401,10 +1401,12 @@ external service, nothing to install beside it.
 - **No YARA-X by default:** `cargo tree -e features` proves the default build has no
   `yara-x`, and that the feature builds it in when asked.
 - **Language:** `cargo xtask language` fails on "fix", "infected", "threat score" and
-  "your PC is clean" in user-facing strings, and on an empty state that does not name
-  what was checked.
-- **Cross-target clippy:** the workspace is checked against Linux and macOS targets, as
-  vn-launcher does, because a Windows machine cannot see what they see.
+  "your PC is clean" in the string literals a person sees. It cannot see whether an empty
+  state names what was checked, so that half of §5.5 is a review rule rather than a check.
+- **Cross-target clippy:** a developer step before a `#[cfg]` push, not a check of its own:
+  a Windows machine can install a Linux target and may stop inside a dependency, which is
+  why the three-OS matrix — Monday, a pull request, and every release — is the real
+  cross-platform check.
 - **Fuzzing:** the pack JSON, the journal reader, the plist/registry parsers and the
   restricted Sigma YAML reader, as each parser lands.
 - **The soak:** 24 hours with the tray, the poll, the watcher and the scheduler running,
