@@ -307,6 +307,8 @@ pub enum Action {
     RemoveWatchRoot(String),
     /// Put a quarantined file back where it came from.
     Restore(String),
+    /// Move a file into the quarantine, after the detail panel has shown what it is.
+    Quarantine(String),
     /// Read the quarantine and the journal from disk again.
     RefreshActions,
     /// Open a file or directory in the platform's file manager.

@@ -384,7 +384,7 @@ impl Ui {
             View::Overview => self.overview(ui, world, actions),
             View::Findings => self.findings(ui, world, actions),
             View::Processes => self.processes(ui, world),
-            View::Startup => self.startup(ui, world),
+            View::Startup => self.startup(ui, world, actions),
             View::Listeners => self.listeners(ui, world),
             View::Changes => self.changes(ui, world, actions),
             View::Actions => act::view(ui, world, actions),

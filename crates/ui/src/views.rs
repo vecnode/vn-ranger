@@ -554,7 +554,12 @@ impl Ui {
     }
 
     /// The startup table and its detail footer.
-    pub(crate) fn startup(&mut self, ui: &mut egui::Ui, world: &crate::World) {
+    pub(crate) fn startup(
+        &mut self,
+        ui: &mut egui::Ui,
+        world: &crate::World,
+        actions: &mut Vec<crate::Action>,
+    ) {
         let Some(snapshot) = world.snapshot() else {
             widgets::empty(
                 ui,
@@ -703,11 +708,15 @@ impl Ui {
         if let Some(autorun) = selected {
             ui.add_space(8.0);
             let mut open_path = None;
+            let mut quarantine = None;
             detail_footer(ui, STARTUP_FOOTER, |ui| {
-                startup_detail_body(ui, autorun, snapshot, &mut open_path);
+                startup_detail_body(ui, autorun, snapshot, &mut open_path, &mut quarantine);
             });
             if let Some(path) = open_path {
                 self.open_path = Some(path);
+            }
+            if let Some(path) = quarantine {
+                actions.push(crate::Action::Quarantine(path));
             }
             ui.add_space(BOTTOM_GAP);
         }
@@ -1523,6 +1532,7 @@ fn startup_detail_body(
     autorun: &vnr_core::AutorunFact,
     snapshot: &Snapshot,
     open_path: &mut Option<String>,
+    quarantine: &mut Option<String>,
 ) {
     ui.horizontal(|ui| {
         ui.label(
@@ -1567,7 +1577,25 @@ fn startup_detail_body(
             if ui.button("Copy path").clicked() {
                 ui.ctx().copy_text(path.clone());
             }
+            // The panel above is the preview: path, command, hash and signature. One click
+            // moves the file, and the journal records that this is what was on screen.
+            if ui
+                .button("Quarantine the file")
+                .on_hover_text(
+                    "Move the file into ranger's quarantine. Its hash is recorded first, and \
+                     Restore in the Actions view puts it back.",
+                )
+                .clicked()
+            {
+                *quarantine = Some(path.clone());
+            }
         });
+    } else {
+        ui.label(
+            RichText::new("There is no resolved path to quarantine for this entry.")
+                .size(11.0)
+                .color(theme::muted(ui)),
+        );
     }
 }
 

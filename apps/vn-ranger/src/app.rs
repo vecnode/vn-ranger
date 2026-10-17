@@ -655,6 +655,24 @@ impl App {
                 }
                 self.refresh_actions();
             }
+            Action::Quarantine(path) => {
+                match vnr_native::act::quarantine(
+                    &mut self.journal,
+                    std::path::Path::new(&path),
+                    "quarantined from the Startup view",
+                    &vnr_native::action::RealIo,
+                ) {
+                    Ok(taken) => {
+                        self.world.error = None;
+                        self.world.notice = Some(format!(
+                            "Moved {} into the quarantine. It can be put back from Actions.",
+                            taken.manifest.original_path
+                        ));
+                    }
+                    Err(error) => self.world.error = Some(error.to_string()),
+                }
+                self.refresh_actions();
+            }
         }
     }
 
