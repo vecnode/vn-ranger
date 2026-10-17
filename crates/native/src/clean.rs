@@ -40,6 +40,8 @@ pub struct Preview {
     pub skipped_links: usize,
     /// How many entries were on another device and left alone.
     pub skipped_devices: usize,
+    /// How many entries the surface keeps by name, such as the system's own caches.
+    pub skipped_excluded: usize,
     /// Whether the walk stopped because it was asked to.
     pub cancelled: bool,
 }
@@ -171,6 +173,18 @@ pub fn preview_roots(
             break;
         }
     }
+    // A surface can keep some entries by name — the macOS caches table says "not named
+    // com.apple.*" — and the walk only learns a name once it has one, so the filter is
+    // applied here, before anything is offered.
+    let mut excluded = 0_usize;
+    preview.items.retain(|item| {
+        let keep = !excluded_name(surface, item.path.file_name());
+        if !keep {
+            excluded = excluded.saturating_add(1);
+        }
+        keep
+    });
+    preview.skipped_excluded = excluded;
     // Deepest first, so a directory is considered after everything inside it.
     preview.items.sort_by(|left, right| {
         right
@@ -369,6 +383,22 @@ fn device_of(_metadata: &std::fs::Metadata) -> Option<u64> {
 /// Whether an entry is on a different filesystem from the surface root.
 fn crosses_device(root_device: u64, entry_device: u64) -> bool {
     root_device != entry_device
+}
+
+/// Names a surface keeps whatever their age.
+///
+/// The macOS caches surface excludes `com.apple.*`: those caches belong to the system, a
+/// person did not choose to have them, and rebuilding one can cost a login. Every other
+/// surface has nothing to exclude, because everything inside it is rebuildable by the
+/// program that wrote it.
+fn excluded_name(surface: Surface, name: Option<&std::ffi::OsStr>) -> bool {
+    if surface != Surface::MacCaches {
+        return false;
+    }
+    let Some(name) = name.and_then(|name| name.to_str()) else {
+        return false;
+    };
+    name.starts_with("com.apple.")
 }
 
 fn modified_unix(metadata: &std::fs::Metadata) -> u64 {
@@ -607,6 +637,37 @@ mod tests {
     fn a_mount_point_is_not_this_surfaces_business() {
         assert!(crosses_device(1, 2));
         assert!(!crosses_device(7, 7));
+    }
+
+    #[test]
+    fn the_systems_own_caches_are_kept_by_name() {
+        use std::ffi::OsStr;
+        assert!(excluded_name(
+            Surface::MacCaches,
+            Some(OsStr::new("com.apple.Safari"))
+        ));
+        assert!(!excluded_name(
+            Surface::MacCaches,
+            Some(OsStr::new("com.google.Chrome"))
+        ));
+        assert!(
+            !excluded_name(Surface::LinuxCache, Some(OsStr::new("com.apple.Safari"))),
+            "the exclusion belongs to one surface, not to the word"
+        );
+        assert!(!excluded_name(Surface::MacCaches, None));
+    }
+
+    #[test]
+    fn an_excluded_entry_is_counted_rather_than_offered() {
+        let dir = tempfile::tempdir().unwrap();
+        let kept = old_file(dir.path(), "com.apple.Safari", b"system");
+        let offered = old_file(dir.path(), "quicklookd", b"user");
+        let preview = preview_roots(Surface::MacCaches, &[dir.path().to_path_buf()], now(), &never);
+        assert!(!preview.items.iter().any(|item| item.path == kept));
+        assert!(preview.items.iter().any(|item| item.path == offered));
+        // The rule is by name, so it holds wherever the test runs; what differs per
+        // platform is whether the surface has roots at all.
+        assert_eq!(preview.skipped_excluded, 1);
     }
 
     #[test]
