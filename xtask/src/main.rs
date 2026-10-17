@@ -16,12 +16,13 @@ fn main() {
         "test" => test(),
         "check" => run(&["check", "--workspace", "--all-targets", "--profile", CI_PROFILE]),
         "no-network" => no_network(),
+        "language" => language(),
         "version" => {
             println!("{}", env!("CARGO_PKG_VERSION"));
             Ok(())
         }
         other => Err(format!(
-            "unknown xtask `{other}`; try ci, fmt-fix, lint, test, check, no-network or version"
+            "unknown xtask `{other}`; try ci, fmt-fix, lint, test, check, no-network, language or version"
         )),
     };
     if let Err(error) = result {
@@ -33,6 +34,7 @@ fn main() {
 fn ci() -> Result<(), String> {
     run(&["fmt", "--all", "--check"])?;
     no_network()?;
+    language()?;
     lint()?;
     test()
 }
@@ -51,10 +53,10 @@ fn lint() -> Result<(), String> {
     ])
 }
 
-/// The tests live in the pure core, the native collectors and the interface's own
-/// decisions. The shell has no tests yet, so it is type-checked rather than linked into
-/// an empty test binary; linking wgpu for zero tests is the slowest useful thing CI can
-/// do.
+/// The tests live in the pure core, the native collectors, the interface's own decisions
+/// and these checks. The shell has no tests yet, so it is type-checked rather than linked
+/// into an empty test binary; linking wgpu for zero tests is the slowest useful thing CI
+/// can do.
 fn test() -> Result<(), String> {
     run(&[
         "test",
@@ -64,6 +66,8 @@ fn test() -> Result<(), String> {
         "vnr-native",
         "--package",
         "vnr-ui",
+        "--package",
+        "xtask",
         "--all-targets",
         "--profile",
         CI_PROFILE,
@@ -175,5 +179,186 @@ fn walk(directory: &Path, files: &mut Vec<PathBuf>) {
         } else {
             files.push(path);
         }
+    }
+}
+
+/// Words the product must not use, each with the sentence that replaces it.
+///
+/// The table is `docs/PLAN.md` §5.5. This check exists because a language audit done by
+/// reading is an audit that stops being done; the words below are the ones that turn a
+/// fact into a verdict, and a verdict is what ranger refuses to sell.
+const BANNED_WORDS: [(&str, &str); 3] = [
+    (
+        "fix",
+        "quarantine, restore, remove the startup entry, open the folder",
+    ),
+    ("infected", "an unexplained startup item"),
+    ("virus", "a binary that matches a rule"),
+];
+
+/// Phrases the product must not use, because they make a claim about a whole machine.
+const BANNED_PHRASES: [(&str, &str); 2] = [
+    ("pc is clean", "no unexplained startup items in this check"),
+    ("threat score", "the findings, with their evidence"),
+];
+
+/// The §5.5 language audit, as a check rather than a reading.
+///
+/// It reads the string literals in the interface and the shell — what a person actually
+/// sees — and leaves comments and identifiers alone, because a comment that says "fix a
+/// bug" is not a product claim.
+fn language() -> Result<(), String> {
+    let root = workspace_root()?;
+    let mut files = Vec::new();
+    walk(&root.join("crates").join("ui").join("src"), &mut files);
+    walk(&root.join("apps").join("vn-ranger").join("src"), &mut files);
+    let mut problems = Vec::new();
+    for file in files {
+        if file.extension().and_then(|value| value.to_str()) != Some("rs") {
+            continue;
+        }
+        let Ok(body) = std::fs::read_to_string(&file) else {
+            continue;
+        };
+
+        for literal in string_literals(&body) {
+            for problem in banned_in(&literal) {
+                problems.push(format!(
+                    "{}: {} — use {}",
+                    file.display(),
+                    problem,
+                    fix_for(problem.trim_matches('"'))
+                ));
+            }
+        }
+    }
+    if problems.is_empty() {
+        Ok(())
+    } else {
+        problems.sort();
+        problems.dedup();
+        Err(format!("the language audit failed:\n{}", problems.join("\n")))
+    }
+}
+
+/// The replacement sentence for a word or phrase.
+fn fix_for(found: &str) -> &'static str {
+    for (word, replacement) in BANNED_WORDS {
+        if found.eq_ignore_ascii_case(word) {
+            return replacement;
+        }
+    }
+    for (phrase, replacement) in BANNED_PHRASES {
+        if found.eq_ignore_ascii_case(phrase) {
+            return replacement;
+        }
+    }
+    "a fact, not a verdict"
+}
+
+/// Every banned word or phrase in one piece of user-facing text.
+fn banned_in(text: &str) -> Vec<String> {
+    let lower = text.to_lowercase();
+    let mut found = Vec::new();
+    for token in lower.split(|character: char| !character.is_alphanumeric()) {
+        for (word, _) in BANNED_WORDS {
+            if token == word
+                || token == format!("{word}s")
+                || token == format!("{word}ed")
+                || token == format!("{word}ing")
+            {
+                found.push(format!("\"{token}\""));
+            }
+        }
+    }
+    for (phrase, _) in BANNED_PHRASES {
+        if lower.contains(phrase) {
+            found.push(format!("\"{phrase}\""));
+        }
+    }
+    found
+}
+
+/// The string literals in a Rust source file, roughly and honestly.
+///
+/// A real parser would be a dependency; the check only has to be good enough that a person
+/// who writes "your PC is clean" in a label cannot get it merged.
+fn string_literals(body: &str) -> Vec<String> {
+    let mut literals = Vec::new();
+    let mut current = String::new();
+    let mut inside = false;
+    let mut escaped = false;
+    for character in body.chars() {
+        if inside {
+            if escaped {
+                current.push(character);
+                escaped = false;
+                continue;
+            }
+            match character {
+                '\\' => escaped = true,
+                '"' => {
+                    literals.push(std::mem::take(&mut current));
+                    inside = false;
+                }
+                _ => current.push(character),
+            }
+        } else if character == '"' {
+            inside = true;
+        }
+    }
+    literals
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_words_the_product_must_not_use_are_caught() {
+        assert!(banned_in("Quarantine this file").is_empty());
+        assert!(!banned_in("Fix the finding").is_empty());
+        assert!(!banned_in("This file is infected").is_empty());
+        assert!(!banned_in("your PC is clean").is_empty());
+        assert!(!banned_in("threat score: 87").is_empty());
+    }
+
+    #[test]
+    fn words_that_merely_contain_a_banned_one_are_left_alone() {
+        for fine in [
+            "the prefix of the path",
+            "a fixture for the parser",
+            "suffix",
+            "the fixings",
+            "infections are out of scope", // not a product claim
+        ] {
+            assert!(banned_in(fine).is_empty(), "{fine:?} must not trip the audit");
+        }
+    }
+
+    #[test]
+    fn every_replacement_is_a_sentence_a_person_can_use() {
+        for (word, replacement) in BANNED_WORDS {
+            assert!(!fix_for(word).is_empty());
+            assert_ne!(replacement, word);
+        }
+        for (phrase, _) in BANNED_PHRASES {
+            assert!(!fix_for(phrase).is_empty());
+        }
+    }
+
+    #[test]
+    fn literals_are_found_and_code_is_not() {
+        let body = r#"let label = "Quarantine"; // a comment is not a literal
+            let other = "found \"quoted\" text";
+            fn fix_a_bug() {}"#;
+        let literals = string_literals(body);
+        assert!(literals.iter().any(|literal| literal == "Quarantine"));
+        assert!(
+            literals
+                .iter()
+                .any(|literal| literal.contains("found \"quoted\" text"))
+        );
+        assert!(!literals.iter().any(|literal| literal.contains("fn fix_a_bug")));
     }
 }
