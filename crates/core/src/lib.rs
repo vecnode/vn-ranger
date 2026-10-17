@@ -11,8 +11,10 @@
 
 pub mod action;
 pub mod diff;
+pub mod fields;
 pub mod journal;
 pub mod model;
+pub mod pack;
 pub mod recovery;
 pub mod report;
 pub mod rules;

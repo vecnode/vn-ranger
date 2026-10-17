@@ -29,8 +29,9 @@ crates/
   core      vnr-core     pure and IO-free: facts, snapshots, timelines, diffs, rules,
                          findings, hash signatures, reports, time arithmetic,
                          journal records, recovery verdicts, pack schema and matcher,
-                         the allowlist table and its refusals (`action.rs`), schedule
-                         arithmetic, the Sigma converter
+                         the allowlist table and its refusals (`action.rs`), the field
+                         vocabulary and the pack schema (`fields.rs`, `pack/`),
+                         schedule arithmetic
   native    vnr-native   the only crate that touches the world:
                          collect/{processes,autoruns,listeners,packages,tasks,agentstack},
                          hash, signatures, elevation, paths, store, watch, scan,
