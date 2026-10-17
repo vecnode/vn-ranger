@@ -152,7 +152,25 @@ pub struct Ui {
     autorun_scope: Option<vnr_core::AutorunScope>,
     show_disabled: bool,
     change_filter: ChangeFilter,
+    palette_open: bool,
+    palette_query: String,
+    palette_index: usize,
     mark: egui::TextureHandle,
+}
+
+/// One row in the command palette.
+struct PaletteEntry {
+    label: String,
+    hit: PaletteHit,
+}
+
+/// What choosing a palette row does.
+enum PaletteHit {
+    View(View),
+    Process(u32),
+    Autorun(String),
+    Finding(String),
+    Action(Action),
 }
 
 impl Ui {
@@ -187,6 +205,9 @@ impl Ui {
             autorun_scope: None,
             show_disabled: true,
             change_filter: ChangeFilter::All,
+            palette_open: false,
+            palette_query: String::new(),
+            palette_index: 0,
             mark,
         }
     }
@@ -200,15 +221,55 @@ impl Ui {
         self.led_lit = !self.led_lit;
     }
 
+    /// Apply the theme loaded from the settings file.
+    pub fn set_dark(&mut self, dark: bool) {
+        self.dark = dark;
+    }
+
+    /// Apply the view loaded from the settings file.
+    pub fn set_view(&mut self, view: View) {
+        self.view = view;
+    }
+
+    /// The theme currently on screen.
+    #[must_use]
+    pub fn is_dark(&self) -> bool {
+        self.dark
+    }
+
     /// Draw one frame and return what the person asked for.
     pub fn show(&mut self, root: &mut egui::Ui, world: &World) -> Vec<Action> {
         let ctx = root.ctx().clone();
         theme::apply(&ctx, self.dark);
         let mut actions = Vec::new();
+        if ctx.input_mut(|input| {
+            input.consume_key(egui::Modifiers::COMMAND, egui::Key::K)
+                || input.consume_key(egui::Modifiers::CTRL, egui::Key::K)
+        }) {
+            self.palette_open = !self.palette_open;
+            self.palette_query.clear();
+            self.palette_index = 0;
+            if self.palette_open {
+                let id = palette_input_id();
+                ctx.memory_mut(|memory| memory.request_focus(id));
+            }
+        }
+        if self.palette_open
+            && ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
+        {
+            self.palette_open = false;
+        }
+        if !self.palette_open
+            && ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
+        {
+            self.selected_process = None;
+            self.selected_autorun = None;
+        }
         let view_changed = self.last_view != self.view;
         self.last_view = self.view;
         self.top_bar(root, world, &mut actions);
         self.rail(root, world);
+        let view_before_draw = self.view;
         egui::CentralPanel::default()
             .frame(
                 egui::Frame::new()
@@ -235,12 +296,16 @@ impl Ui {
                     scroll.show(ui, |ui| self.draw_view(ui, world, &mut actions, view));
                 }
             });
+        if self.view != view_before_draw {
+            actions.push(Action::SetView(self.view));
+        }
         if let Some(path) = self.open_path.take() {
             actions.push(Action::OpenPath(path));
         }
         self.modal(&ctx, &mut actions);
         self.project_modal(&ctx);
         self.suppress_modal(&ctx, &mut actions);
+        self.palette(&ctx, world, &mut actions);
         actions
     }
 
@@ -552,6 +617,164 @@ impl Ui {
         }
     }
 
+    fn palette(&mut self, ctx: &egui::Context, world: &World, actions: &mut Vec<Action>) {
+        if !self.palette_open {
+            return;
+        }
+        let needle = self.palette_query.trim().to_lowercase();
+        let mut entries = self.palette_entries(world);
+        if !needle.is_empty() {
+            entries.retain(|entry| entry.label.to_lowercase().contains(&needle));
+            entries.sort_by_key(|entry| !entry.label.to_lowercase().starts_with(&needle));
+        }
+        entries.truncate(10);
+        if self.palette_index >= entries.len() {
+            self.palette_index = entries.len().saturating_sub(1);
+        }
+
+        let down = ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown));
+        let up = ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp));
+        if down && !entries.is_empty() {
+            self.palette_index = (self.palette_index + 1) % entries.len();
+        }
+        if up {
+            self.palette_index = self.palette_index.saturating_sub(1);
+        }
+        let mut chosen = ctx
+            .input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Enter))
+            .then_some(self.palette_index);
+
+        let mut open = true;
+        let palette_index = self.palette_index;
+        let query = &mut self.palette_query;
+        egui::Window::new("Command palette")
+            .title_bar(false)
+            .collapsible(false)
+            .resizable(false)
+            .anchor(Align2::CENTER_TOP, vec2(0.0, 90.0))
+            .open(&mut open)
+            .show(ctx, |ui| {
+                ui.set_width(520.0);
+                let id = palette_input_id();
+                let response = ui.add(
+                    egui::TextEdit::singleline(query)
+                        .id(id)
+                        .hint_text("Go to a view, a process, a startup item, a finding or an action")
+                        .margin(Margin::symmetric(10, 8)),
+                );
+                if !response.has_focus() && ctx.memory(|memory| memory.focused().is_none()) {
+                    response.request_focus();
+                }
+                ui.add_space(6.0);
+                for (index, entry) in entries.iter().enumerate() {
+                    let selected = index == palette_index;
+                    let response = ui.add(
+                        egui::Button::new(RichText::new(entry.label.as_str()).size(12.0).color(
+                            if selected {
+                                ui.visuals().strong_text_color()
+                            } else {
+                                ui.visuals().text_color()
+                            },
+                        ))
+                        .fill(if selected {
+                            ui.visuals().selection.bg_fill
+                        } else {
+                            egui::Color32::TRANSPARENT
+                        })
+                        .frame(false)
+                        .min_size(vec2(ui.available_width(), 26.0)),
+                    );
+                    if response.clicked() {
+                        chosen = Some(index);
+                    }
+                    if response.hovered() {
+                        self.palette_index = index;
+                    }
+                }
+                if entries.is_empty() {
+                    ui.label(
+                        RichText::new("Nothing matches.")
+                            .size(11.0)
+                            .color(theme::muted(ui)),
+                    );
+                }
+            });
+        if !open {
+            self.palette_open = false;
+        }
+        if let Some(index) = chosen
+            && let Some(entry) = entries.get(index)
+        {
+            match &entry.hit {
+                PaletteHit::View(view) => self.view = *view,
+                PaletteHit::Process(pid) => {
+                    self.view = View::Processes;
+                    self.selected_process = Some(*pid);
+                    self.search.clear();
+                }
+                PaletteHit::Autorun(id) => {
+                    self.view = View::Startup;
+                    self.selected_autorun = Some(id.clone());
+                    self.search.clear();
+                }
+                PaletteHit::Finding(title) => {
+                    self.view = View::Findings;
+                    self.finding_query = title.clone();
+                    self.finding_severity = None;
+                }
+                PaletteHit::Action(action) => actions.push(action.clone()),
+            }
+            self.palette_open = false;
+        }
+    }
+
+    fn palette_entries(&self, world: &World) -> Vec<PaletteEntry> {
+        let mut entries: Vec<PaletteEntry> = View::ALL
+            .iter()
+            .map(|view| PaletteEntry {
+                label: format!("Go to {}", view.label()),
+                hit: PaletteHit::View(*view),
+            })
+            .collect();
+        for process in world.processes().iter().take(200) {
+            entries.push(PaletteEntry {
+                label: format!("Process · {} (pid {})", process.name, process.pid),
+                hit: PaletteHit::Process(process.pid),
+            });
+        }
+        if let Some(snapshot) = world.snapshot() {
+            for autorun in snapshot.autoruns.iter().take(200) {
+                entries.push(PaletteEntry {
+                    label: format!("Startup · {} ({})", autorun.name, autorun.kind.label()),
+                    hit: PaletteHit::Autorun(autorun.id.clone()),
+                });
+            }
+        }
+        for finding in world.findings.iter().take(100) {
+            entries.push(PaletteEntry {
+                label: format!("Finding · {}", finding.title),
+                hit: PaletteHit::Finding(finding.title.to_owned()),
+            });
+        }
+        let actions = [
+            ("Run a scan", Action::Scan),
+            ("Export JSON", Action::ExportJson),
+            ("Export Markdown", Action::ExportMarkdown),
+            ("Export findings as JSON", Action::ExportFindingsJson),
+            ("Accept this scan as the baseline", Action::AcceptBaseline),
+            ("Open the data folder", Action::OpenDataDir),
+            ("Toggle the theme", Action::SetDark(!self.dark)),
+            ("Quit ranger", Action::Quit),
+        ];
+        for (label, action) in actions {
+            entries.push(PaletteEntry {
+                label: label.to_owned(),
+                hit: PaletteHit::Action(action),
+            });
+        }
+        entries
+    }
+
     fn suppress_modal(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
         let Some(finding) = self.suppress_target.clone() else {
             return;
@@ -667,6 +890,11 @@ fn view_icon(view: View) -> icons::Icon {
         View::Report => icons::Icon::Report,
         View::Settings => icons::Icon::Settings,
     }
+}
+
+#[allow(deprecated)]
+fn palette_input_id() -> egui::Id {
+    egui::Id::new("palette-input")
 }
 
 #[cfg(test)]

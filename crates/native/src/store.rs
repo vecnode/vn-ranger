@@ -85,6 +85,35 @@ pub fn save_suppressions(suppressions: &[Suppression]) -> std::io::Result<()> {
     write_atomic(&path, &bytes)
 }
 
+/// What the interface remembers between launches.
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub struct UiSettings {
+    /// Dark theme.
+    pub dark: Option<bool>,
+    /// The view to open.
+    pub view: Option<String>,
+    /// The process poll.
+    pub poll: Option<bool>,
+    /// The file watcher.
+    pub watch: Option<bool>,
+    /// The live indicator.
+    pub led: Option<bool>,
+}
+
+/// Read the interface preferences, falling back to the defaults.
+#[must_use]
+pub fn load_ui_settings() -> UiSettings {
+    std::fs::read_to_string(crate::paths::settings_path())
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default()
+}
+
+/// Save the interface preferences.
+pub fn save_ui_settings(settings: &UiSettings) -> std::io::Result<()> {
+    write_json_value(settings, &crate::paths::settings_path())
+}
+
 fn load(path: &Path) -> Option<Snapshot> {
     let text = std::fs::read_to_string(path).ok()?;
     let snapshot: Snapshot = serde_json::from_str(&text).ok()?;
@@ -100,11 +129,16 @@ fn load(path: &Path) -> Option<Snapshot> {
     Some(snapshot)
 }
 
-/// Write a snapshot as pretty JSON, replacing the target atomically.
-pub fn write_json(snapshot: &Snapshot, path: &Path) -> std::io::Result<()> {
-    let bytes = serde_json::to_vec_pretty(snapshot)
+/// Write any serialisable value as pretty JSON, replacing the target atomically.
+pub fn write_json_value<T: serde::Serialize + ?Sized>(value: &T, path: &Path) -> std::io::Result<()> {
+    let bytes = serde_json::to_vec_pretty(value)
         .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
     write_atomic(path, &bytes)
+}
+
+/// Write a snapshot as pretty JSON, replacing the target atomically.
+pub fn write_json(snapshot: &Snapshot, path: &Path) -> std::io::Result<()> {
+    write_json_value(snapshot, path)
 }
 
 /// Write bytes to a file by writing a temporary sibling and renaming it into place.

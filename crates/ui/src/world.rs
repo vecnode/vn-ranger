@@ -59,6 +59,15 @@ impl View {
         }
     }
 
+    /// Look a view up by its label, for the saved interface state.
+    #[must_use]
+    pub fn from_label(label: &str) -> Option<Self> {
+        Self::ALL
+            .iter()
+            .copied()
+            .find(|view| view.label().eq_ignore_ascii_case(label.trim()))
+    }
+
     /// The sentence under the view's heading.
     #[must_use]
     pub fn subtitle(self) -> &'static str {
@@ -199,6 +208,8 @@ pub enum Action {
     ExportJson,
     /// Write the snapshot as Markdown.
     ExportMarkdown,
+    /// Write the current findings as JSON.
+    ExportFindingsJson,
     /// Open ranger's data directory.
     OpenDataDir,
     /// Open the signatures directory.
@@ -215,6 +226,10 @@ pub enum Action {
     SetWatch(bool),
     /// Show or hide the live poll indicator.
     SetPollLed(bool),
+    /// Switch between the dark and light theme.
+    SetDark(bool),
+    /// Remember the view the person chose.
+    SetView(View),
     /// Suppress one finding, carrying the reason the person gave.
     SuppressFinding {
         /// The rule to suppress.

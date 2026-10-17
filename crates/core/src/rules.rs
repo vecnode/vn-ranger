@@ -15,7 +15,8 @@ use serde::{Deserialize, Serialize};
 use crate::model::{AutorunFact, AutorunScope, ProcessFact, Snapshot};
 
 /// How much a finding deserves attention. It is about consequence, not confidence.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Severity {
     /// Context: something a person may want to know.
     Info,
@@ -48,7 +49,8 @@ impl Severity {
 }
 
 /// How sure ranger is of the interpretation. `Observed` means the fact is certain.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Confidence {
     /// The fact itself was observed; the interpretation may still be wrong.
     Observed,
@@ -71,7 +73,7 @@ impl Confidence {
 }
 
 /// What a rule says about the facts.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct Finding {
     /// The stable rule id, never reused for a different meaning.
     pub rule_id: &'static str,

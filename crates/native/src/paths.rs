@@ -53,6 +53,18 @@ pub fn suppressions_path() -> PathBuf {
     data_dir().join("suppressions.json")
 }
 
+/// Where the interface preferences are kept.
+#[must_use]
+pub fn settings_path() -> PathBuf {
+    data_dir().join("settings.json")
+}
+
+/// The instance lock that keeps one window per data directory.
+#[must_use]
+pub fn instance_path() -> PathBuf {
+    data_dir().join("instance.lock")
+}
+
 /// The folders the file watcher reads.
 ///
 /// Only directories that exist are returned, so the interface never claims to watch a

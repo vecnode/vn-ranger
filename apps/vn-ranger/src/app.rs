@@ -15,12 +15,19 @@ pub struct App {
     world: World,
     receiver: Option<Receiver<ScanMessage>>,
     watch: worker::WatchService,
+    settings: vnr_native::store::UiSettings,
+    instance: Option<vnr_native::instance::InstanceGuard>,
 }
 
 impl App {
     /// Build the world from the last snapshot and start the first scan if there is
     /// nothing to show.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        let settings = vnr_native::store::load_ui_settings();
+        let (instance, instance_error) = match vnr_native::instance::acquire() {
+            Ok(guard) => (Some(guard), None),
+            Err(message) => (None, Some(message)),
+        };
         let snapshot = vnr_native::store::load_last();
         let (baseline, baseline_error) = match vnr_native::store::read_baseline() {
             vnr_native::store::BaselineLoad::Present(snapshot) => (Some(*snapshot), None),
@@ -36,7 +43,7 @@ impl App {
         let world = World {
             snapshot,
             scan: ScanState::Idle,
-            error: None,
+            error: instance_error,
             notice: None,
             elevated: vnr_native::elevation::is_elevated(),
             can_elevate: vnr_native::elevation::can_elevate(),
@@ -45,10 +52,10 @@ impl App {
             version: env!("CARGO_PKG_VERSION").to_owned(),
             now_unix: now_unix(),
             live: None,
-            poll_enabled: true,
-            poll_led: true,
+            poll_enabled: settings.poll.unwrap_or(true),
+            poll_led: settings.led.unwrap_or(true),
             watch: WatchReport {
-                enabled: true,
+                enabled: settings.watch.unwrap_or(true),
                 ..WatchReport::default()
             },
             baseline,
@@ -58,13 +65,21 @@ impl App {
             findings,
             suppressions,
         };
-        let ui = Ui::new(&cc.egui_ctx);
+        let mut ui = Ui::new(&cc.egui_ctx);
+        if let Some(dark) = settings.dark {
+            ui.set_dark(dark);
+        }
+        if let Some(view) = settings.view.as_deref().and_then(vnr_ui::View::from_label) {
+            ui.set_view(view);
+        }
         let watch = worker::WatchService::start(cc.egui_ctx.clone());
         let mut app = Self {
             ui,
             world,
             receiver: None,
             watch,
+            settings,
+            instance,
         };
         if app.world.snapshot.is_none() {
             app.start_scan(&cc.egui_ctx, false);
@@ -126,10 +141,13 @@ impl App {
                 }
                 ScanMessage::Done(snapshot) => {
                     let snapshot = *snapshot;
-                    if let Err(error) = vnr_native::store::save_last(&snapshot) {
+                    if self.instance.is_some()
+                        && let Err(error) = vnr_native::store::save_last(&snapshot)
+                    {
                         self.world.error =
                             Some(format!("The scan finished, but it could not be saved: {error}"));
                     }
+                    let duration = snapshot.duration_ms;
                     let changes = self
                         .world
                         .baseline
@@ -138,7 +156,7 @@ impl App {
                     self.world.changes = changes;
                     self.world.snapshot = Some(snapshot);
                     self.world.scan = ScanState::Idle;
-                    self.world.notice = None;
+                    self.world.notice = Some(format!("Scan finished in {duration} ms."));
                     self.refresh_findings(true);
                     finished = true;
                 }
@@ -283,6 +301,16 @@ impl App {
             Action::ScanElevated => self.start_scan(ctx, true),
             Action::ExportJson => self.export_json(),
             Action::ExportMarkdown => self.export_markdown(),
+            Action::ExportFindingsJson => self.export_findings_json(),
+            Action::SetDark(dark) => {
+                self.ui.set_dark(dark);
+                self.settings.dark = Some(dark);
+                self.persist_settings();
+            }
+            Action::SetView(view) => {
+                self.settings.view = Some(view.label().to_owned());
+                self.persist_settings();
+            }
             Action::OpenDataDir => self.open(&vnr_native::paths::data_dir()),
             Action::OpenSignaturesDir => {
                 let directory = vnr_native::paths::signatures_dir();
@@ -305,6 +333,7 @@ impl App {
             Action::SetPoll(enabled) => {
                 self.world.poll_enabled = enabled;
                 self.watch.set_poll(enabled);
+                self.persist_settings();
             }
             Action::SetWatch(enabled) => {
                 self.world.watch.enabled = enabled;
@@ -313,8 +342,12 @@ impl App {
                     self.world.watch.roots.clear();
                     self.world.watch.skipped.clear();
                 }
+                self.persist_settings();
             }
-            Action::SetPollLed(enabled) => self.world.poll_led = enabled,
+            Action::SetPollLed(enabled) => {
+                self.world.poll_led = enabled;
+                self.persist_settings();
+            }
             Action::SuppressFinding {
                 rule_id,
                 subject,
@@ -411,6 +444,33 @@ impl App {
             }
             Err(error) => {
                 self.world.error = Some(format!("Could not write the Markdown report: {error}"));
+            }
+        }
+    }
+
+    fn persist_settings(&mut self) {
+        self.settings.dark = Some(self.ui.is_dark());
+        self.settings.poll = Some(self.world.poll_enabled);
+        self.settings.watch = Some(self.world.watch.enabled);
+        self.settings.led = Some(self.world.poll_led);
+        if let Err(error) = vnr_native::store::save_ui_settings(&self.settings) {
+            self.world.error = Some(format!("The interface preference could not be saved: {error}"));
+        }
+    }
+
+    fn export_findings_json(&mut self) {
+        if self.world.findings.is_empty() {
+            self.world.notice = Some("There are no findings to export.".to_owned());
+            return;
+        }
+        let path = vnr_native::paths::report_path("findings.json");
+        match vnr_native::store::write_json_value(&self.world.findings, &path) {
+            Ok(()) => {
+                self.world.error = None;
+                self.world.notice = Some(format!("Findings written to {}", path.display()));
+            }
+            Err(error) => {
+                self.world.error = Some(format!("Could not write the findings: {error}"));
             }
         }
     }

@@ -108,6 +108,45 @@ impl Ui {
         });
         ui.add_space(10.0);
 
+        widgets::card(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Baseline").family(theme::semibold()));
+                if world.baseline.is_some() {
+                    widgets::badge(ui, "ACCEPTED", theme::OK);
+                }
+            });
+            ui.add_space(4.0);
+            match &world.baseline {
+                Some(baseline) => {
+                    ui.label(
+                        RichText::new(format!(
+                            "Accepted {} ago. {} difference(s) from it now.",
+                            describe_age(world.now_unix, baseline.taken_at_unix),
+                            world.changes.len()
+                        ))
+                        .size(11.0)
+                        .color(theme::muted(ui)),
+                    );
+                    if ui.button("Re-baseline this scan").clicked() {
+                        actions.push(Action::AcceptBaseline);
+                    }
+                }
+                None => {
+                    ui.label(
+                        RichText::new(
+                            "No baseline yet. Accepting a scan records this machine as normal today, so a later scan can say what changed.",
+                        )
+                        .size(11.0)
+                        .color(theme::muted(ui)),
+                    );
+                    if world.snapshot().is_some() && ui.button("Accept this scan as the baseline").clicked() {
+                        actions.push(Action::AcceptBaseline);
+                    }
+                }
+            }
+        });
+        ui.add_space(10.0);
+
         if snapshot.has_matches() {
             signature_matches_card(ui, snapshot);
         } else {
@@ -375,6 +414,26 @@ impl Ui {
                 ordering
             }
         });
+        if !ui.ctx().memory(|memory| memory.focused().is_some()) && !self.palette_open {
+            let down =
+                ui.input(|input| input.key_pressed(egui::Key::J) || input.key_pressed(egui::Key::ArrowDown));
+            let up =
+                ui.input(|input| input.key_pressed(egui::Key::K) || input.key_pressed(egui::Key::ArrowUp));
+            if down || up {
+                let current = rows
+                    .iter()
+                    .position(|process| Some(process.pid) == self.selected_process);
+                let next = match current {
+                    Some(index) if down => Some((index + 1).min(rows.len().saturating_sub(1))),
+                    Some(index) => Some(index.saturating_sub(1)),
+                    None if down => Some(0),
+                    None => None,
+                };
+                if let Some(process) = next.and_then(|index| rows.get(index)) {
+                    self.selected_process = Some(process.pid);
+                }
+            }
+        }
         let live_age = world
             .live
             .as_ref()
@@ -530,6 +589,26 @@ impl Ui {
             self.autorun_scope.is_none_or(|scope| autorun.scope == scope)
                 && (self.show_disabled || autorun.enabled)
         });
+        if !ui.ctx().memory(|memory| memory.focused().is_some()) && !self.palette_open {
+            let down =
+                ui.input(|input| input.key_pressed(egui::Key::J) || input.key_pressed(egui::Key::ArrowDown));
+            let up =
+                ui.input(|input| input.key_pressed(egui::Key::K) || input.key_pressed(egui::Key::ArrowUp));
+            if down || up {
+                let current = rows
+                    .iter()
+                    .position(|autorun| Some(&autorun.id) == self.selected_autorun.as_ref());
+                let next = match current {
+                    Some(index) if down => Some((index + 1).min(rows.len().saturating_sub(1))),
+                    Some(index) => Some(index.saturating_sub(1)),
+                    None if down => Some(0),
+                    None => None,
+                };
+                if let Some(autorun) = next.and_then(|index| rows.get(index)) {
+                    self.selected_autorun = Some(autorun.id.clone());
+                }
+            }
+        }
         ui.label(
             RichText::new(format!(
                 "{} of {} startup items",
@@ -950,6 +1029,9 @@ impl Ui {
                 if ui.button("Export Markdown").clicked() {
                     actions.push(Action::ExportMarkdown);
                 }
+                if ui.button("Export findings (JSON)").clicked() {
+                    actions.push(Action::ExportFindingsJson);
+                }
                 if ui.button("Open data folder").clicked() {
                     actions.push(Action::OpenDataDir);
                 }
@@ -987,7 +1069,9 @@ impl Ui {
     pub(crate) fn settings(&mut self, ui: &mut egui::Ui, world: &crate::World, actions: &mut Vec<Action>) {
         widgets::card(ui, |ui| {
             ui.label(RichText::new("Appearance").family(theme::semibold()));
-            ui.checkbox(&mut self.dark, "Dark theme");
+            if ui.checkbox(&mut self.dark, "Dark theme").changed() {
+                actions.push(Action::SetDark(self.dark));
+            }
         });
         ui.add_space(10.0);
         widgets::card(ui, |ui| {
