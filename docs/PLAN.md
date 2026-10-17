@@ -1044,6 +1044,22 @@ guard and a top-right error toast.
 
 ### M5 — v0.1.6, Act, Resident and Packs
 
+**Built so far** (on `main`, with its tests; the waves below are the whole release, not the
+part that exists):
+
+| Wave | In the tree | Still to do |
+|---|---|---|
+| 1 Ledger | journal records, reader, rotation, crash-recovery verdicts, the typed action path with its four refusals, the `ActionIo` seam | — |
+| 2 Quarantine and cleaning | quarantine with a manifest, verified restore, irreversible purge, all four acts journaled, the allowlist walk with preview and removal, the language audit as a check, the Actions view, the quarantine entry point, the typed-`DELETE` dialog | the clean preview surface |
+| 3 Resident | the schedule (six hours ±10 %, seeded jitter), resume detection, a scan on resume | tray, opt-in autostart, activation, the soak recorder |
+| 4 Packs | — | everything |
+| 5 Coverage | — | everything |
+
+Two deviations from what was written below are recorded in §6.10 and §7 rather than
+silently taken: the link rule is about the acted entry and not its ancestors (macOS
+resolves `$TMPDIR` through `/var`), and Windows cannot read a link count or a volume serial
+from stable `std`, so a second hard link and a nested filesystem are not refused there.
+
 The interface layer closed in 0.1.5. 0.1.6 is the release that stops being read-only,
 and it is deliberately large: the action layer, the resident shell and signed rule packs
 ship together, because a ranger that can act but must be restarted to notice, or that

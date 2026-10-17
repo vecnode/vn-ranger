@@ -17,6 +17,25 @@ All notable changes to vn-ranger are recorded here. The format follows
   with one suggested next step each.
 - `VN_RANGER_DATA_DIR`, absolute paths only, for a disposable profile beside the daily
   one; the soak harness needs it.
+- Quarantine: one directory per entry, holding a manifest written and synced before the
+  bytes move and the payload itself. Restore verifies the hash, refuses to overwrite, and
+  puts the file back with a hard link; a permanent delete is reachable only through the
+  word `DELETE`.
+- A typed action path in which nothing takes a path: an entry id under an open directory
+  handle, four refusals (outside the root, a link, a hard link, a changed file) and a
+  deterministic seam for the test that proves the last one.
+- All four acts share one journaled facade — intent synced before the act, result after —
+  and a clean that selected nothing is not journalled.
+- Allowlisted cleaning: a walk that never follows a link, never enters another filesystem,
+  stops at depth 8, skips anything younger than the surface's threshold, and re-checks
+  every item before removing it.
+- `cargo xtask language`: the §5.5 audit as a check, reading the interface's string
+  literals for the words that turn a fact into a verdict.
+- An Actions view listing the quarantine (with verified restore and the typed delete) and
+  the journal newest-first, with an interrupted intent marked.
+- A quarantine entry point in the Startup detail panel, which is the preview.
+- A resident schedule: six hours ±10 % from a seeded jitter, and a scan when the machine
+  wakes from sleep.
 
 ### Fixed
 
