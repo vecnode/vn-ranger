@@ -73,14 +73,45 @@ not a rule that never fires: a rule that silently matches nothing looks like cov
 
 ### Subjects and their fields
 
-| Subject | Fields |
+Every field has a kind, and the kind decides which operators can hold for it. That is not a
+style rule: `gt` on a path and `prefix` on a port can never be true, so a pack that writes one
+is refused rather than loaded as a rule that never fires.
+
+| Subject | Field | Kind |
+|---|---|---|
+| `startup` | `command`, `hash`, `kind`, `location`, `name`, `path`, `scope`, `signed` | text |
+| `startup` | `enabled` | true/false |
+| `process` | `command`, `name`, `path`, `user` | text |
+| `process` | `parent`, `pid`, `started_at` | number |
+| `listener` | `address`, `process`, `protocol`, `state` | text |
+| `listener` | `port` | number |
+| `listener` | `public` | true/false |
+| `package` | `name`, `publisher`, `source`, `version` | text |
+| `file-event` | `kind`, `path`, `source` | text |
+| `agent` | `config`, `name`, `path`, `tool` | text |
+
+The values a text field takes, where the machine has a fixed set:
+
+| Field | Values |
 |---|---|
-| `startup` | `command`, `hash`, `name`, `path`, `scope`, `signed`, `user` |
-| `process` | `command`, `name`, `parent`, `path`, `pid`, `started_at`, `user` |
-| `listener` | `address`, `port`, `process`, `protocol`, `public` |
-| `package` | `name`, `path`, `publisher`, `version` |
-| `file-event` | `kind`, `path`, `source` |
-| `agent` | `config`, `name`, `path`, `tool` |
+| `scope` | `user`, `system` |
+| `signed` | `valid`, `invalid`, `unsigned`, `unknown`, `not_checked` |
+| `kind` | `run_key`, `startup_folder`, `service`, `launch_agent`, `launch_daemon`, `systemd_unit`, `cron`, `xdg_autostart`, `other` |
+| `protocol` | `TCP`, `UDP` |
+
+A field is absent when the fact does not carry it — a startup entry with no resolvable path has
+no `path` — and an absent field matches nothing. `exists` is what asks whether it is there.
+
+### Places, instead of paths
+
+A rule cannot know where a person's temporary folder is, so it may name a place and ranger
+resolves it. The closed list is:
+
+`{TEMP}`, `{HOME}`, `{DOWNLOADS}`, `{DESKTOP}`, `{APPDATA}`, `{LOCALAPPDATA}`,
+`{PROGRAMDATA}`, `{STARTUP}`
+
+Anything else in braces is a refusal, not a literal. A place this machine cannot name is a
+place the comparison cannot hold, so the rule does not fire rather than firing against a guess.
 
 ### Operators
 
@@ -97,6 +128,12 @@ not a rule that never fires: a rule that silently matches nothing looks like cov
 | `gt` | yes | Greater than, for a number. |
 | `lt` | yes | Less than. |
 | `exists` | **no** | The field is present. Giving it a value is refused. |
+
+Text operators accept text (`eq`, `ne`, `prefix`, `suffix`, `contains`, `glob`, `under`, `in`,
+`exists`); numbers accept `eq`, `ne`, `gt`, `lt`, `in` and `exists`; a true/false field accepts
+`eq`, `ne` and `exists`. A value that is not the field's kind is refused, and `in` takes a
+non-empty list of the right kind. Text comparisons are case-insensitive, because `C:\Users` and
+`c:\users` are the same folder.
 
 There is no regular expression operator and no operator that reads a file's contents. A pack
 cannot make the machine do unbounded work and cannot read a document.
@@ -135,11 +172,20 @@ A pack is verified **before it is parsed**: minisign, Ed25519 over BLAKE2b-512, 
 `.minisig` beside the JSON, one public key per author. A pack signed by a key ranger has not
 been given is refused, and so is a pack with one changed byte.
 
-Be clear about the state of this: the signature check exists and is tested
-(`native/src/pack/signature.rs`), and the validator exists (`crates/core/src/pack/`). The
-**trust store, activation and rollback are not built yet** — so there is no way, in this
-build, to install a third-party pack and have it loaded. When they land, adding a key will
-require typing its fingerprint, and removing a key will unload the packs that depended on it.
+The trust store is `packs/keys.json` in ranger's data folder, and the interface is the **Rule
+packs** page. Adding a key needs two things pasted: the key, and the fingerprint its author
+read out. Ranger computes the fingerprint from the key and refuses the two if they disagree,
+because a form that trusts whatever was pasted is not a check. Removing a key unloads the packs
+it signed on the next read.
+
+Activation is `active.json`, beside the packs: the id, the version, the SHA-256 of the bytes
+and the key that signed them. It is written only after the signature and the validator have
+both passed, and the intent and the result are journalled, like every other act. **Roll back**
+swaps that record with `previous.json` and touches nothing else — not a fact, not a baseline,
+not a pack file — so returning to a pack that worked is one click and one journal line.
+
+The pack compiled into the binary (`packs/ranger.core.json`) needs no signature at run time,
+because the bytes travel with the build rather than with a file a person could swap.
 
 ## The four promises no pack can break
 
@@ -158,6 +204,24 @@ coverage table — which techniques the shipped rules reach, and which they cann
 today the technique ids are on the rules, but the table that makes a gap visible is not
 generated yet. The plan asks for it generated from the packs rather than typed, so it will
 arrive with the generator rather than as a list that drifts.
+
+## Importing a Sigma rule
+
+```sh
+vn-ranger --sigma rule.yml
+```
+
+writes `rule.pack.json` beside the rule and prints what mapped and what did not. The mapping is
+small on purpose: `Image` → `process.path`, `CommandLine` → `process.command`, `User` →
+`process.user`, with `|contains`, `|startswith` and `|endswith` carried across. Everything else
+is skipped with a reason naming the field, the modifier or the condition — a Sigma rule about
+a registry key is not expressible as a fact about a process, and saying so is more useful than
+a rule that would never fire.
+
+`level: critical` and `level: high` become `attention`, which is the pack ceiling.
+`falsepositives` becomes `benign`, and a rule without one is skipped for the same reason a
+hand-written rule without one is refused. The output is not active: it has no `.minisig`, so
+the Rule packs page lists it as refused until its author signs it. Ranger never signs anything.
 
 ## Working on a pack
 

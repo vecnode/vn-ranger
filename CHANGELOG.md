@@ -4,7 +4,7 @@ All notable changes to vn-ranger are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.6] - 2026-10-18
 
 ### Added
 
@@ -37,6 +37,53 @@ All notable changes to vn-ranger are recorded here. The format follows
 - A resident schedule: six hours ±10 % from a seeded jitter, and a scan when the machine
   wakes from sleep.
 
+### Added — rule packs
+
+- **A pack now fires.** `vnr_core::pack::evaluate` takes a rule and a fact view and returns a
+  `Finding`: `all` and `any`, text compared case-insensitively, an absent field matching
+  nothing, `glob` as a two-pointer walk instead of a regular expression, and evidence that
+  names the value the fact actually had. Before this, a pack could be proved valid and could
+  never say anything.
+- **The field vocabulary is typed.** Every field of every subject is text, a number or
+  true/false, and the validator refuses an operator that cannot hold for it (`gt` on a path,
+  `prefix` on a port) at load time, with the operators that would work in the refusal.
+- **Places instead of paths.** A rule may name `{TEMP}`, `{HOME}`, `{DOWNLOADS}`,
+  `{DESKTOP}`, `{APPDATA}`, `{LOCALAPPDATA}`, `{PROGRAMDATA}` or `{STARTUP}`; the core resolves
+  none of them, so the caller hands the paths in and a build on a machine that cannot name a
+  place does not guess at one.
+- **Activation and rollback.** `packs/active.json` names the pack, its digest and the key that
+  signed it; the pair of writes is journalled with an intent before and a result after, and
+  `previous.json` is written first so a crash leaves a way back. Rolling back swaps the two
+  records and touches nothing else.
+- **The first-party pack is compiled in** with `include_str!`, so the catalogue travels with
+  the build rather than with a file a person could swap.
+- **The Rule packs page**: what is loaded and who signed it, every pack in the folder with
+  what verification says about it, keys added only when the typed fingerprint is the key's
+  own, and a key removed by fingerprint — which unloads the packs it signed, because the
+  record is verified again every time it is read.
+- **The Sigma importer** (`--sigma rule.yml`): a restricted YAML reader that refuses anchors,
+  aliases, tags and multi-document files by line; `Image`, `CommandLine` and `User` map with
+  three modifiers; everything else is counted with a reason that names the field or the
+  condition. The output is a pack that still has to be signed.
+- **The optional content scan** (`--features content-scan`): `yara-x`, behind a flag, off in
+  the default build, with the walk bounded by files, depth and size, no link followed, and
+  nothing but a rule name and a path kept. `cargo xtask ci` proves the default build contains
+  no YARA-X with `cargo tree`.
+
+### Changed — the interface
+
+- The overview opens with a line of counts rather than four tiles, and says how long the last
+  scan ago was, how long it took and how many collectors answered, where a person reads about
+  the scan.
+- "No network. No telemetry." moved from the overview to Settings, with the data folder beside
+  it, because it is a statement about the program rather than a fact about the machine.
+- Dialogs have one header size and one padding: a dialog titled at a page's size reads as a
+  page in a box, and the margin now comes from the theme rather than from each dialog.
+- The controls above every table are chips and a 24-pixel search field, sized with the table
+  header, instead of links at body size.
+- The journal's failure sentence now names the folder and the two things that cause it —
+  a security program, or a policy — and the variable that moves it.
+
 ### Fixed
 
 - The live indicator toggled once per poll, which reads as a metronome and keeps looking
@@ -59,6 +106,22 @@ All notable changes to vn-ranger are recorded here. The format follows
 - `docs/BENCHMARKS.md` carries the 0.1.6 budgets and the 24-hour soak that must hold
   before the tag, and `AGENTS.md` carries the deletion and pack contracts those waves
   have to obey.
+
+### Not in this release
+
+- **Wave 5, coverage, has not started.** The Windows registry surface table, scheduled tasks
+  and WMI, `ServiceDll`, the macOS and Linux surfaces and the agent-stack files are not in
+  this build, and neither are the first-party rules that would cover them. The matcher, the
+  field vocabulary and the validator they need are in this release, which is what makes that
+  the next piece of work rather than a rewrite.
+- The fixtures for those surfaces have to be **captured on macOS and Linux**. Inventing one is
+  the thing this repository forbids, so they are listed as owed in `docs/PLAN.md` rather than
+  written from memory.
+- The content scan has an engine and a consent sentence, but not the button in the window that
+  asks: it is reachable from the library and not yet from the interface.
+- The coverage table is still generated by hand, which is to say not yet.
+- The 24-hour soak on a release candidate, the two reviewers on the deletion paths, and the
+  manual matrix in `docs/PLAN.md` §12 are process rows, and they are still owed.
 
 ## [0.1.5] - 2026-10-17
 
