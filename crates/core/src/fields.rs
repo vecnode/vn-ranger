@@ -138,6 +138,9 @@ const LISTENER: &[Field] = &[
 /// when the fact is built: a rule can ask "is the process talking to that address running
 /// from a temporary folder" without a language for joins (`docs/PLAN-0.1.7.md` §4.5).
 const FLOW: &[Field] = &[
+    boolean("beacon"),
+    number("beacon_interval"),
+    number("beacon_jitter"),
     number("bytes"),
     boolean("from_downloads"),
     boolean("from_temp"),

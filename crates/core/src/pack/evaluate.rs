@@ -372,6 +372,11 @@ pub fn flow_fact(snapshot: &Snapshot, flow: &crate::model::FlowFact) -> Fact {
     fact.push_number("local_port", Some(i64::from(flow.local_port)));
     fact.push_number("pid", flow.pid.map(i64::from));
     fact.push_number("bytes", flow.bytes.and_then(|bytes| i64::try_from(bytes).ok()));
+    if let Some(beacon) = flow.beacon {
+        fact.push("beacon", Value::Bool(true));
+        fact.push_number("beacon_interval", i64::try_from(beacon.interval_s).ok());
+        fact.push_number("beacon_jitter", Some(i64::from(beacon.jitter_bp)));
+    }
     if let Some(pid) = flow.pid
         && let Some(process) = snapshot.processes.iter().find(|process| process.pid == pid)
         && let Some(exe) = process.exe.as_deref()
