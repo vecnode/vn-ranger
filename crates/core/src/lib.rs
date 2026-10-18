@@ -30,8 +30,9 @@ pub use journal::{
     Action, Confirmation, Draft, JournalEntry, Kind as JournalKind, Outcome, Read as JournalRead,
 };
 pub use model::{
-    AutorunFact, AutorunKind, AutorunScope, CollectorState, CollectorStatus, Counts, Host, ListenerFact,
-    PackageFact, ProcessFact, Protocol, SignatureMatch, SignatureReport, SignatureStatus, Snapshot,
+    AgentFact, AutorunFact, AutorunKind, AutorunScope, CollectorState, CollectorStatus, Counts, Host,
+    ListenerFact, PackageFact, ProcessFact, Protocol, SignatureMatch, SignatureReport, SignatureStatus,
+    Snapshot,
 };
 pub use recovery::{Phase as RecoveryPhase, Verdict as RecoveryVerdict};
 pub use rules::{

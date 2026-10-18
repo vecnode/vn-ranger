@@ -6,7 +6,7 @@
 //! quiet on the same fact when it is ordinary. A rule that cannot be shown to fire is a
 //! comment.
 
-use crate::model::{AutorunFact, AutorunKind, AutorunScope, Host, SignatureStatus, Snapshot};
+use crate::model::{AgentFact, AutorunFact, AutorunKind, AutorunScope, Host, SignatureStatus, Snapshot};
 use crate::pack::Pack;
 use crate::pack::evaluate::{Places, evaluate};
 use crate::rules::{Severity, builtin_ids};
@@ -255,4 +255,44 @@ fn every_rule_in_the_shipped_pack_names_a_technique_and_a_benign_explanation() {
         assert!(!rule.benign.trim().is_empty(), "{} has no benign", rule.id);
         assert!(rule.severity != Severity::Attention || !rule.benign.trim().is_empty());
     }
+}
+
+fn agent(command: Option<&str>) -> AgentFact {
+    AgentFact {
+        id: "mcp:filesystem".to_owned(),
+        tool: "mcp".to_owned(),
+        name: "filesystem".to_owned(),
+        path: r"C:\Users\user\.cursor\mcp.json".to_owned(),
+        command: command.map(str::to_owned),
+    }
+}
+
+#[test]
+fn a_configuration_that_names_a_command_fires_and_one_that_does_not_stays_quiet() {
+    let pack = shipped();
+    let mut with = snapshot(Vec::new());
+    with.agents.push(agent(Some("npx -y server-filesystem /tmp")));
+    let fires = evaluate(&pack, &with, &places());
+    let finding = fires
+        .iter()
+        .find(|finding| finding.rule_id == "agent.config-names-a-command")
+        .expect("a configuration that names a command fires");
+    assert_eq!(finding.severity, Severity::Notice);
+    assert_eq!(finding.technique.as_deref(), Some("T1059"));
+    assert_eq!(finding.subject, "mcp:filesystem");
+    assert!(
+        finding.evidence.iter().any(|line| line.contains("npx -y")),
+        "the evidence names the command: {:?}",
+        finding.evidence
+    );
+
+    let mut without = snapshot(Vec::new());
+    without.agents.push(agent(None));
+    let quiet = evaluate(&pack, &without, &places());
+    assert!(
+        quiet
+            .iter()
+            .all(|finding| finding.rule_id != "agent.config-names-a-command"),
+        "a server with a URL and no command starts nothing: {quiet:?}"
+    );
 }

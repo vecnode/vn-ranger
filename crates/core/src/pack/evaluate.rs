@@ -18,7 +18,7 @@
 //! refuses to emit.
 
 use crate::fields::Subject;
-use crate::model::{AutorunFact, ListenerFact, PackageFact, ProcessFact, Snapshot};
+use crate::model::{AgentFact, AutorunFact, ListenerFact, PackageFact, ProcessFact, Snapshot};
 use crate::pack::{Operator, Pack, Rule};
 use crate::rules::Finding;
 
@@ -273,6 +273,21 @@ pub fn package_fact(package: &PackageFact) -> Fact {
     fact
 }
 
+/// An editor, agent or package-manager configuration as a rule sees it.
+#[must_use]
+pub fn agent_fact(agent: &AgentFact) -> Fact {
+    let mut fact = Fact {
+        subject: agent.id.clone(),
+        label: format!("{} ({})", agent.name, agent.path),
+        fields: Vec::new(),
+    };
+    fact.push_text("tool", Some(&agent.tool));
+    fact.push_text("name", Some(&agent.name));
+    fact.push_text("path", Some(&agent.path));
+    fact.push_text("command", agent.command.as_deref());
+    fact
+}
+
 /// Every fact in a snapshot that a rule could be about, as rule views.
 ///
 /// The order is the snapshot's own, so two scans of an unchanged machine produce the same
@@ -284,10 +299,10 @@ pub fn facts_of(snapshot: &Snapshot, subject: Subject) -> Vec<Fact> {
         Subject::Process => snapshot.processes.iter().map(process_fact).collect(),
         Subject::Listener => snapshot.listeners.iter().map(listener_fact).collect(),
         Subject::Package => snapshot.packages.iter().map(package_fact).collect(),
-        // A watched change and an agent configuration are facts the scan does not carry:
-        // the watcher reports them as they happen, and the agent collector adds them in
-        // its own pass. A rule about them evaluates against the views it is handed.
-        Subject::FileEvent | Subject::Agent => Vec::new(),
+        Subject::Agent => snapshot.agents.iter().map(agent_fact).collect(),
+        // A watched change is a fact the scan does not carry: the watcher reports them as
+        // they happen. A rule about it evaluates against the views it is handed.
+        Subject::FileEvent => Vec::new(),
     }
 }
 

@@ -133,7 +133,7 @@ const PACKAGE: &[Field] = &[text("name"), text("publisher"), text("source"), tex
 const FILE_EVENT: &[Field] = &[text("kind"), text("path"), text("source")];
 
 /// The fields of an editor, agent or package-manager configuration.
-const AGENT: &[Field] = &[text("config"), text("name"), text("path"), text("tool")];
+const AGENT: &[Field] = &[text("command"), text("name"), text("path"), text("tool")];
 
 impl Subject {
     /// Every subject, in the order `docs/RULES.md` lists them.
@@ -198,16 +198,17 @@ impl Subject {
 
     /// Whether this build collects facts for this subject.
     ///
-    /// Two subjects are in the vocabulary and not in a collector: a watched file change and
-    /// an agent configuration. A rule about either would load, look like coverage, and never
+    /// One subject is in the vocabulary and not in a collector: a watched file change. The
+    /// agent-stack collector fills `agent`; when a collector for `file-event` lands, its
+    /// rules stop being refused. A rule about either would load, look like coverage, and never
     /// fire — which is the failure mode the validator exists to prevent, so it is a load
     /// error here too. Flipping one of these to `true` is what a collector landing looks
     /// like.
     #[must_use]
     pub fn has_source(self) -> bool {
         match self {
-            Self::Startup | Self::Process | Self::Listener | Self::Package => true,
-            Self::FileEvent | Self::Agent => false,
+            Self::Startup | Self::Process | Self::Listener | Self::Package | Self::Agent => true,
+            Self::FileEvent => false,
         }
     }
 }

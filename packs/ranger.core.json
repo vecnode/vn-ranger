@@ -41,6 +41,19 @@
       "remediation": "Open the folder and look at the file before removing anything. The hash is in the finding."
     },
     {
+      "id": "agent.config-names-a-command",
+      "title": "A configuration file names a program to run",
+      "severity": "notice",
+      "confidence": "possible",
+      "technique": "T1059",
+      "match": {
+        "subject": "agent",
+        "all": [{ "field": "command", "op": "exists" }]
+      },
+      "why": "An MCP server, an SSH key with a forced command and an editor hook are the same shape: a file the person trusts names a program, and the program runs without a click. None of them appears in a startup list, so this is where they are visible.",
+      "benign": "A server the person added to their own agent client, or a backup key that is allowed one command on purpose.",
+      "remediation": "Read the file the finding names. If you did not write the line, remove it and change the key or the client's configuration."
+    },    {
       "id": "process.from-temp",
       "title": "A process running from a temporary folder",
       "severity": "notice",

@@ -94,7 +94,12 @@ pub fn scan(progress: &dyn Fn(ScanProgress), cancelled: &dyn Fn() -> bool) -> Op
             .then_with(|| a.kind.label().cmp(b.kind.label()))
             .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
     });
+    let (agents, agent_status) =
+        collect::agentstack::collect().into_parts(collect::agentstack::ID, collect::agentstack::LABEL);
+    snapshot.agents = agents;
+
     snapshot.collectors = vec![process_status, autorun_status];
+    snapshot.collectors.push(agent_status);
     #[cfg(windows)]
     snapshot.collectors.push(task_status);
     snapshot.collectors.extend([listener_status, package_status]);

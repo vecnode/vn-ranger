@@ -268,6 +268,26 @@ pub struct ListenerFact {
     pub public: bool,
 }
 
+/// One configuration that can run something on a person's behalf.
+///
+/// An editor's task, an agent client's server list and an SSH key with a forced command are
+/// the same fact in different clothes: a file the person trusts names a program, and the
+/// program runs without a click. The fact says what the file is, where it is, and what it
+/// would run — not whether that is a good idea.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AgentFact {
+    /// A stable identity, such as `mcp:claude-desktop:filesystem`.
+    pub id: String,
+    /// Which kind of tool the configuration belongs to: `ssh` or `mcp`.
+    pub tool: String,
+    /// The name the configuration gives the thing it would run.
+    pub name: String,
+    /// The configuration file that names it.
+    pub path: String,
+    /// The command it would run, when the configuration names one.
+    pub command: Option<String>,
+}
+
 /// One installed package or application.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PackageFact {
@@ -409,6 +429,9 @@ pub struct Snapshot {
     pub listeners: Vec<ListenerFact>,
     /// Installed packages and applications.
     pub packages: Vec<PackageFact>,
+    /// Configurations that can run something on the person's behalf.
+    #[serde(default)]
+    pub agents: Vec<AgentFact>,
     /// Per-collector outcomes, including the ones that could not run.
     pub collectors: Vec<CollectorStatus>,
     /// Signature database state and matches.
@@ -442,6 +465,7 @@ impl Snapshot {
             autoruns: Vec::new(),
             listeners: Vec::new(),
             packages: Vec::new(),
+            agents: Vec::new(),
             collectors: Vec::new(),
             signatures: SignatureReport::default(),
         }
@@ -505,6 +529,12 @@ impl Snapshot {
                 .then_with(|| a.address.cmp(&b.address))
         });
         self.packages.sort_by_key(|package| package.name.to_lowercase());
+        self.agents.sort_by(|a, b| {
+            a.tool
+                .cmp(&b.tool)
+                .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+                .then_with(|| a.path.cmp(&b.path))
+        });
         self.collectors.sort_by(|a, b| a.id.cmp(&b.id));
         self.signatures
             .matches

@@ -137,6 +137,11 @@ All notable changes to vn-ranger are recorded here. The format follows
   the collector as unavailable with that reason instead of reporting no tasks.
 - **`hidden` is a fact**, so "a hidden scheduled task runs a program from a folder a user can
   write" is a shipped rule with a positive and a negative case.
+- **The agent stack**: the collector reads four configuration surfaces — `authorized_keys`
+  lines with a forced command or a supplied environment, `~/.ssh/rc`, `ProxyCommand` and
+  `LocalCommand` in `~/.ssh/config`, and an MCP client's `mcpServers` — and says what each
+  would run. A private key, a known-hosts file and every browser profile are never read, and
+  the status line names which files were read and which were not there.
 - **The coverage table is generated** from the pack by `cargo xtask coverage`, and `ci` fails
   when a rule exists and the table does not mention it.
 - **A rule about a subject nothing collects is now a load error.** `agent` and `file-event`

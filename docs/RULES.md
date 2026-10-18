@@ -93,7 +93,7 @@ is refused rather than loaded as a rule that never fires.
 | `listener` | `public` | true/false |
 | `package` | `name`, `publisher`, `source`, `version` | text |
 | `file-event` | `kind`, `path`, `source` | text |
-| `agent` | `config`, `name`, `path`, `tool` | text |
+
 
 The values a text field takes, where the machine has a fixed set:
 
@@ -223,6 +223,19 @@ Notification Packages` is one DLL per entry, named `Notification Packages (1)`, 
 on. A `REG_DWORD` in a `Run` key is not a command and is not an entry, because guessing at its
 bytes would invent a fact.
 
+The agent-stack collector fills the `agent` subject from four kinds of configuration, each
+named in the finding by its file:
+
+| File | What is one fact |
+|---|---|
+| `~/.ssh/authorized_keys` | a key line with `command=` or `environment=` |
+| `~/.ssh/rc` | the script itself, which runs when a session opens |
+| `~/.ssh/config` | a `ProxyCommand`, `LocalCommand` or `Match exec` naming a program |
+| an MCP client's configuration (`mcpServers`) | a server, with the command it starts |
+
+A private key, a known-hosts file and everything under a browser profile are never read.
+`file-event` is still the one subject nothing collects, and a rule about it is a load error.
+
 Scheduled tasks are the twentieth source and they are not a registry key: each task file is
 parsed by a reader with its own captured fixture, and the facts carry `kind eq
 "scheduled_task"`, the account the task runs as in `scope`, whether it hides itself in
@@ -257,6 +270,7 @@ actually covers.
 | Technique | Rule | Severity | What it says |
 |---|---|---|---|
 | `T1053.005` | `task.hidden-user-writable` | Attention | A hidden scheduled task runs a program from a user-writable folder |
+| `T1059` | `agent.config-names-a-command` | Notice | A configuration file names a program to run |
 | `T1204.002` | `process.from-temp` | Notice | A process running from a temporary folder |
 | `T1543.003` | `startup.service-dll-user-writable` | Attention | A service's DLL is in a folder a user can write |
 | `T1546.002` | `startup.screensaver-user-writable` | Notice | The screensaver runs a program from a user-writable folder |
@@ -267,7 +281,7 @@ actually covers.
 | `T1547.012` | `startup.print-monitor-user-writable` | Attention | A print monitor DLL is named by a full path in a user-writable folder |
 | `T1611` | `listener.every-interface` | Notice | A socket waiting for a connection on every interface |
 
-10 rules covering 9 technique(s), from `packs/ranger.core.json`.
+11 rules covering 10 technique(s), from `packs/ranger.core.json`.
 <!-- coverage:end -->
 
 ## Importing a Sigma rule
