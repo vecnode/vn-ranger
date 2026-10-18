@@ -18,12 +18,13 @@ fn main() {
         "no-network" => no_network(),
         "language" => language(),
         "packs" => packs(),
+        "features" => features(),
         "version" => {
             println!("{}", env!("CARGO_PKG_VERSION"));
             Ok(())
         }
         other => Err(format!(
-            "unknown xtask `{other}`; try ci, fmt-fix, lint, test, check, no-network, language, packs or version"
+            "unknown xtask `{other}`; try ci, fmt-fix, lint, test, check, no-network, language, packs, features or version"
         )),
     };
     if let Err(error) = result {
@@ -84,8 +85,54 @@ fn ci() -> Result<(), String> {
     no_network()?;
     language()?;
     packs()?;
+    no_content_engine()?;
     lint()?;
     test()
+}
+
+/// The content scan is optional, and the default build must not contain its engine.
+///
+/// `yara-x` is a pattern engine over file bytes. It is a build feature on purpose: a binary
+/// either has it and asks before reading content, or does not have it at all. A dependency
+/// that is in the tree by default is a capability that ships unasked, so this check is what
+/// keeps the promise that a sentence in the release notes would not.
+fn no_content_engine() -> Result<(), String> {
+    let root = workspace_root()?;
+    let output = Command::new("cargo")
+        .args([
+            "tree",
+            "--package",
+            "vnr-native",
+            "--edges",
+            "normal",
+            "--prefix",
+            "none",
+        ])
+        .current_dir(&root)
+        .output()
+        .map_err(|error| format!("could not run cargo tree: {error}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "cargo tree failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    let tree = String::from_utf8_lossy(&output.stdout);
+    let offenders: Vec<&str> = tree
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("yara-x"))
+        .collect();
+    if offenders.is_empty() {
+        println!("content scan: the default build contains no YARA-X");
+        Ok(())
+    } else {
+        Err(format!(
+            "the default build contains the content-scan engine: {}. It is a feature, not a \
+             dependency: a person who did not ask for a content scan must not receive one.",
+            offenders.join(", ")
+        ))
+    }
 }
 
 fn lint() -> Result<(), String> {
@@ -93,7 +140,28 @@ fn lint() -> Result<(), String> {
         "clippy",
         "--workspace",
         "--all-targets",
-        "--all-features",
+        "--profile",
+        CI_PROFILE,
+        "--",
+        "-D",
+        "warnings",
+    ])
+}
+
+/// Compile and lint the optional features, which `ci` deliberately does not build.
+///
+/// The content scan pulls a pattern engine and a compiler backend with it, which is minutes
+/// of build time on every check and is exactly why it is optional. It still has to compile
+/// and be warning-free, so it gets its own command, and CI runs it as its own step: the
+/// default build is the one `ci` is fast enough to run on every push.
+fn features() -> Result<(), String> {
+    run(&[
+        "clippy",
+        "--package",
+        "vnr-native",
+        "--features",
+        "content-scan",
+        "--all-targets",
         "--profile",
         CI_PROFILE,
         "--",

@@ -15,6 +15,7 @@ pub mod action;
 pub mod autostart;
 pub mod clean;
 pub mod collect;
+pub mod contentscan;
 pub mod elevation;
 pub mod hash;
 pub mod instance;

@@ -96,3 +96,9 @@ jobs:
       # core and the native collectors, and type-checks the UI and shell.
       - name: Check
         run: cargo xtask ci
+
+      # The optional features are deliberately not in the default build, which is exactly
+      # why they need their own step: code behind a feature flag is code no default check
+      # compiles. This is the content scan, and it pulls a pattern engine with it.
+      - name: Optional features
+        run: cargo xtask features
