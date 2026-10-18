@@ -342,6 +342,17 @@ pub fn file_fact(file: &FileFact) -> Fact {
         fact.push_text("container", Some(&file.container.join(" > ")));
         fact.push_number("depth", i64::try_from(file.container.len()).ok());
     }
+    // The header's own numbers. A file that is not an executable carries none of them, which
+    // is absent rather than zero: a rule that matched `rwx eq 0` would be claiming every text
+    // file has no writable section, and nobody checked that.
+    if let Some(structure) = file.structure.as_ref() {
+        fact.push_number("sections", Some(i64::from(structure.sections)));
+        fact.push_number("rwx", Some(i64::from(structure.writable_executable)));
+        fact.push_number("entropy", Some(i64::from(structure.max_entropy_x100)));
+        fact.push_number("imports", Some(i64::from(structure.imports)));
+        fact.push_number("overlay", i64::try_from(structure.overlay_bytes).ok());
+        fact.push_text("imphash", structure.imphash.as_deref());
+    }
     fact
 }
 
@@ -999,6 +1010,7 @@ mod tests {
                 line: 3,
             }],
             read_bytes: Some(2048),
+            structure: None,
         };
         let fact = file_fact(&file);
         assert_eq!(fact.subject, "file:C:\\Temp\\report.docx");

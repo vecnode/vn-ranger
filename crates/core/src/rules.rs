@@ -2036,6 +2036,7 @@ mod tests {
                 line: 5,
             }],
             read_bytes: Some(68),
+            structure: None,
         });
         let findings = evaluate(&snapshot, None);
         let hash = findings

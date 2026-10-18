@@ -356,6 +356,7 @@ impl State<'_> {
             .extension()
             .and_then(|extension| extension.to_str())
             .map(str::to_ascii_lowercase);
+        let structure = bytes.as_deref().and_then(crate::structs::read);
         self.report.files.push(FileFact {
             path: path.display().to_string(),
             name: name.clone(),
@@ -369,6 +370,7 @@ impl State<'_> {
             hash_match,
             matches,
             read_bytes,
+            structure,
         });
 
         // What a container holds is read in memory, never unpacked: the members are scanned
@@ -448,6 +450,7 @@ impl State<'_> {
                         hash_match,
                         matches,
                         read_bytes: Some(size),
+                        structure: crate::structs::read(&nested_bytes),
                     });
                     if containers::is_container(&nested_name) {
                         self.expand_and_scan(&member_path, &nested_name, &nested_bytes, depth + 1);

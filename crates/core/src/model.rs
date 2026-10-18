@@ -378,6 +378,56 @@ pub struct FileFact {
     /// Equal to `size` for a file that was read whole, less for one that was truncated by a
     /// cap, and `None` when the file was not read at all.
     pub read_bytes: Option<u64>,
+    /// The shape of an executable, when the bytes are one and this build read the header.
+    ///
+    /// `None` is "not an executable, or not read" — never "no sections": the difference is
+    /// the whole point of the field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub structure: Option<Structure>,
+}
+
+/// The shape of an executable, as far as a scanner can see it without running it.
+///
+/// These are structural facts, not a verdict: a writable and executable section is how a
+/// just-in-time compiler works and also how a packer works. Every count here is something a
+/// person can check against the file itself with a hex editor, and the rule that reads them
+/// names the benign case first.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Structure {
+    /// The container format: `pe`, `elf` or `macho`.
+    pub format: String,
+    /// The machine or architecture, as the header spells it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub machine: Option<String>,
+    /// How many sections the header declares.
+    #[serde(default)]
+    pub sections: u32,
+    /// How many sections are both writable and executable.
+    #[serde(default)]
+    pub writable_executable: u32,
+    /// The highest Shannon entropy of any section, in hundredths of a bit per byte.
+    ///
+    /// 800 is 8.0, the ceiling; a section near it is compressed or encrypted data inside an
+    /// executable, which is a fact about bytes and not about intent.
+    #[serde(default)]
+    pub max_entropy_x100: u16,
+    /// How many imported symbols the file names.
+    #[serde(default)]
+    pub imports: u32,
+    /// The import hash, when the file imports anything.
+    ///
+    /// A family hash in the open-source sense: the same imports in the same order give the
+    /// same value, so two files of one family share it even when the bytes differ.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub imphash: Option<String>,
+    /// Bytes after the last section, where an appended payload sits.
+    #[serde(default)]
+    pub overlay_bytes: u64,
+    /// Whether the file carries an Authenticode signature blob.
+    ///
+    /// Carrying one is not the same as a valid one; this program reports what is there.
+    #[serde(default)]
+    pub signature_blob: bool,
 }
 
 /// One content signature that matched a file.
@@ -435,7 +485,6 @@ pub struct FlowFact {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub beacon: Option<BeaconFact>,
 }
-
 impl FlowFact {
     /// The identity a rhythm is remembered under: the process and the other end.
     ///

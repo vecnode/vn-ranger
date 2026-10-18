@@ -29,6 +29,7 @@ pub mod signatures;
 pub mod soak;
 pub mod startup;
 pub mod store;
+pub mod structs;
 pub mod tray;
 pub mod watch;
 

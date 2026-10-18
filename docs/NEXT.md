@@ -76,8 +76,15 @@ read — that is what a decompression bomb looks like. What was skipped goes int
 refused list with a reason, in words, rather than leaving an archive that looks empty.
 
 `goblin` vs `object` and the structural facts (sections and entropy, imports and imphash, the
-overlay, the signature blob, `authenticode`) are **not built**: they are the other half of
-this wave, and `object` is the candidate because it is already in the local registry cache.
+overlay, the signature blob, `authenticode`) are **half built**: `object` 0.40 is the choice
+(one new crate, features `read,std`, no C), and `native/src/structs.rs` turns an executable's
+header into a `Structure`: format and machine, section count, how many sections are writable
+*and* executable, the highest section entropy in hundredths of a bit, import count, the import
+hash (libraries and symbols in table order, lower-cased — the open-source family hash), bytes
+after the last section, and whether an Authenticode blob is attached. The content engine
+records it on every file and every container member, and the `file` subject gains `sections`,
+`rwx`, `entropy`, `imports`, `overlay` and `imphash` for pack rules. **A rule that reads them
+and the `authenticode` digest are not built.**
 
 `cargo add zip flate2 cfb`. One walker with a ratio cap, 256 MB total, 3 layers, and the
 `.ndb` library run on what it extracts — never to disk. Then `goblin` **or** `object`
