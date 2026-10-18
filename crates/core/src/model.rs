@@ -294,11 +294,15 @@ pub struct ListenerFact {
 /// the same fact in different clothes: a file the person trusts names a program, and the
 /// program runs without a click. The fact says what the file is, where it is, and what it
 /// would run — not whether that is a good idea.
+///
+/// From 0.1.7 a fact may also be a **skill**: a `SKILL.md` and the files beside it. What a
+/// skill's files would let it do is the [`AgentFact::capabilities`] matrix, one entry per
+/// kind with the line that proved it, and [`AgentFact::hash`] is the digest of the package.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AgentFact {
-    /// A stable identity, such as `mcp:claude-desktop:filesystem`.
+    /// A stable identity, such as `mcp:claude-desktop:filesystem` or `skill:pdf-analysis`.
     pub id: String,
-    /// Which kind of tool the configuration belongs to: `ssh` or `mcp`.
+    /// Which kind of tool the configuration belongs to: `ssh`, `mcp` or `skill`.
     pub tool: String,
     /// The name the configuration gives the thing it would run.
     pub name: String,
@@ -306,6 +310,23 @@ pub struct AgentFact {
     pub path: String,
     /// The command it would run, when the configuration names one.
     pub command: Option<String>,
+    /// What the files would let it do: `(kind, evidence)`, where the kind is one of
+    /// `executes`, `network`, `writes`, `credentials` or `model`, and the evidence is the
+    /// line that showed it.
+    ///
+    /// One entry per kind, never one per match: "it can execute" is the fact, and twelve
+    /// lines that prove it are not twelve facts. Empty for a configuration that is not a
+    /// skill, and empty for a skill whose files prove nothing.
+    #[serde(default)]
+    pub capabilities: Vec<(String, String)>,
+    /// The SHA-256 of the skill package: one line per file it ships, in path order, in the
+    /// shape `sha256sum` prints (`digest`, two spaces, path), hashed again.
+    ///
+    /// A digest of the package rather than of one file, because a skill is a folder: an
+    /// edited script has to make a different fact. `None` for a configuration that is not a
+    /// skill, and for a skill whose files could not be read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hash: Option<String>,
 }
 
 /// One installed package or application.

@@ -161,7 +161,23 @@ const PACKAGE: &[Field] = &[text("name"), text("publisher"), text("source"), tex
 const FILE_EVENT: &[Field] = &[text("kind"), text("path"), text("source")];
 
 /// The fields of an editor, agent or package-manager configuration.
-const AGENT: &[Field] = &[text("command"), text("name"), text("path"), text("tool")];
+///
+/// The five booleans are a skill's capability matrix: each is set from the capability entry
+/// that named it, so a rule can ask "runs commands and reaches the network" without a
+/// language for matrix lookups. A configuration that is not a skill has none of them, which
+/// means absent rather than false — the same distinction the rest of the vocabulary keeps.
+const AGENT: &[Field] = &[
+    text("command"),
+    boolean("credentials"),
+    boolean("executes"),
+    text("hash"),
+    boolean("model"),
+    text("name"),
+    boolean("network"),
+    text("path"),
+    text("tool"),
+    boolean("writes"),
+];
 
 /// The fields of a file the content engine read.
 const FILE: &[Field] = &[

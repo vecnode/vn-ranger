@@ -548,11 +548,17 @@ ranger":
 | 4 | The skill reader: `SKILL.md` frontmatter (an unclosed header is body, not metadata) and the five capability kinds with the line that proved each | `0a2135a` |
 
 **Not started:** containers and structural facts (Wave 1 — the §14 dependencies are approved and unbuilt (see §14.4));
-events (Wave 2 — needs `evtx`); agents (Wave 4); the triage package and the sweep (Wave 5).
+events (Wave 2 — needs `evtx`); the rest of agents (Wave 4: suite provenance and the
+baseline diff); the triage package and the sweep (Wave 5).
 **Beaconing is closed:** the two-second poll calls `Sampler::observe` for every connection it
 reads, the scan's flows are stamped with what the sampler saw, and `flow.beaconing` fires on
 a steady rhythm. Without a series there is nothing to stamp, so a one-shot scan reports no
 rhythm rather than guessing one — `FlowFact::beacon` is never set by a single photograph.
+**The skill inventory is built:** the agent-stack collector finds a `SKILL.md` wherever a
+client keeps one, reads the package's own files, hashes them into one digest, and reports the
+five capabilities with the line that proved each. `agent.skill-executes-networked` is the
+first finding that reads that matrix. What is not built is item 3's provenance record and
+item 5's baseline diff.
 
 Six waves, one gate, in order. A wave is done when its exit holds, and the release may
 take longer than a plan, but it may not take the shortcut.

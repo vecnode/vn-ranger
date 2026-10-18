@@ -56,6 +56,8 @@ pub fn authorized_keys(path: &str, text: &str) -> Vec<AgentFact> {
             command: command
                 .clone()
                 .or_else(|| environment.map(|environment| format!("environment: {environment}"))),
+            capabilities: Vec::new(),
+            hash: None,
         });
     }
     facts
@@ -75,6 +77,8 @@ pub fn rc(path: &str, text: &str) -> Vec<AgentFact> {
         name: "rc file".to_owned(),
         path: path.to_owned(),
         command: Some(format!("runs when a session opens ({lines} line(s))")),
+        capabilities: Vec::new(),
+        hash: None,
     }]
 }
 
@@ -109,6 +113,8 @@ pub fn config(path: &str, text: &str) -> Vec<AgentFact> {
             name: format!("{written} for {host}"),
             path: path.to_owned(),
             command: Some(value.to_owned()),
+            capabilities: Vec::new(),
+            hash: None,
         });
     }
     facts

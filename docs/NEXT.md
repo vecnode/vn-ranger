@@ -32,8 +32,13 @@ Everything else in the flow wave is done: `Sampler::observe`, `beacon()`, `Beaco
 
 ## 2. Wave 4 — the agent collector
 
-`vnr_core::skills` already reads `SKILL.md` and reports the five capabilities. What is
-missing is the collector that finds the skills and turns them into facts.
+**Done.** The collector finds a `SKILL.md` in the folders a client keeps one, reads the
+package's own files, and reports the five capabilities with the line that proved each, one
+digest per folder, and `agent.skill-executes-networked`. The steps below are kept as the
+record of what was decided.
+
+`vnr_core::skills` already reads `SKILL.md` and reports the five capabilities. What was
+missing was the collector that finds the skills and turns them into facts.
 
 | Step | File | What to do |
 |---|---|---|

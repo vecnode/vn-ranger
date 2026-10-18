@@ -264,6 +264,8 @@ fn agent(command: Option<&str>) -> AgentFact {
         name: "filesystem".to_owned(),
         path: r"C:\Users\user\.cursor\mcp.json".to_owned(),
         command: command.map(str::to_owned),
+        capabilities: Vec::new(),
+        hash: None,
     }
 }
 

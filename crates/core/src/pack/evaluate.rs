@@ -274,6 +274,11 @@ pub fn package_fact(package: &PackageFact) -> Fact {
 }
 
 /// An editor, agent or package-manager configuration as a rule sees it.
+///
+/// A skill's capability matrix becomes five booleans here, because a fact is one subject
+/// with a closed vocabulary and a rule cannot walk a list. A configuration that is not a
+/// skill, or a skill whose files proved nothing, carries none of them — absent, which
+/// matches nothing, rather than false, which would look like a measurement.
 #[must_use]
 pub fn agent_fact(agent: &AgentFact) -> Fact {
     let mut fact = Fact {
@@ -285,7 +290,31 @@ pub fn agent_fact(agent: &AgentFact) -> Fact {
     fact.push_text("name", Some(&agent.name));
     fact.push_text("path", Some(&agent.path));
     fact.push_text("command", agent.command.as_deref());
+    fact.push_text("hash", agent.hash.as_deref());
+    for (kind, _) in &agent.capabilities {
+        if let Some(field) = capability_field(kind) {
+            fact.push(field, Value::Bool(true));
+        }
+    }
     fact
+}
+
+/// The field a capability kind sets, when this build knows the kind.
+///
+/// The kinds come from [`crate::skills::Kind`], so a capability added there without a field
+/// here is a kind no rule can match rather than a field nobody declared.
+fn capability_field(kind: &str) -> Option<&'static str> {
+    const KINDS: [crate::skills::Kind; 5] = [
+        crate::skills::Kind::Executes,
+        crate::skills::Kind::Network,
+        crate::skills::Kind::Writes,
+        crate::skills::Kind::Credentials,
+        crate::skills::Kind::Model,
+    ];
+    KINDS
+        .into_iter()
+        .find(|known| known.id() == kind)
+        .map(crate::skills::Kind::id)
 }
 
 /// A file the content engine read, as a rule sees it.

@@ -15,12 +15,14 @@
 //! | `~/.ssh/rc` | the script itself: it runs on every login through that key |
 //! | `~/.ssh/config` | a `ProxyCommand`, `LocalCommand` or `Match exec` that names a command |
 //! | an MCP client's configuration | one server entry, with its command |
+//! | a skill folder | one `SKILL.md` and the files beside it, as a capability matrix |
 //!
 //! Nothing here reads a private key, a known-hosts file, or anything under a browser
 //! profile. A file that is not there contributes nothing, and the status line says which
 //! files were looked for, so "none" is distinguishable from "not looked".
 
 pub mod mcp;
+pub mod skills;
 pub mod ssh;
 
 use std::path::PathBuf;
@@ -90,6 +92,28 @@ pub fn collect() -> Outcome<AgentFact> {
         items.extend(facts);
     }
 
+    // Skills: one fact per `SKILL.md`, with what its files would let it do. A folder that is
+    // not there is named in the status rather than left out, so a machine with no skills and
+    // a build that did not look are different answers.
+    let mut skill_facts = 0;
+    for root in skills::roots(&home) {
+        if !root.is_dir() {
+            looked.push(Looked {
+                path: root.display().to_string(),
+                found: None,
+            });
+            continue;
+        }
+        let scan = skills::collect_root(&root);
+        skill_facts += scan.facts.len();
+        unreadable.extend(scan.unreadable);
+        looked.push(Looked {
+            path: root.display().to_string(),
+            found: Some(scan.facts.len()),
+        });
+        items.extend(scan.facts);
+    }
+
     let read: Vec<&str> = looked
         .iter()
         .filter(|entry| entry.found.is_some())
@@ -105,8 +129,10 @@ pub fn collect() -> Outcome<AgentFact> {
         ));
     }
     reasons.push(format!(
-        "{} file(s) were read ({}), {} were not there, and a configuration is a fact rather \
-         than a verdict. Editor tasks and package-manager hooks are not read in this build.",
+        "{} file(s) and folder(s) were read ({}), {} were not there, and a configuration is a \
+         fact rather than a verdict. {skill_facts} skill(s) were found, each with the \
+         capabilities its own files prove. Editor tasks and package-manager hooks are not read \
+         in this build.",
         read.len(),
         if read.is_empty() {
             "no configuration in this home directory".to_owned()
@@ -143,7 +169,7 @@ mod tests {
             status
                 .reason
                 .as_deref()
-                .is_some_and(|reason| reason.contains("file(s) were read")),
+                .is_some_and(|reason| reason.contains("were read")),
             "{:?}",
             status.reason
         );

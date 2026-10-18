@@ -63,6 +63,8 @@ pub fn read(path: &str, text: &str) -> Vec<AgentFact> {
             name: name.clone(),
             path: path.to_owned(),
             command: line,
+            capabilities: Vec::new(),
+            hash: None,
         });
     }
     facts

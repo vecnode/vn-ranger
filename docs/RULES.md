@@ -93,7 +93,8 @@ is refused rather than loaded as a rule that never fires.
 | `listener` | `public` | true/false |
 | `package` | `name`, `publisher`, `source`, `version` | text |
 | `file-event` | `kind`, `path`, `source` | text |
-| `agent` | `command`, `name`, `path`, `tool` | text |
+| `agent` | `command`, `hash`, `name`, `path`, `tool` | text |
+| `agent` | `credentials`, `executes`, `model`, `network`, `writes` | true/false |
 | `file` | `container`, `digest`, `extension`, `kind`, `name`, `path`, `signed`, `signer` | text |
 | `file` | `depth`, `size` | number |
 | `file-match` | `container`, `kind`, `name`, `path`, `signed`, `signer` | text |
@@ -128,6 +129,13 @@ the poll has watched this process and this peer often enough (six contacts) clos
 interval in seconds and `beacon_jitter` is the spread in basis points: 300 means 3%. A
 `--report` run has no poll behind it, so it carries no rhythm — a rule that matches
 `beacon` is quiet there rather than guessing.
+
+**`agent`** is one configuration that can run something without a click. The five
+capability fields are a skill's matrix: each is present and `true` only when the skill's own
+files proved it, and the line that proved it is the finding's evidence, not a field a rule
+can read. A configuration that is not a skill carries none of the five, so `executes` is
+absent there rather than `false` — absent matches nothing, which is the honest answer for a
+file nobody made that claim about.
 
 
 The values a text field takes, where the machine has a fixed set:
@@ -258,7 +266,7 @@ Notification Packages` is one DLL per entry, named `Notification Packages (1)`, 
 on. A `REG_DWORD` in a `Run` key is not a command and is not an entry, because guessing at its
 bytes would invent a fact.
 
-The agent-stack collector fills the `agent` subject from four kinds of configuration, each
+The agent-stack collector fills the `agent` subject from five kinds of configuration, each
 named in the finding by its file:
 
 | File | What is one fact |
@@ -267,9 +275,17 @@ named in the finding by its file:
 | `~/.ssh/rc` | the script itself, which runs when a session opens |
 | `~/.ssh/config` | a `ProxyCommand`, `LocalCommand` or `Match exec` naming a program |
 | an MCP client's configuration (`mcpServers`) | a server, with the command it starts |
+| a skill folder: `SKILL.md` and the files beside it | the skill, with what its files would let it do |
 
 A private key, a known-hosts file and everything under a browser profile are never read.
 `file-event` is still the one subject nothing collects, and a rule about it is a load error.
+
+A **skill** is read as its own files and nothing else: the frontmatter, the body, and the
+scripts beside it. Each of the five capabilities is reported once, with the file and line
+that proved it, and `hash` is one digest of the whole folder — one line per file, in path
+order, in the shape `sha256sum` prints, hashed again. A folder a person can check by hand
+is a fact; a prompt it was told to follow is not ranger's to read, and no conversation is
+opened.
 
 Scheduled tasks are the twentieth source and they are not a registry key: each task file is
 parsed by a reader with its own captured fixture, and the facts carry `kind eq
@@ -336,6 +352,7 @@ table instead of leaving a blank.
 | `T1554` | `startup.hash-changed` | Attention | built-in | A startup binary changed since the baseline |
 | `T1574.008` | `service.unquoted-path` | Notice | built-in | A service path has a space in it and no quotes |
 | `T1611` | `listener.every-interface` | Notice | pack | A socket waiting for a connection on every interface |
+| `—` | `agent.skill-executes-networked` | Attention | built-in | A skill both runs commands and reaches the network |
 | `—` | `file.content-match` | Attention | built-in | A file holds the bytes a signature describes |
 | `—` | `file.hash-match` | Attention | built-in | A file matched a signature by hash |
 | `—` | `flow.beaconing` | Notice | built-in | A program is contacting the same address on a steady rhythm |
@@ -347,7 +364,7 @@ table instead of leaving a blank.
 | `—` | `startup.bare-command` | Notice | built-in | A startup command does not name a full path |
 | `—` | `startup.duplicate-command` | Info | built-in | One command is registered as several startup items |
 
-32 rules covering 14 technique(s): 20 built in and 12 from `packs/ranger.core.json`.
+33 rules covering 14 technique(s): 21 built in and 12 from `packs/ranger.core.json`.
 
 No technique, and why — a rule that cannot name one says so:
 
@@ -361,6 +378,7 @@ No technique, and why — a rule that cannot name one says so:
 - `file.content-match` — the pattern is a fact; a technique is an interpretation of what the file does, which this rule does not observe
 - `flow.temp-process-remote` — a connection is a channel; which technique it serves depends on what is said over it, which this rule does not observe
 - `flow.beaconing` — a rhythm is a channel; what it carries is not observed
+- `agent.skill-executes-networked` — a capability matrix says what a package could do; which technique it serves is what its author intended, which this rule does not observe
 <!-- coverage:end -->
 
 ## Importing a Sigma rule
