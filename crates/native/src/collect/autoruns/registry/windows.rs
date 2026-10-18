@@ -17,7 +17,14 @@ use super::{Hive, KeyData, KeyReader, Subkey, Value, View, text_of};
 pub(crate) struct WindowsRegistry;
 
 impl KeyReader for WindowsRegistry {
-    fn read(&self, hive: Hive, view: View, key: &str, depth: usize) -> Result<KeyData, String> {
+    fn read(
+        &self,
+        hive: Hive,
+        view: View,
+        key: &str,
+        depth: usize,
+        cap: Option<usize>,
+    ) -> Result<KeyData, String> {
         let widening = match view {
             View::SixtyFour => KEY_WOW64_64KEY,
             View::ThirtyTwo => KEY_WOW64_32KEY,
@@ -27,7 +34,7 @@ impl KeyReader for WindowsRegistry {
             Hive::LocalMachine => RegKey::predef(HKEY_LOCAL_MACHINE),
         };
         match root.open_subkey_with_flags(key, KEY_READ | widening) {
-            Ok(open) => Ok(read_key(&open, depth)),
+            Ok(open) => Ok(read_key(&open, depth, cap)),
             // A key that is not there is the ordinary state of most of this table: an
             // absent `RunOnce` is a fact about the machine, not a failure to read it.
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(KeyData::default()),
@@ -41,7 +48,7 @@ impl KeyReader for WindowsRegistry {
     }
 }
 
-fn read_key(key: &RegKey, depth: usize) -> KeyData {
+fn read_key(key: &RegKey, depth: usize, cap: Option<usize>) -> KeyData {
     let mut values = Vec::new();
     for (name, value) in key.enum_values().flatten() {
         if let Some(data) = text_of(vtype(&value.vtype), &value.bytes) {
@@ -49,14 +56,21 @@ fn read_key(key: &RegKey, depth: usize) -> KeyData {
         }
     }
     let mut subkeys = Vec::new();
+    let mut truncated = 0_usize;
     if depth > 0 {
-        for name in key.enum_keys().flatten() {
+        // The cap is counted from the enumeration, not from the opens: a key with 11,905
+        // children costs nothing to walk and everything to open.
+        for (index, name) in key.enum_keys().flatten().enumerate() {
+            if cap.is_some_and(|limit| index >= limit) {
+                truncated = truncated.saturating_add(1);
+                continue;
+            }
             // A subkey that cannot be opened is skipped rather than failing the surface:
             // one unreadable child must not hide the other four hundred.
             let Ok(child) = key.open_subkey_with_flags(&name, KEY_READ) else {
                 continue;
             };
-            let data = read_key(&child, depth.saturating_sub(1));
+            let data = read_key(&child, depth.saturating_sub(1), None);
             subkeys.push(Subkey {
                 name,
                 values: data.values,
@@ -64,7 +78,11 @@ fn read_key(key: &RegKey, depth: usize) -> KeyData {
             });
         }
     }
-    KeyData { values, subkeys }
+    KeyData {
+        values,
+        subkeys,
+        truncated,
+    }
 }
 
 /// The numeric type of a value, in the form the parser knows.
@@ -93,6 +111,7 @@ mod tests {
                 View::SixtyFour,
                 r"Software\vn-ranger\this key does not exist",
                 0,
+                None,
             )
             .expect("an absent key is not a failure");
         assert!(data.values.is_empty());
@@ -106,7 +125,7 @@ mod tests {
         // an empty answer is still an answer.
         let reader = WindowsRegistry;
         let data = reader
-            .read(Hive::CurrentUser, View::SixtyFour, r"Software", 1)
+            .read(Hive::CurrentUser, View::SixtyFour, r"Software", 1, None)
             .expect("the software key exists on every profile");
         assert!(
             data.values.len() + data.subkeys.len() < usize::MAX,

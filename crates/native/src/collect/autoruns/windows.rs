@@ -59,8 +59,17 @@ fn collect_registry(items: &mut Vec<AutorunFact>, reasons: &mut Vec<String>) {
     for surface in registry::SURFACES {
         for view in surface.wideness.views() {
             let depth = surface.read.depth();
-            match reader.read(surface.hive, *view, surface.key, depth) {
+            match reader.read(surface.hive, *view, surface.key, depth, surface.cap) {
                 Ok(data) => {
+                    if data.truncated > 0 {
+                        reasons.push(format!(
+                            "{}: only the first {} of {} keys were read, because reading all of \
+                             them is not a scan.",
+                            surface.label,
+                            surface.cap.unwrap_or(0),
+                            data.truncated.saturating_add(surface.cap.unwrap_or(0))
+                        ));
+                    }
                     for entry in registry::entries(surface, *view, &data) {
                         let command = winutil::expand_env(&entry.command);
                         let exe = winutil::executable_from_command(&command)

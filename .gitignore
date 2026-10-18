@@ -15,8 +15,12 @@ desktop.ini
 /scratch/
 *.local.toml
 
-# Scratch profile for a local test run: the data directory the harness writes
+# Scratch profiles for a local test run: the data directory a harness writes, and the
+# throwaway profile a report is written into. They hold this machine's facts - process
+# paths, listeners, packages - so they never belong in a commit.
 /.tmp-ci/
+/.tmp-probe/
+/.tmp-probe2/
 
 # A commit message written to a file, so a long one survives the shell
 /.git-commit-msg.txt

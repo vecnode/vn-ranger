@@ -168,6 +168,12 @@ pub(crate) struct Surface {
     pub scope: AutorunScope,
     /// The ATT&CK technique the surface is an instance of, where one is the honest mapping.
     pub technique: Option<&'static str>,
+    /// How many subkeys of this key are read, when reading all of them is not a scan.
+    ///
+    /// `COM` has 11,905 classes on an ordinary machine. Reading a thousand of them is a
+    /// couple of seconds on every scan, and the number a rule would need is not the first
+    /// thousand — so the read is capped and the status says it was.
+    pub cap: Option<usize>,
 }
 
 /// The surfaces this build reads.
@@ -186,6 +192,7 @@ pub(crate) const SURFACES: &[Surface] = &[
         kind: AutorunKind::RunKey,
         scope: AutorunScope::User,
         technique: Some("T1547.001"),
+        cap: None,
     },
     Surface {
         id: "run-machine",
@@ -197,6 +204,7 @@ pub(crate) const SURFACES: &[Surface] = &[
         kind: AutorunKind::RunKey,
         scope: AutorunScope::System,
         technique: Some("T1547.001"),
+        cap: None,
     },
     Surface {
         id: "run-once",
@@ -208,6 +216,7 @@ pub(crate) const SURFACES: &[Surface] = &[
         kind: AutorunKind::RunKey,
         scope: AutorunScope::User,
         technique: Some("T1547.001"),
+        cap: None,
     },
     Surface {
         id: "run-once-machine",
@@ -219,6 +228,7 @@ pub(crate) const SURFACES: &[Surface] = &[
         kind: AutorunKind::RunKey,
         scope: AutorunScope::System,
         technique: Some("T1547.001"),
+        cap: None,
     },
     Surface {
         id: "run-services",
@@ -230,6 +240,7 @@ pub(crate) const SURFACES: &[Surface] = &[
         kind: AutorunKind::RunKey,
         scope: AutorunScope::System,
         technique: Some("T1547.001"),
+        cap: None,
     },
     Surface {
         id: "run-services-once",
@@ -241,6 +252,7 @@ pub(crate) const SURFACES: &[Surface] = &[
         kind: AutorunKind::RunKey,
         scope: AutorunScope::System,
         technique: Some("T1547.001"),
+        cap: None,
     },
     Surface {
         id: "winlogon-shell",
@@ -252,6 +264,7 @@ pub(crate) const SURFACES: &[Surface] = &[
         kind: AutorunKind::Other,
         scope: AutorunScope::System,
         technique: Some("T1547.004"),
+        cap: None,
     },
     Surface {
         id: "winlogon-userinit",
@@ -263,6 +276,7 @@ pub(crate) const SURFACES: &[Surface] = &[
         kind: AutorunKind::Other,
         scope: AutorunScope::System,
         technique: Some("T1547.004"),
+        cap: None,
     },
     Surface {
         id: "winlogon-notify",
@@ -274,6 +288,7 @@ pub(crate) const SURFACES: &[Surface] = &[
         kind: AutorunKind::Other,
         scope: AutorunScope::System,
         technique: Some("T1547.004"),
+        cap: None,
     },
     Surface {
         id: "appinit",
@@ -285,6 +300,7 @@ pub(crate) const SURFACES: &[Surface] = &[
         kind: AutorunKind::Other,
         scope: AutorunScope::System,
         technique: Some("T1546.010"),
+        cap: None,
     },
     Surface {
         id: "ifeo-debugger",
@@ -299,6 +315,7 @@ pub(crate) const SURFACES: &[Surface] = &[
         kind: AutorunKind::Debugger,
         scope: AutorunScope::System,
         technique: Some("T1546.012"),
+        cap: None,
     },
     Surface {
         id: "active-setup",
@@ -313,6 +330,7 @@ pub(crate) const SURFACES: &[Surface] = &[
         kind: AutorunKind::Other,
         scope: AutorunScope::System,
         technique: Some("T1547.014"),
+        cap: None,
     },
     Surface {
         id: "service-dll",
@@ -327,6 +345,7 @@ pub(crate) const SURFACES: &[Surface] = &[
         kind: AutorunKind::Service,
         scope: AutorunScope::System,
         technique: Some("T1543.003"),
+        cap: None,
     },
     Surface {
         id: "print-monitor",
@@ -341,6 +360,7 @@ pub(crate) const SURFACES: &[Surface] = &[
         kind: AutorunKind::PrintMonitor,
         scope: AutorunScope::System,
         technique: Some("T1547.012"),
+        cap: None,
     },
     Surface {
         id: "lsa-notification",
@@ -352,6 +372,7 @@ pub(crate) const SURFACES: &[Surface] = &[
         kind: AutorunKind::Other,
         scope: AutorunScope::System,
         technique: Some("T1547.005"),
+        cap: None,
     },
     Surface {
         id: "lsa-authentication",
@@ -363,6 +384,7 @@ pub(crate) const SURFACES: &[Surface] = &[
         kind: AutorunKind::Other,
         scope: AutorunScope::System,
         technique: Some("T1547.005"),
+        cap: None,
     },
     Surface {
         id: "netsh-helper",
@@ -374,6 +396,7 @@ pub(crate) const SURFACES: &[Surface] = &[
         kind: AutorunKind::NetshHelper,
         scope: AutorunScope::System,
         technique: Some("T1546.007"),
+        cap: None,
     },
     Surface {
         id: "screensaver",
@@ -385,6 +408,7 @@ pub(crate) const SURFACES: &[Surface] = &[
         kind: AutorunKind::Screensaver,
         scope: AutorunScope::User,
         technique: Some("T1546.002"),
+        cap: None,
     },
     Surface {
         id: "time-provider",
@@ -399,6 +423,7 @@ pub(crate) const SURFACES: &[Surface] = &[
         kind: AutorunKind::TimeProvider,
         scope: AutorunScope::System,
         technique: Some("T1547.003"),
+        cap: None,
     },
     Surface {
         id: "shell-extension",
@@ -410,6 +435,24 @@ pub(crate) const SURFACES: &[Surface] = &[
         kind: AutorunKind::ShellExtension,
         scope: AutorunScope::System,
         technique: Some("T1546.015"),
+        cap: None,
+    },
+    Surface {
+        id: "com-inprocserver",
+        label: "COM in-process server",
+        hive: Hive::LocalMachine,
+        key: r"SOFTWARE\Classes\CLSID",
+        wideness: Widening::SixtyFour,
+        read: Read::SubkeyValue {
+            path: "InprocServer32",
+            value: "",
+        },
+        kind: AutorunKind::Other,
+        scope: AutorunScope::System,
+        technique: Some("T1546.015"),
+        // A thousand of 11,905: enough to see what is registered in an unusual place, few
+        // enough that the scan stays a second. The status line says a cap was applied.
+        cap: Some(1000),
     },
 ];
 
@@ -439,6 +482,9 @@ pub(crate) struct KeyData {
     /// Its subkeys.
     #[serde(default)]
     pub subkeys: Vec<Subkey>,
+    /// How many subkeys were not read because the surface set a cap. Zero means all of them.
+    #[serde(default)]
+    pub truncated: usize,
 }
 
 /// A subkey of a key, with what it holds.
@@ -524,7 +570,19 @@ pub(crate) fn entries(surface: &Surface, view: View, data: &KeyData) -> Vec<Entr
                 let Some(found) = node.value(value) else {
                     continue;
                 };
-                let location = format!("{}\\{} ({}-bit)", subkey.name, value, view.label());
+                // The location is the path to the value, so a person can find it in
+                // `regedit`: the subkey, the path inside it, and the value's name — or
+                // nothing for the default value, which is what a COM server is stored in.
+                let mut location = subkey.name.clone();
+                for segment in path.split('\\').filter(|segment| !segment.is_empty()) {
+                    location.push('\\');
+                    location.push_str(segment);
+                }
+                if !value.is_empty() {
+                    location.push('\\');
+                    location.push_str(value);
+                }
+                let location = format!("{location} ({}-bit)", view.label());
                 push_value(&mut entries, surface, view, &subkey.name, &found.data, &location);
             }
         }
@@ -584,8 +642,15 @@ fn push(entries: &mut Vec<Entry>, surface: &Surface, view: View, name: &str, dat
 /// on an ordinary machine, and "not present" is the fact, not a failure. A key that exists
 /// and could not be read is `Err`, because that is a gap a person needs to see.
 pub(crate) trait KeyReader {
-    /// Read a key, fetching `depth` levels of subkeys.
-    fn read(&self, hive: Hive, view: View, key: &str, depth: usize) -> Result<KeyData, String>;
+    /// Read a key, fetching `depth` levels of subkeys, opening at most `cap` of them.
+    fn read(
+        &self,
+        hive: Hive,
+        view: View,
+        key: &str,
+        depth: usize,
+        cap: Option<usize>,
+    ) -> Result<KeyData, String>;
 }
 
 #[cfg(windows)]

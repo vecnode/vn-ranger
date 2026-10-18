@@ -40,6 +40,7 @@ fn fixture_for(id: &str) -> &'static str {
         "screensaver" => "screensaver",
         "time-provider" => "time-providers",
         "shell-extension" => "shell-extension",
+        "com-inprocserver" => "com",
         other => panic!("{other} has no captured fixture"),
     }
 }
@@ -274,6 +275,7 @@ fn a_multi_string_with_two_packages_is_two_entries_with_distinct_names() {
             data: "scecli\u{0}acme\u{0}".to_owned(),
         }],
         subkeys: Vec::new(),
+        truncated: 0,
     };
     let entries = entries(surface("lsa-notification").unwrap(), View::SixtyFour, &data);
     assert_eq!(entries.len(), 2);
@@ -310,4 +312,33 @@ fn each_loader_surface_names_the_component_that_would_load_it() {
     ] {
         assert_eq!(surface(id).unwrap().kind, kind, "{id}");
     }
+}
+
+#[test]
+fn a_com_class_is_read_two_levels_in_and_a_class_without_a_server_is_skipped() {
+    let surface = surface("com-inprocserver").unwrap();
+    let entries = entries(surface, View::SixtyFour, &fixture("com"));
+    assert_eq!(entries.len(), 3, "a class with no InprocServer32 is not an entry");
+    assert!(entries[0].name.starts_with('{'));
+    assert!(
+        entries[0].command.ends_with(".dll"),
+        "the server is the command: {}",
+        entries[0].command
+    );
+    assert!(entries[0].location.contains("InprocServer32"));
+    assert_eq!(
+        entries
+            .iter()
+            .filter(|entry| entry.command.eq_ignore_ascii_case("combase.dll"))
+            .count(),
+        1,
+        "a server named without a path is kept exactly as the registry has it"
+    );
+}
+
+#[test]
+fn a_surface_that_sets_a_cap_says_so_and_one_that_does_not_has_none() {
+    assert_eq!(surface("com-inprocserver").unwrap().cap, Some(1000));
+    assert_eq!(surface("run").unwrap().cap, None);
+    assert_eq!(surface("service-dll").unwrap().cap, None);
 }
