@@ -821,6 +821,79 @@ impl Ui {
         }
     }
 
+    /// The places ranger knows how to clean, measured and not touched.
+    ///
+    /// This view has no delete verb on purpose. It answers "how much is there, and what would
+    /// ranger keep" — the two questions a person has before they decide to clean anything —
+    /// and the removal itself is the existing allowlisted card in Actions, with its totals,
+    /// its confirmation and its journal. A second removal path in a second view is how a
+    /// security tool grows two answers to one question.
+    pub(crate) fn clean(
+        &mut self,
+        ui: &mut egui::Ui,
+        world: &crate::World,
+        actions: &mut Vec<crate::Action>,
+    ) {
+        ui.horizontal_wrapped(|ui| {
+            if ui
+                .button("Measure")
+                .on_hover_text(
+                    "Walk the places ranger is allowed to clean, count what is past the age each \
+                     one keeps, and write nothing anywhere.",
+                )
+                .clicked()
+            {
+                actions.push(crate::Action::PreviewClean);
+            }
+            if ui
+                .button("Clean in Actions…")
+                .on_hover_text(
+                    "The removal is the allowlisted card, with the totals on screen and the \
+                     journal written first.",
+                )
+                .clicked()
+            {
+                actions.push(crate::Action::SetView(crate::View::Actions));
+            }
+        });
+        ui.add_space(6.0);
+        let Some(report) = world.clean.as_ref() else {
+            ui.label(
+                RichText::new(
+                    "Nothing has been measured yet. Measure walks the places ranger is allowed to \
+                     clean and counts what is past the age each one keeps; it reads names, sizes \
+                     and times, and writes nothing.",
+                )
+                .size(11.5)
+                .color(theme::muted(ui)),
+            );
+            ui.add_space(8.0);
+            places_table(ui, None);
+            return;
+        };
+        ui.label(
+            RichText::new(format!(
+                "Measured {} place(s) in this dry run, {} across {} entries. Nothing was removed \
+                 and nothing was recorded.",
+                report.surfaces.len(),
+                widgets::bytes(measured_totals(report).1),
+                measured_totals(report).2
+            ))
+            .size(11.5)
+            .color(theme::muted(ui)),
+        );
+        ui.add_space(6.0);
+        places_table(ui, Some(report));
+        if report.cancelled {
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new("The walk stopped before it finished.")
+                    .size(11.0)
+                    .color(theme::ATTENTION),
+            );
+        }
+    }
+
     /// The listener table.
     pub(crate) fn listeners(&mut self, ui: &mut egui::Ui, world: &crate::World) {
         let Some(snapshot) = world.snapshot() else {
@@ -2003,6 +2076,93 @@ fn signature_card(ui: &mut egui::Ui, snapshot: &Snapshot, actions: &mut Vec<Acti
     });
 }
 
+/// How many entries a dry run counted and how much they weigh.
+///
+/// One place decides what "the total" means, so the sentence over the table and any later
+/// summary cannot disagree about a number a person uses to decide whether to clean.
+fn measured_totals(report: &crate::world::CleanReport) -> (usize, u64, usize) {
+    let bytes = report
+        .surfaces
+        .iter()
+        .map(crate::world::CleanSurface::bytes)
+        .sum();
+    let entries = report
+        .surfaces
+        .iter()
+        .map(crate::world::CleanSurface::entries)
+        .sum();
+    (report.surfaces.len(), bytes, entries)
+}
+
+/// Every place ranger is allowed to clean, measured or not.
+///
+/// The table is the allowlist, not the measurement: a place that was not measured still
+/// appears, so "nothing here" and "not looked at" are different rows rather than the same
+/// silence.
+fn places_table(ui: &mut egui::Ui, report: Option<&crate::world::CleanReport>) {
+    egui::Grid::new("clean-places")
+        .num_columns(5)
+        .spacing([16.0, 6.0])
+        .striped(true)
+        .show(ui, |ui| {
+            for header in ["Place", "Used by", "Entries", "Size", "Kept"] {
+                ui.label(
+                    RichText::new(header)
+                        .size(10.5)
+                        .color(theme::muted(ui))
+                        .family(theme::semibold()),
+                );
+            }
+            ui.end_row();
+            for surface in vnr_core::action::Surface::ALL {
+                let measured = report.and_then(|report| {
+                    report
+                        .surfaces
+                        .iter()
+                        .find(|measured| measured.id == surface.id())
+                });
+                ui.label(RichText::new(surface.label()).size(11.5));
+                ui.label(
+                    RichText::new(match measured {
+                        Some(measured) => format!("{} folder(s)", measured.roots),
+                        None if report.is_some() => "none here".to_owned(),
+                        None => "not measured".to_owned(),
+                    })
+                    .size(11.0)
+                    .color(theme::muted(ui)),
+                );
+                ui.label(
+                    RichText::new(match measured {
+                        Some(measured) => measured.entries().to_string(),
+                        None => "—".to_owned(),
+                    })
+                    .size(11.0)
+                    .monospace(),
+                );
+                ui.label(
+                    RichText::new(match measured {
+                        Some(measured) => widgets::bytes(measured.bytes()),
+                        None => "—".to_owned(),
+                    })
+                    .size(11.0)
+                    .monospace(),
+                );
+                ui.label(
+                    RichText::new(match measured {
+                        Some(measured) => format!(
+                            "{} young, {} links, {} other volume",
+                            measured.skipped_young, measured.skipped_links, measured.skipped_devices
+                        ),
+                        None => "—".to_owned(),
+                    })
+                    .size(10.5)
+                    .color(theme::muted(ui)),
+                );
+                ui.end_row();
+            }
+        });
+}
+
 fn startup_preview(ui: &mut egui::Ui, snapshot: &Snapshot) {
     widgets::card(ui, |ui| {
         ui.label(RichText::new("Startup items").family(theme::semibold()));
@@ -2623,6 +2783,57 @@ mod tests {
 
         let flat = lines_for(&rows, crate::ProcessGrouping::None, &[]);
         assert_eq!(counts(&flat), (0, 4));
+    }
+
+    #[test]
+    fn a_dry_run_totals_are_the_sum_of_its_places() {
+        let report = crate::world::CleanReport {
+            run: 1,
+            surfaces: vec![
+                crate::world::CleanSurface {
+                    id: "win.temp".to_owned(),
+                    label: "Temporary files".to_owned(),
+                    roots: 2,
+                    opt_in: false,
+                    items: vec![
+                        crate::world::CleanItem {
+                            path: "a".to_owned(),
+                            bytes: 10,
+                            is_dir: false,
+                        },
+                        crate::world::CleanItem {
+                            path: "b".to_owned(),
+                            bytes: 0,
+                            is_dir: true,
+                        },
+                    ],
+                    skipped_young: 3,
+                    skipped_links: 0,
+                    skipped_devices: 0,
+                    skipped_excluded: 1,
+                },
+                crate::world::CleanSurface {
+                    id: "win.gpu".to_owned(),
+                    label: "GPU shader cache".to_owned(),
+                    roots: 1,
+                    opt_in: false,
+                    items: vec![crate::world::CleanItem {
+                        path: "c".to_owned(),
+                        bytes: 90,
+                        is_dir: false,
+                    }],
+                    skipped_young: 0,
+                    skipped_links: 0,
+                    skipped_devices: 0,
+                    skipped_excluded: 0,
+                },
+            ],
+            cancelled: false,
+        };
+        let (places, bytes, entries) = measured_totals(&report);
+        assert_eq!(places, 2);
+        assert_eq!(bytes, 100, "sizes add up across surfaces");
+        assert_eq!(entries, 3, "an empty folder is an entry with no bytes");
     }
 
     #[test]

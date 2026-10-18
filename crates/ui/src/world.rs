@@ -27,6 +27,8 @@ pub enum View {
     Listeners,
     /// What changed while ranger was watching.
     Changes,
+    /// The places ranger knows how to clean, measured and not touched.
+    Clean,
     /// What ranger can act on: the quarantine and the journal.
     Actions,
     /// Export and read the scan.
@@ -37,7 +39,7 @@ pub enum View {
 
 impl View {
     /// Every view, in navigation order.
-    pub const ALL: [View; 10] = [
+    pub const ALL: [View; 11] = [
         View::Overview,
         View::Findings,
         View::Packs,
@@ -45,6 +47,7 @@ impl View {
         View::Startup,
         View::Listeners,
         View::Changes,
+        View::Clean,
         View::Actions,
         View::Report,
         View::Settings,
@@ -61,6 +64,7 @@ impl View {
             Self::Startup => "Startup",
             Self::Listeners => "Listeners",
             Self::Changes => "Changes",
+            Self::Clean => "Clean",
             Self::Actions => "Actions",
             Self::Report => "Report",
             Self::Settings => "Settings",
@@ -87,6 +91,7 @@ impl View {
             Self::Startup => "What runs without a person clicking it.",
             Self::Listeners => "Sockets waiting for a connection.",
             Self::Changes => "What changed since ranger opened, and since the baseline.",
+            Self::Clean => "The places ranger knows how to clean, measured before anything moves.",
             Self::Actions => "What ranger has done, and what it can put back.",
             Self::Report => "A record you can read, export and keep.",
             Self::Settings => "How ranger runs, and what it will not do.",

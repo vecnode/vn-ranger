@@ -180,6 +180,16 @@ scan…"* for the sizes that are not the default.
 
 ### 5e. A Clean tab, for later
 
+**Done, as a measuring view.** `View::Clean` lists every row of the cleaning allowlist — all
+eleven surfaces, whatever the machine has — with the folders it resolved to, how many entries
+are past the age that surface keeps, the size, and how many were left alone because they are
+young, a link, or on another volume. Before the first dry run every row says *"not measured"*,
+which is a different statement from "nothing here": a place that was measured and is absent
+says **"none here"**. **Measure** runs the existing dry run, which reads names, sizes and
+times and writes nothing. The view has **no delete verb**: the removal is the existing
+allowlisted card in Actions, with its totals, its confirmation and its journal, because a
+second removal path in a second view is how a security tool grows two answers to one question.
+
 A placeholder that is honest rather than empty: the Clean view lists the known places —
 temporary folders, browser caches, Windows Update leftovers, crash dumps, logs — with the
 size it measured **when a person asks it to measure**, and no delete verb. Each place is a
