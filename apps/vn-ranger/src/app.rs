@@ -59,6 +59,8 @@ pub struct App {
     quitting: bool,
     /// Whether this launch came from the login entry, and so starts out of the way.
     background: bool,
+    /// A content scan in flight: it reads bytes, so it never runs on the frame's thread.
+    content: Option<Receiver<vnr_native::contentscan::Report>>,
     /// The soak recorder, when `--soak` asked for one.
     soak: Option<vnr_native::soak::Soak>,
     /// What the shell has done since the last sample.
@@ -141,6 +143,12 @@ impl App {
             journal: Vec::new(),
             journal_damaged: false,
             packs: vnr_ui::Packs::default(),
+            content: vnr_ui::ContentScan {
+                available: vnr_native::contentscan::Report::available(),
+                sentence: vnr_native::contentscan::consent_sentence(),
+                running: false,
+                report: None,
+            },
         };
         let mut ui = Ui::new(&cc.egui_ctx);
         if let Some(dark) = settings.dark {
@@ -199,6 +207,7 @@ impl App {
             journal,
             pack,
             pack_keys,
+            content: None,
             journal_reported,
             plan,
             schedule_seed,
@@ -557,6 +566,34 @@ impl App {
     /// loop running on this thread, and by the time a frame is drawn there is one. A
     /// desktop with no status area is not an error to recover from, it is a state to say
     /// out loud, in Settings and in the journal.
+    /// Run the content scan on a thread of its own.
+    ///
+    /// It reads bytes, which is the slowest thing this program can do, so it never runs on
+    /// the frame's thread: the window keeps drawing and the card says "reading". What it
+    /// keeps is a rule name and a path, and the journal records the count, not the content.
+    fn start_content_scan(&mut self, ctx: &egui::Context) {
+        if self.content.is_some() {
+            return;
+        }
+        if !vnr_native::contentscan::Report::available() {
+            self.world.content.available = false;
+            self.world.notice =
+                Some("This build has no content scan, so there are no file contents to read.".to_owned());
+            return;
+        }
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            let report = vnr_native::contentscan::scan(&|| false);
+            let _ = sender.send(report);
+            ctx.request_repaint();
+        });
+        self.content = Some(receiver);
+        self.world.content.running = true;
+        self.world.content.report = None;
+        self.world.notice = Some("Reading the contents of those folders.".to_owned());
+    }
+
     fn start_tray(&mut self, ctx: &egui::Context) {
         if self.tray_started {
             return;
@@ -660,7 +697,43 @@ impl App {
         }
     }
 
+    /// Collect a finished content scan, if one has finished.
+    fn drain_content(&mut self) {
+        let Some(receiver) = &self.content else {
+            return;
+        };
+        let Ok(report) = receiver.try_recv() else {
+            return;
+        };
+        self.content = None;
+        self.world.content.running = false;
+        self.world.content.report = Some(vnr_ui::ContentReport {
+            files: report.files,
+            hits: report
+                .hits
+                .iter()
+                .map(|hit| format!("{} — {}", hit.rule, hit.path))
+                .collect(),
+            skipped: report.skipped.len(),
+            problem: report.problem.clone(),
+        });
+        let reason = match &report.problem {
+            Some(problem) => format!("content scan did not run: {problem}"),
+            None => format!(
+                "content scan read {} file(s) and matched {} rule(s); nothing was stored",
+                report.files,
+                report.hits.len()
+            ),
+        };
+        let _ = self.journal.record(
+            Draft::event("content scan")
+                .with_action(vnr_core::Action::Scan)
+                .with_reason(&reason),
+        );
+    }
+
     fn drain(&mut self) {
+        self.drain_content();
         let mut messages = Vec::new();
         let mut disconnected = false;
         if let Some(receiver) = &self.receiver {
@@ -1148,6 +1221,7 @@ impl App {
             Action::ActivatePack(path) => self.activate_pack(&path),
             Action::RollbackPack => self.rollback_pack(),
             Action::ActivateEmbeddedPack => self.activate_embedded_pack(),
+            Action::RunContentScan => self.start_content_scan(ctx),
             Action::RefreshPacks => {
                 self.pack_keys =
                     vnr_native::pack::Keys::load(&vnr_native::pack::directory()).unwrap_or_default();

@@ -1397,6 +1397,67 @@ impl Ui {
         });
         ui.add_space(10.0);
         widgets::card(ui, |ui| {
+            let content = &world.content;
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Reading file contents").family(theme::semibold()));
+                if content.available {
+                    widgets::badge(ui, "AVAILABLE", theme::OK);
+                } else {
+                    widgets::badge(ui, "NOT IN THIS BUILD", theme::muted(ui));
+                }
+            });
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new(content.sentence.as_str())
+                    .size(11.0)
+                    .color(theme::muted(ui)),
+            );
+            ui.add_space(4.0);
+            if !content.available {
+                ui.label(
+                    RichText::new(
+                        "Everything else ranger does reads names, paths and hashes. Reading bytes is a feature this build was not compiled with, so there is nothing here to turn on.",
+                    )
+                    .size(10.5)
+                    .color(theme::muted(ui)),
+                );
+            } else {
+                ui.horizontal(|ui| {
+                    let button = ui.add_enabled(
+                        !content.running,
+                        egui::Button::new("Read the contents of those folders"),
+                    );
+                    if button.clicked() {
+                        actions.push(Action::RunContentScan);
+                    }
+                    if content.running {
+                        ui.spinner();
+                        ui.label(RichText::new("Reading…").size(11.0).color(theme::muted(ui)));
+                    }
+                });
+                if let Some(report) = &content.report {
+                    ui.add_space(4.0);
+                    if let Some(problem) = &report.problem {
+                        ui.label(RichText::new(problem.as_str()).size(11.0).color(theme::ATTENTION));
+                    } else {
+                        ui.label(
+                            RichText::new(format!(
+                                "{} file(s) were read; {} matched a rule; {} were skipped and nothing was stored.",
+                                report.files,
+                                report.hits.len(),
+                                report.skipped
+                            ))
+                            .size(11.0),
+                        );
+                        for line in &report.hits {
+                            widgets::dot_line(ui, theme::ATTENTION, line);
+                        }
+                    }
+                }
+            }
+        });
+        ui.add_space(10.0);
+        widgets::card(ui, |ui| {
             ui.label(RichText::new("Elevation").family(theme::semibold()));
             ui.add_space(4.0);
             if world.elevated {

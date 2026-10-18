@@ -21,8 +21,8 @@ mod act;
 mod clean;
 
 pub use world::{
-    Action, AutostartState, CleanChoice, CleanItem, CleanReport, CleanSurface, JournalRow, KeyRow, Live,
-    PackRow, Packs, QuarantineRow, ScanState, TrayState, View, WatchReport, World,
+    Action, AutostartState, CleanChoice, CleanItem, CleanReport, CleanSurface, ContentReport, ContentScan,
+    JournalRow, KeyRow, Live, PackRow, Packs, QuarantineRow, ScanState, TrayState, View, WatchReport, World,
 };
 
 use egui::{Align2, CornerRadius, FontId, Margin, RichText, Sense, vec2};
@@ -1090,6 +1090,7 @@ mod tests {
             journal: Vec::new(),
             journal_damaged: false,
             packs: Packs::default(),
+            content: crate::ContentScan::default(),
         }
     }
 

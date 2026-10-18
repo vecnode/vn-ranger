@@ -372,6 +372,36 @@ pub struct PackRow {
     pub status: String,
 }
 
+/// What a content scan is, and what it found.
+///
+/// The scan reads the bytes of files, which nothing else in ranger does, so the interface
+/// says what it would read and what it keeps before it runs — and the default build does not
+/// have it at all, which is a state rather than an error.
+#[derive(Clone, Debug, Default)]
+pub struct ContentScan {
+    /// Whether this build was compiled with the content scan.
+    pub available: bool,
+    /// The sentence that names the folders, the limits and what is kept.
+    pub sentence: String,
+    /// Whether a scan is running now.
+    pub running: bool,
+    /// What the last scan found, when one has run.
+    pub report: Option<ContentReport>,
+}
+
+/// What one content scan did.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ContentReport {
+    /// How many files were read.
+    pub files: usize,
+    /// The rule that matched and the file it matched in, one line each.
+    pub hits: Vec<String>,
+    /// How many files were skipped, and why the first one was.
+    pub skipped: usize,
+    /// Why the scan could not run, when it could not.
+    pub problem: Option<String>,
+}
+
 /// A key ranger trusts.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct KeyRow {
@@ -470,6 +500,8 @@ pub struct World {
     pub journal_damaged: bool,
     /// The rule packs: which one is loaded, what is installed, and the keys trusted.
     pub packs: Packs,
+    /// The optional content scan: what it would read, and what it found.
+    pub content: ContentScan,
 }
 
 impl World {
@@ -627,6 +659,8 @@ pub enum Action {
     ActivateEmbeddedPack,
     /// Read the packs folder and the trust store again.
     RefreshPacks,
+    /// Read the bytes of the files in the folders a person consented to.
+    RunContentScan,
     /// Open a file or directory in the platform's file manager.
     OpenPath(String),
     /// Close the application.
