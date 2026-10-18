@@ -110,6 +110,22 @@ value and refuses `Changed` when the command is not the one the scan reported, a
 `SourceMissing` when it is gone. A read never creates the key it reads. The Startup folder
 is still refused at the surface level — the `.lnk` move into the quarantine is step 2b.
 
+**Steps 3 and 4 are done for the registry surfaces.** `vnr_native::act::startup` writes the
+intent (synced) before the operating system is touched and the result after it, with the same
+act id on both lines, and a refusal is journalled as a refusal rather than as silence — a test
+proves the pair for a machine-scope removal without touching the registry at all. The Startup
+card has **Remove from startup…**, which opens a card naming the surface, the location and the
+command, shows the refusal sentence instead of a button where the surface needs an
+administrator, and emits `Action::RemoveStartup { id }`. The shell looks that id up in the
+snapshot it is showing, re-checks the change, and takes the row out of the table afterwards
+rather than waiting for a scan to agree.
+
+**Still owed:** (a) step 2b, the Startup folder's `.lnk` into the quarantine, which is what
+makes the third writable row real; (b) the `Add…` half of the card, which needs a typed
+command form; (c) **the second reviewer** — `AGENTS.md` §2 requires two on a change to the
+action path, and the traversal table written from the specification by the reviewer who did
+not write the tests. This commit is one reviewer's work and says so.
+
 | Step | File | What to do |
 |---|---|---|
 | 1 | `core/src/action.rs` | A new `Action::StartupChange` with `Add`/`Remove`, one `Surface` row per writable startup surface (HKCU Run, HKCU RunOnce, machine Run needs elevation and is refused, the user Startup folder), each with its own refusal tests. **No path is accepted**: the identity is `AutorunFact.id`, resolved from the surface's own root. |

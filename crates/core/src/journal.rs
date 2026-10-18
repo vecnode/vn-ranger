@@ -72,6 +72,8 @@ pub enum Action {
     Scan,
     /// Activate, roll back or remove a rule pack.
     Pack,
+    /// Add or remove a startup entry, which is a change to the operating system.
+    Startup,
     /// Enable or disable autostart.
     Autostart,
     /// A change to ranger's own configuration.
@@ -89,6 +91,7 @@ impl Action {
             Self::Clean => "clean",
             Self::Scan => "scan",
             Self::Pack => "pack",
+            Self::Startup => "startup",
             Self::Autostart => "autostart",
             Self::Config => "config",
         }
@@ -98,7 +101,7 @@ impl Action {
     /// highlights, and the ones a recovery verdict is written for.
     #[must_use]
     pub fn is_destructive(self) -> bool {
-        matches!(self, Self::Quarantine | Self::Purge | Self::Clean)
+        matches!(self, Self::Quarantine | Self::Purge | Self::Clean | Self::Startup)
     }
 }
 

@@ -204,6 +204,88 @@ fn record(journal: &mut Journal, draft: Draft) -> std::result::Result<JournalEnt
     journal.record_synced(draft).map_err(ActError::Unrecorded)
 }
 
+/// Add or remove one startup entry, with both journal lines.
+///
+/// The intent is written before the operating system is touched, and it carries the command
+/// that is about to stop running, because that line is what a person reads when they want
+/// the entry back. A refusal is journalled as a refusal: "ranger declined" is a fact about
+/// the session worth keeping, and the alternative is a person clicking a button that
+/// appears to do nothing.
+pub fn startup(
+    journal: &mut Journal,
+    change: &vnr_core::action::StartupChange,
+) -> std::result::Result<crate::startup::Applied, ActError> {
+    let act_id = next_act_id();
+    let surface = change.surface();
+    let subject = startup_subject(change);
+    let mut intent = Draft::intent(Action::Startup)
+        .with_id(&act_id)
+        .with_subject(&subject)
+        .with_reason(&startup_reason(change))
+        .with_confirmation(Confirmation::Preview);
+    if let vnr_core::action::StartupChange::Remove { entry, .. } = change {
+        intent = intent.with_path(&entry.location);
+    }
+    record(journal, intent)?;
+
+    match crate::startup::apply(change) {
+        Ok(applied) => {
+            if let Err(error) = journal.record_synced(
+                Draft::result(Action::Startup, Outcome::Ok)
+                    .with_id(&act_id)
+                    .with_subject(&subject)
+                    .with_reason(&applied.sentence()),
+            ) {
+                log::warn!("the result of a startup change could not be recorded: {error}");
+            }
+            Ok(applied)
+        }
+        Err(error) => {
+            let outcome = if error.refusal().is_some() {
+                Outcome::Refused
+            } else {
+                Outcome::Failed
+            };
+            if let Err(write) = journal.record_synced(
+                Draft::result(Action::Startup, outcome)
+                    .with_id(&act_id)
+                    .with_subject(&subject)
+                    .with_reason(&format!("{}: {error}", surface.label())),
+            ) {
+                log::warn!("the failure of a startup change could not be recorded: {write}");
+            }
+            Err(ActError::Act(error))
+        }
+    }
+}
+
+/// What a startup change is about, for the two journal lines.
+fn startup_subject(change: &vnr_core::action::StartupChange) -> String {
+    match change {
+        vnr_core::action::StartupChange::Add { surface, name, .. } => format!("{}:{name}", surface.id()),
+        vnr_core::action::StartupChange::Remove { surface, entry } => {
+            format!("{}:{}", surface.id(), entry.name)
+        }
+    }
+}
+
+/// The sentence the intent line carries.
+fn startup_reason(change: &vnr_core::action::StartupChange) -> String {
+    match change {
+        vnr_core::action::StartupChange::Add {
+            surface,
+            name,
+            command,
+        } => format!("add {name} to {} as {command}", surface.label()),
+        vnr_core::action::StartupChange::Remove { surface, entry } => format!(
+            "remove {} from {}, which runs {}",
+            entry.name,
+            surface.label(),
+            entry.command
+        ),
+    }
+}
+
 /// Remove the items a person selected from an allowlisted surface, with both journal lines.
 ///
 /// The preview has already happened: the items carry what was shown, and the removal
@@ -338,6 +420,51 @@ mod tests {
     use super::*;
     use crate::action::RealIo;
     use vnr_core::JournalKind;
+
+    #[test]
+    fn a_refused_startup_change_is_journalled_as_a_refusal_with_the_same_act_id() {
+        use vnr_core::action::{Refusal, StartupChange, StartupSurface};
+
+        let mut bed = Bed::new();
+        let entry = vnr_core::AutorunFact {
+            id: "run:machine:Acme".to_owned(),
+            name: "Acme".to_owned(),
+            command: r"C:\Program Files\Acme\acme.exe".to_owned(),
+            location: r"HKLM\Software\Microsoft\Windows\CurrentVersion\Run".to_owned(),
+            kind: vnr_core::AutorunKind::RunKey,
+            scope: vnr_core::AutorunScope::System,
+            enabled: true,
+            hidden: false,
+            exe: None,
+            sha256: None,
+            signature: vnr_core::SignatureStatus::NotChecked,
+        };
+        let change = StartupChange::Remove {
+            surface: StartupSurface::WinMachineRun,
+            entry,
+        };
+        let error = match startup(&mut bed.journal, &change) {
+            Err(ActError::Act(error)) => error,
+            other => panic!("a machine-scope removal is refused, got {other:?}"),
+        };
+        assert_eq!(error.refusal(), Some(Refusal::MachineScope));
+
+        let entries = bed.entries();
+        assert_eq!(entries.len(), 2, "an intent and a result");
+        assert_eq!(entries[0].kind, JournalKind::Intent);
+        assert_eq!(entries[0].action, Some(Action::Startup));
+        assert_eq!(
+            entries[0].subject.as_deref(),
+            Some("win.machine.run:Acme"),
+            "the intent names the surface and the value"
+        );
+        assert_eq!(entries[1].kind, JournalKind::Result);
+        assert_eq!(entries[1].outcome, Some(Outcome::Refused));
+        assert_eq!(
+            entries[0].id, entries[1].id,
+            "the pair is one act, so a recovery can pair them"
+        );
+    }
 
     fn real() -> RealIo {
         RealIo

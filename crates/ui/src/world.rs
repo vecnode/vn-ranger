@@ -671,6 +671,15 @@ pub enum Action {
     Restore(String),
     /// Move a file into the quarantine, after the detail panel has shown what it is.
     Quarantine(String),
+    /// Remove one startup entry, after the card has named the surface and the value.
+    ///
+    /// The id is the one the scan gave the entry: the shell looks it up in the snapshot it
+    /// is showing, so a screen that has drifted from the machine cannot ask for an entry
+    /// that was never on it.
+    RemoveStartup {
+        /// The `AutorunFact` id.
+        id: String,
+    },
     /// Walk the allowlisted surfaces and report what a clean would remove.
     ///
     /// This is a dry run: it reads names, sizes and times, and writes nothing — no journal

@@ -782,14 +782,25 @@ impl Ui {
             ui.add_space(8.0);
             let mut open_path = None;
             let mut quarantine = None;
+            let mut remove_startup = None;
             detail_footer(ui, STARTUP_FOOTER, |ui| {
-                startup_detail_body(ui, autorun, snapshot, &mut open_path, &mut quarantine);
+                startup_detail_body(
+                    ui,
+                    autorun,
+                    snapshot,
+                    &mut open_path,
+                    &mut quarantine,
+                    &mut remove_startup,
+                );
             });
             if let Some(path) = open_path {
                 self.open_path = Some(path);
             }
             if let Some(path) = quarantine {
                 actions.push(crate::Action::Quarantine(path));
+            }
+            if let Some(id) = remove_startup {
+                self.startup_ask = Some(id);
             }
             ui.add_space(BOTTOM_GAP);
         }
@@ -2117,6 +2128,7 @@ fn startup_detail_body(
     snapshot: &Snapshot,
     open_path: &mut Option<String>,
     quarantine: &mut Option<String>,
+    remove_startup: &mut Option<String>,
 ) {
     ui.horizontal(|ui| {
         ui.label(
@@ -2181,6 +2193,25 @@ fn startup_detail_body(
                 .color(theme::muted(ui)),
         );
     }
+    ui.horizontal(|ui| {
+        let surface = vnr_core::action::StartupSurface::of(autorun);
+        let button = ui.button("Remove from startup…").on_hover_text(
+            "Take this entry out of the operating system's startup. The card names where it \
+                 lives and what it runs before anything happens.",
+        );
+        if button.clicked() {
+            *remove_startup = Some(autorun.id.clone());
+        }
+        match surface.refusal() {
+            None => {
+                ui.label(RichText::new(surface.label()).size(10.5).color(theme::muted(ui)));
+            }
+            Some(refusal) => {
+                ui.label(RichText::new(refusal.label()).size(10.5).color(theme::ATTENTION))
+                    .on_hover_text(refusal.sentence());
+            }
+        }
+    });
 }
 
 fn finding_card(ui: &mut egui::Ui, finding: &vnr_core::Finding) -> bool {

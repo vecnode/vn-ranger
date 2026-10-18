@@ -242,6 +242,8 @@ pub struct Ui {
     project_rect: egui::Rect,
     suppress_target: Option<vnr_core::Finding>,
     suppress_reason: String,
+    /// The startup entry a person asked to remove, waiting for the card to be confirmed.
+    startup_ask: Option<String>,
     /// Which quarantine entry is waiting for its word, and what has been typed.
     purge_ask: crate::act::PurgeAsk,
     /// What the clean card has ticked, and against which dry run.
@@ -335,6 +337,7 @@ impl Ui {
             project_rect: egui::Rect::NOTHING,
             suppress_target: None,
             suppress_reason: String::new(),
+            startup_ask: None,
             purge_ask: crate::act::PurgeAsk::default(),
             clean: crate::clean::CleanState::default(),
             finding_severity: None,
@@ -456,6 +459,7 @@ impl Ui {
         self.modal(&ctx, &mut actions);
         self.project_modal(&ctx);
         self.suppress_modal(&ctx, &mut actions);
+        self.startup_modal(&ctx, world, &mut actions);
         self.palette(&ctx, world, &mut actions);
         self.toast(&ctx, world);
         self.notice(&ctx, world);
@@ -967,6 +971,87 @@ impl Ui {
             self.notice_dismissed = Some(text);
         }
         ctx.request_repaint_after(std::time::Duration::from_secs(1));
+    }
+
+    /// The card that names the startup entry before it goes.
+    ///
+    /// It says where the entry lives and what it runs, because those are the two facts a
+    /// person needs to recognise it, and it refuses with a sentence rather than a greyed-out
+    /// button that explains nothing when the surface needs an administrator.
+    fn startup_modal(&mut self, ctx: &egui::Context, world: &World, actions: &mut Vec<Action>) {
+        let Some(id) = self.startup_ask.clone() else {
+            return;
+        };
+        let entry = world
+            .snapshot()
+            .and_then(|snapshot| snapshot.autoruns.iter().find(|entry| entry.id == id))
+            .cloned();
+        let mut remove = false;
+        let mut keep = false;
+        let (_, open) = widgets::dialog(ctx, "Remove a startup entry", 460.0, |ui| {
+            let Some(entry) = entry.as_ref() else {
+                ui.label(
+                    RichText::new(
+                        "That entry is not in the scan this window is showing. Run a scan and \
+                         choose it again.",
+                    )
+                    .size(11.5)
+                    .color(theme::muted(ui)),
+                );
+                if ui.button("Close").clicked() {
+                    keep = true;
+                }
+                return;
+            };
+            let surface = vnr_core::action::StartupSurface::of(entry);
+            ui.label(
+                RichText::new(entry.name.as_str())
+                    .size(13.0)
+                    .family(theme::semibold()),
+            );
+            widgets::key_value(ui, "Lives in", surface.label());
+            widgets::key_value(ui, "Registered at", &entry.location);
+            widgets::key_value(ui, "Runs", &entry.command);
+            ui.add_space(6.0);
+            if let Some(refusal) = surface.refusal() {
+                ui.label(
+                    RichText::new(refusal.sentence())
+                        .size(11.0)
+                        .color(theme::ATTENTION),
+                );
+                if ui.button("Close").clicked() {
+                    keep = true;
+                }
+                return;
+            }
+            ui.label(
+                RichText::new(
+                    "Ranger removes this one value and keeps what it said in the journal, so you \
+                     can put it back by hand. Nothing else on this machine changes.",
+                )
+                .size(11.0)
+                .color(theme::muted(ui)),
+            );
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                if ui.button("Keep it").clicked() {
+                    keep = true;
+                }
+                if ui.button("Remove it").clicked() {
+                    remove = true;
+                }
+            });
+        });
+        if !open || keep {
+            self.startup_ask = None;
+            return;
+        }
+        if remove {
+            if let Some(entry) = entry {
+                actions.push(Action::RemoveStartup { id: entry.id });
+            }
+            self.startup_ask = None;
+        }
     }
 
     fn suppress_modal(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
@@ -1485,6 +1570,18 @@ mod tests {
         world.notice = None;
         let _ = frame(&ctx, &mut ui, &world, screen_input(Vec::new()));
         assert!(ui.notice_seen.is_none(), "a cleared notice is forgotten");
+    }
+
+    #[test]
+    fn the_startup_removal_card_draws_for_an_entry_that_is_no_longer_in_the_scan() {
+        let ctx = egui::Context::default();
+        let mut ui = Ui::new(&ctx);
+        let world = base_world(None, None);
+        ui.startup_ask = Some("autorun:gone".to_owned());
+        let _ = frame(&ctx, &mut ui, &world, screen_input(Vec::new()));
+        // Nothing was pressed, so the card stays open and no action was invented for an
+        // entry the window cannot see.
+        assert!(ui.startup_ask.is_some());
     }
 
     #[test]

@@ -274,6 +274,55 @@ impl App {
         app
     }
 
+    /// Take one startup entry out, journalling the intent before the operating system is
+    /// touched and the result after it.
+    ///
+    /// The entry is looked up in the snapshot this window is showing, not in a fresh scan:
+    /// the confirmation named a surface and a command, and what is removed has to be exactly
+    /// that. The module re-reads the value and refuses when it has moved on since.
+    fn remove_startup(&mut self, id: &str) {
+        let Some(entry) = self
+            .world
+            .snapshot
+            .as_ref()
+            .and_then(|snapshot| snapshot.autoruns.iter().find(|entry| entry.id == id))
+            .cloned()
+        else {
+            self.world.error = Some(
+                "That startup entry is not in the scan this window is showing. Run a scan and \
+                 choose it again."
+                    .to_owned(),
+            );
+            return;
+        };
+        let change = vnr_core::action::StartupChange::Remove {
+            surface: vnr_core::action::StartupSurface::of(&entry),
+            entry: entry.clone(),
+        };
+        if let Err(refusal) = change.check() {
+            self.world.error = Some(refusal.sentence().to_owned());
+            return;
+        }
+        match vnr_native::act::startup(&mut self.journal, &change) {
+            Ok(applied) => {
+                self.world.error = None;
+                self.world.notice = Some(format!(
+                    "{} The entry is gone from startup; the journal keeps what it ran.",
+                    applied.sentence()
+                ));
+                // The table has to stop showing it: a scan would say the same, and waiting
+                // for one would leave the window claiming something that is no longer true.
+                if let Some(snapshot) = self.world.snapshot.as_mut() {
+                    snapshot.autoruns.retain(|entry| entry.id != id);
+                }
+                self.refresh_findings(true);
+            }
+            Err(error) => self.world.error = Some(error.to_string()),
+        }
+        self.maintain_journal();
+        self.refresh_actions();
+    }
+
     fn start_scan(&mut self, ctx: &egui::Context, elevated: bool) {
         if self.world.busy() {
             return;
@@ -1472,6 +1521,7 @@ impl App {
                 }
                 self.refresh_actions();
             }
+            Action::RemoveStartup { id } => self.remove_startup(&id),
             Action::PreviewClean => {
                 let started = std::time::Instant::now();
                 self.refresh_clean(true);
