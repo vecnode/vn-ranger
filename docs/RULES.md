@@ -98,6 +98,9 @@ is refused rather than loaded as a rule that never fires.
 | `file` | `depth`, `size` | number |
 | `file-match` | `container`, `kind`, `name`, `path`, `signed`, `signer` | text |
 | `file-match` | `at`, `line` | number |
+| `flow` | `process`, `process_path`, `protocol`, `remote_addr`, `state` | text |
+| `flow` | `beacon_interval`, `beacon_jitter`, `bytes`, `local_port`, `pid`, `remote_port` | number |
+| `flow` | `beacon`, `from_downloads`, `from_temp` | true/false |
 
 The content engine produces two subjects. **`file`** is one fact per file it read: its shape,
 its digest, and what its signature says. **`file-match`** is one fact per signature that hit
@@ -111,6 +114,20 @@ shape cannot fire once per signature.
 `container` is the chain of containers a file was found inside, outermost first, joined with
 ` > `; `depth` is how many links it has. A file that was hashed but not read has a `digest`
 and no match, which is a different statement from a file that was read and held nothing.
+
+**`flow`** is one fact per connection the machine is holding, with the process that holds it.
+`remote_addr` is an address and never a resolved name, because ranger sends no query. The
+three joined fields answer a question the socket table cannot: `process_path` is the holding
+process's binary, and `from_temp`/`from_downloads` say whether it runs from a folder the
+system clears or a folder files arrive in.
+
+The beacon fields are the one part of this subject that a single scan cannot fill. A rhythm
+is read from a series of samples taken by the two-second poll, so `beacon` is true only when
+the poll has watched this process and this peer often enough (six contacts) closely enough
+(20 s to 2 h, under 15% spread) to call it a schedule. `beacon_interval` is the middle
+interval in seconds and `beacon_jitter` is the spread in basis points: 300 means 3%. A
+`--report` run has no poll behind it, so it carries no rhythm — a rule that matches
+`beacon` is quiet there rather than guessing.
 
 
 The values a text field takes, where the machine has a fixed set:
@@ -321,6 +338,7 @@ table instead of leaving a blank.
 | `T1611` | `listener.every-interface` | Notice | pack | A socket waiting for a connection on every interface |
 | `—` | `file.content-match` | Attention | built-in | A file holds the bytes a signature describes |
 | `—` | `file.hash-match` | Attention | built-in | A file matched a signature by hash |
+| `—` | `flow.beaconing` | Notice | built-in | A program is contacting the same address on a steady rhythm |
 | `—` | `flow.temp-process-remote` | Notice | built-in | A program in a temporary folder is talking to another machine |
 | `—` | `listener.public-new-process` | Notice | built-in | A recently started process listens beyond loopback |
 | `—` | `listener.public-unknown-owner` | Info | built-in | A public socket has no visible owner |
@@ -329,7 +347,7 @@ table instead of leaving a blank.
 | `—` | `startup.bare-command` | Notice | built-in | A startup command does not name a full path |
 | `—` | `startup.duplicate-command` | Info | built-in | One command is registered as several startup items |
 
-31 rules covering 14 technique(s): 19 built in and 12 from `packs/ranger.core.json`.
+32 rules covering 14 technique(s): 20 built in and 12 from `packs/ranger.core.json`.
 
 No technique, and why — a rule that cannot name one says so:
 
@@ -342,6 +360,7 @@ No technique, and why — a rule that cannot name one says so:
 - `file.hash-match` — a hash names a file; which technique that file serves is the signature author's knowledge, and a rule cannot inherit it
 - `file.content-match` — the pattern is a fact; a technique is an interpretation of what the file does, which this rule does not observe
 - `flow.temp-process-remote` — a connection is a channel; which technique it serves depends on what is said over it, which this rule does not observe
+- `flow.beaconing` — a rhythm is a channel; what it carries is not observed
 <!-- coverage:end -->
 
 ## Importing a Sigma rule

@@ -12,7 +12,7 @@
 
 use std::fmt::Write as _;
 
-use crate::model::{FlowFact, Protocol};
+use crate::model::{BeaconFact, FlowFact, Protocol};
 
 /// The header Zeek writes before its fields, so the file is self-describing.
 pub const ZEEK_HEADER: &str = "#separator \\x09\n\
@@ -121,6 +121,21 @@ pub struct Beacon {
     pub interval_s: u64,
     /// The coefficient of variation of the intervals: smaller is steadier.
     pub jitter: f64,
+}
+
+impl Beacon {
+    /// The same rhythm, as the integer fact a snapshot carries.
+    ///
+    /// One conversion, here, so the sampler and the finding cannot disagree about a jitter
+    /// that is a float in one place and basis points in the other.
+    #[must_use]
+    pub fn fact(self) -> BeaconFact {
+        BeaconFact {
+            contacts: self.contacts,
+            interval_s: self.interval_s,
+            jitter_bp: (self.jitter * 10_000.0).round().clamp(0.0, 4_294_967_295.0) as u32,
+        }
+    }
 }
 
 /// The fewest contacts a rhythm can be read from.
@@ -253,7 +268,59 @@ impl Sampler {
     pub fn forget(&mut self, key: &str) {
         self.series.remove(key);
     }
+
+    /// Forget everything, as a sampler that has just been started would.
+    ///
+    /// A poll that stops is not evidence that a rhythm continued, so the sampler that was fed
+    /// by it stops answering about the past.
+    pub fn clear(&mut self) {
+        self.series.clear();
+    }
+
+    /// Record every connection a poll just read, and answer with the rhythms now visible.
+    ///
+    /// A socket with no peer is not a contact with anything, so it is dropped before it is
+    /// remembered: a rhythm built out of listening sockets would be a rhythm of nothing. The
+    /// answer is sorted, so two polls that found the same rhythms produce the same list.
+    pub fn observe_flows(&mut self, flows: &[FlowFact], now: u64) -> Vec<(String, BeaconFact)> {
+        let mut beacons = Vec::new();
+        for flow in flows {
+            if flow.remote_port == 0 || flow.remote_addr.is_empty() {
+                continue;
+            }
+            let key = flow.beacon_key();
+            self.observe(&key, now);
+            if let Some(found) = self.beacon(&key) {
+                beacons.push((key, found.fact()));
+            }
+        }
+        beacons.sort_by(|a, b| a.0.cmp(&b.0));
+        beacons
+    }
 }
+
+/// Set each connection's rhythm from what a [`Sampler`] observed.
+///
+/// A scan photographs the connection table; a rhythm needs a series of photographs, so the
+/// two are joined here rather than by a rule. The join key is the identity a rhythm is
+/// remembered under, which is why a client that reconnected between the scan and the answer
+/// still lines up. A flow the sampler has never seen keeps whatever it came with, and a
+/// snapshot stamped with nothing says exactly that: no rhythm has been observed yet.
+pub fn stamp(flows: &mut [FlowFact], beacons: &[(String, BeaconFact)]) {
+    if beacons.is_empty() {
+        return;
+    }
+    let known: std::collections::HashMap<&str, BeaconFact> = beacons
+        .iter()
+        .map(|(key, found)| (key.as_str(), *found))
+        .collect();
+    for flow in flows.iter_mut() {
+        if let Some(found) = known.get(flow.beacon_key().as_str()) {
+            flow.beacon = Some(*found);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -384,6 +451,9 @@ mod tests {
         assert_eq!(sampler.len(), 1);
         sampler.forget("agent.exe>203.0.113.9:443");
         assert!(sampler.is_empty());
+        sampler.observe("agent.exe>203.0.113.9:443", 1_700_000_000);
+        sampler.clear();
+        assert!(sampler.is_empty(), "a stopped poll leaves no rhythm behind");
     }
 
     #[test]
@@ -407,5 +477,83 @@ mod tests {
             sampler.observe(&format!("k{index}"), 1);
         }
         assert_eq!(sampler.len(), MAX_SERIES, "the oldest series is dropped");
+    }
+
+    #[test]
+    fn a_scan_is_stamped_with_the_rhythms_the_sampler_observed() {
+        let mut sampler = Sampler::new();
+        for step in 0..8 {
+            sampler.observe("agent.exe>203.0.113.9:443", 1_700_000_000 + step * 60);
+        }
+        let found = sampler
+            .beacon("agent.exe>203.0.113.9:443")
+            .expect("a rhythm")
+            .fact();
+        let beacons = vec![("agent.exe>203.0.113.9:443".to_owned(), found)];
+
+        // A different local port: this is the same rhythm seen from a later connection.
+        let mut flows = vec![
+            flow(Protocol::Tcp, "203.0.113.9", 443, "ESTABLISHED", None),
+            flow(Protocol::Tcp, "198.51.100.1", 80, "ESTABLISHED", None),
+        ];
+        flows[0].local_port = 51_999;
+        stamp(&mut flows, &beacons);
+        assert_eq!(flows[0].beacon, Some(found));
+        assert_eq!(flows[1].beacon, None, "a connection with no rhythm is left alone");
+
+        // Nothing observed stamps nothing, and does not take away what a flow already had.
+        let mut stamped = flows.clone();
+        stamp(&mut stamped, &[]);
+        assert_eq!(stamped[0].beacon, Some(found));
+    }
+
+    #[test]
+    fn six_polls_on_one_interval_are_a_rhythm_and_five_are_not() {
+        let mut sampler = Sampler::new();
+        let flows = [flow(Protocol::Tcp, "203.0.113.9", 443, "ESTABLISHED", None)];
+        let mut beacons = Vec::new();
+        for step in 0..6 {
+            beacons = sampler.observe_flows(&flows, 1_700_000_000 + step * 60);
+            if step < 5 {
+                assert!(beacons.is_empty(), "{} contact(s) is not a rhythm", step + 1);
+            }
+        }
+        assert_eq!(beacons.len(), 1);
+        assert_eq!(beacons[0].0, "agent.exe>203.0.113.9:443");
+        assert_eq!(beacons[0].1.contacts, 6);
+        assert_eq!(beacons[0].1.interval_s, 60);
+        assert_eq!(beacons[0].1.jitter_bp, 0, "a perfect 60 s is no jitter at all");
+    }
+
+    #[test]
+    fn a_client_that_reconnects_from_a_new_port_keeps_one_rhythm() {
+        let mut sampler = Sampler::new();
+        // A schedule reconnects, so the source port is new each time; only the process and
+        // the peer are the same, and those are what a rhythm is remembered under.
+        for step in 0..6 {
+            let mut one = flow(Protocol::Tcp, "203.0.113.20", 443, "ESTABLISHED", None);
+            one.local_port = 51_000 + u16::try_from(step).unwrap_or(0);
+            let beacons = sampler.observe_flows(&[one], 1_700_000_000 + step * 300);
+            let expected = if step < 5 { 0 } else { 1 };
+            assert_eq!(beacons.len(), expected, "at contact {}", step + 1);
+        }
+        assert_eq!(sampler.len(), 1, "one rhythm, not one series per socket");
+    }
+
+    #[test]
+    fn a_socket_with_no_peer_is_not_contacting_anything() {
+        let mut sampler = Sampler::new();
+        let mut listening = flow(Protocol::Tcp, "", 0, "LISTEN", None);
+        listening.process = Some("agent.exe".to_owned());
+        let mut anywhere = flow(Protocol::Tcp, "0.0.0.0", 0, "LISTEN", None);
+        anywhere.process = Some("agent.exe".to_owned());
+        for step in 0..6 {
+            assert!(
+                sampler
+                    .observe_flows(&[listening.clone(), anywhere.clone()], step * 60)
+                    .is_empty()
+            );
+        }
+        assert!(sampler.is_empty(), "nothing was remembered");
     }
 }

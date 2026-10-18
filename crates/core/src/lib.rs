@@ -34,9 +34,9 @@ pub use journal::{
     Action, Confirmation, Draft, JournalEntry, Kind as JournalKind, Outcome, Read as JournalRead,
 };
 pub use model::{
-    AgentFact, AutorunFact, AutorunKind, AutorunScope, CollectorState, CollectorStatus, ContentMatch, Counts,
-    FileFact, FlowFact, Host, ListenerFact, PackageFact, ProcessFact, Protocol, SignatureMatch,
-    SignatureReport, SignatureStatus, Snapshot,
+    AgentFact, AutorunFact, AutorunKind, AutorunScope, BeaconFact, CollectorState, CollectorStatus,
+    ContentMatch, Counts, FileFact, FlowFact, Host, ListenerFact, PackageFact, ProcessFact, Protocol,
+    SignatureMatch, SignatureReport, SignatureStatus, Snapshot,
 };
 pub use recovery::{Phase as RecoveryPhase, Verdict as RecoveryVerdict};
 pub use rules::{

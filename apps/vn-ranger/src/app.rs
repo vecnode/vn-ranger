@@ -54,6 +54,13 @@ pub struct App {
     /// become an item, so the interface never hands the action path something it did not
     /// see itself.
     clean_previews: Vec<(vnr_core::action::Surface, vnr_native::clean::Preview)>,
+    /// The rhythms the poll's sampler has seen, keyed by [`vnr_core::FlowFact::beacon_key`].
+    ///
+    /// A scan is a photograph and a rhythm needs a film, so the sampler's answer arrives on
+    /// the watcher's channel and is stamped onto the flows of the next snapshot. A scan that
+    /// runs before the sampler has seen six contacts is stamped with nothing, which is the
+    /// truth: a first sighting is not a rhythm.
+    beacons: Vec<(String, vnr_core::BeaconFact)>,
     /// Counts dry runs, so the interface can tell one from another.
     clean_run: u64,
     /// The tray, when this desktop has one.
@@ -243,6 +250,7 @@ impl App {
             last_frame_unix: now_unix(),
             clean_previews: Vec::new(),
             clean_run: 0,
+            beacons: Vec::new(),
             tray: None,
             tray_started: false,
             paused: false,
@@ -929,7 +937,11 @@ impl App {
                     self.world.scan = ScanState::Running(step.to_owned());
                 }
                 ScanMessage::Done(snapshot) => {
-                    let snapshot = *snapshot;
+                    let mut snapshot = *snapshot;
+                    // The poll's sampler is the only thing that has watched this machine for
+                    // long enough to have an opinion about a rhythm, so its answer is what the
+                    // flows of this photograph are stamped with.
+                    vnr_core::flows::stamp(&mut snapshot.flows, &self.beacons);
                     self.note(Draft::event("scan").with_reason(&format!(
                         "{} processes · {} startup items · {} listeners · {} packages",
                         snapshot.processes.len(),
@@ -1008,6 +1020,9 @@ impl App {
                         )));
                         self.world.timeline.push(event);
                     }
+                }
+                worker::WatchMessage::Beacons(beacons) => {
+                    self.beacons = beacons;
                 }
                 worker::WatchMessage::Watching { roots, skipped } => {
                     self.world.watch.roots = roots;

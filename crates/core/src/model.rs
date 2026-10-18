@@ -415,6 +415,27 @@ pub struct FlowFact {
     pub beacon: Option<BeaconFact>,
 }
 
+impl FlowFact {
+    /// The identity a rhythm is remembered under: the process and the other end.
+    ///
+    /// The local port is deliberately not part of it. A client that reconnects on a schedule
+    /// gets a new source port each time, and a key that carried the port would remember one
+    /// contact per connection rather than one rhythm — which is the thing a beacon is.
+    ///
+    /// A connection this account cannot attribute is remembered as `unknown`, so flows whose
+    /// process is invisible share one series. That can only hide a rhythm — several unseen
+    /// processes talking to one peer produce a spread — and never invent one.
+    #[must_use]
+    pub fn beacon_key(&self) -> String {
+        format!(
+            "{}>{}:{}",
+            self.process.as_deref().unwrap_or("unknown"),
+            self.remote_addr,
+            self.remote_port
+        )
+    }
+}
+
 /// How a collector finished.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -712,5 +733,30 @@ mod tests {
         snapshot.sort();
         assert_eq!(snapshot.processes[0].name, "A");
         assert_eq!(snapshot.processes[0].pid, 1);
+    }
+
+    #[test]
+    fn a_rhythm_is_remembered_by_process_and_peer_not_by_local_port() {
+        let flow = FlowFact {
+            protocol: Protocol::Tcp,
+            local_addr: "192.168.1.10".into(),
+            local_port: 51_000,
+            remote_addr: "203.0.113.9".into(),
+            remote_port: 443,
+            state: "ESTABLISHED".into(),
+            pid: Some(7),
+            process: Some("agent.exe".into()),
+            bytes: None,
+            beacon: None,
+        };
+        assert_eq!(flow.beacon_key(), "agent.exe>203.0.113.9:443");
+        // The same client reconnecting gets a different source port and the same rhythm.
+        let mut again = flow.clone();
+        again.local_port = 51_999;
+        assert_eq!(again.beacon_key(), flow.beacon_key());
+        // A connection this account cannot attribute is one series, not one per flow.
+        let mut anonymous = flow;
+        anonymous.process = None;
+        assert_eq!(anonymous.beacon_key(), "unknown>203.0.113.9:443");
     }
 }

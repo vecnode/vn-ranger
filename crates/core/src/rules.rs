@@ -196,7 +196,7 @@ pub struct Rule {
 /// rules with one id make it impossible to say which one a person meant. This is the list the
 /// pack validator is given, so it is the list a new built-in rule has to be added to — and a
 /// test below fails when a `Rule` constant's id is not in it.
-pub const RULE_IDS: [&str; 19] = [
+pub const RULE_IDS: [&str; 20] = [
     "startup.temp-path",
     "startup.downloads-path",
     "startup.script-extension",
@@ -216,6 +216,7 @@ pub const RULE_IDS: [&str; 19] = [
     "file.hash-match",
     "file.content-match",
     "flow.temp-process-remote",
+    "flow.beaconing",
 ];
 
 /// The built-in rule ids, in the form a pack validator wants them.
@@ -500,12 +501,28 @@ const TEMP_FLOW: Rule = Rule {
                     said over it, which this rule does not observe",
 };
 
+const BEACONING_FLOW: Rule = Rule {
+    id: "flow.beaconing",
+    title: "A program is contacting the same address on a steady rhythm",
+    severity: Severity::Notice,
+    confidence: Confidence::Likely,
+    why: "The intervals between this connection's appearances are close enough to one fixed \
+          value that they read as a schedule rather than as someone using a program. A \
+          machine checking in on a timer produces exactly this shape, which is why the \
+          rhythm alone is a fact to look at and not a verdict.",
+    benign: "A client that polls on a fixed interval — an updater, a sync tool, a monitor.",
+    remediation: "Identify the program and the address. If you did not set up the schedule, \
+                  check what the program is and where it came from.",
+    technique: None,
+    technique_note: "a rhythm is a channel; what it carries is not observed",
+};
+
 /// Every built-in rule, in the order [`RULE_IDS`] publishes them.
 ///
 /// One table, read by the engine that fires the rules and by the command that writes the
 /// coverage table, so "what does ranger detect" has one answer in one place. A pack rule is
 /// the other half of the answer; the two are counted together by `cargo xtask coverage`.
-pub const BUILTIN_RULES: [Rule; 19] = [
+pub const BUILTIN_RULES: [Rule; 20] = [
     TEMP_PATH,
     DOWNLOADS_PATH,
     SCRIPT_EXTENSION,
@@ -525,6 +542,7 @@ pub const BUILTIN_RULES: [Rule; 19] = [
     HASH_MATCH,
     CONTENT_MATCH,
     TEMP_FLOW,
+    BEACONING_FLOW,
 ];
 
 /// The built-in rules, as a slice.
@@ -553,6 +571,7 @@ pub fn evaluate(snapshot: &Snapshot, baseline: Option<&Snapshot>) -> Vec<Finding
     unquoted_service_paths(snapshot, &mut findings);
     content_matches(snapshot, &mut findings);
     remote_flows(snapshot, &mut findings);
+    beaconing_flows(snapshot, &mut findings);
 
     sort_findings(&mut findings);
     findings
@@ -601,6 +620,61 @@ fn remote_flows(snapshot: &Snapshot, findings: &mut Vec<Finding>) {
                 flow.remote_port
             ),
             format!("{} → {}:{}", process.name, flow.remote_addr, flow.remote_port),
+            evidence,
+        ));
+    }
+}
+
+/// A connection that keeps coming back on a schedule.
+///
+/// Only time tells this apart from a person opening a program, so the finding is built from
+/// what the sampler observed — the interval, how much it wobbled, how often — and says
+/// nothing about what travels over the connection, which this program never reads.
+///
+/// One rhythm is one finding: a client holding two sockets to the same peer is still talking
+/// to one address on one schedule, and reporting it twice would make a person dismiss both.
+fn beaconing_flows(snapshot: &Snapshot, findings: &mut Vec<Finding>) {
+    let mut reported: HashSet<String> = HashSet::new();
+    for flow in &snapshot.flows {
+        let Some(beacon) = flow.beacon else {
+            continue;
+        };
+        let subject = format!("flow:{}", flow.beacon_key());
+        if !reported.insert(subject.clone()) {
+            continue;
+        }
+        let mut evidence = vec![
+            format!(
+                "Connection: {} → {}:{} ({})",
+                flow.protocol.label(),
+                flow.remote_addr,
+                flow.remote_port,
+                flow.state
+            ),
+            format!("Seen {} times", beacon.contacts),
+            format!(
+                "Interval: {} s, give or take {}%",
+                beacon.interval_s,
+                f64::from(beacon.jitter_bp) / 100.0
+            ),
+        ];
+        if let Some(process) = flow.process.as_deref() {
+            evidence.push(format!("Process: {process}"));
+        }
+        if let Some(pid) = flow.pid {
+            evidence.push(format!("Pid: {pid}"));
+        }
+        findings.push(make(
+            &BEACONING_FLOW,
+            subject,
+            format!(
+                "{} → {}:{}",
+                flow.process
+                    .as_deref()
+                    .unwrap_or("a process this account cannot see"),
+                flow.remote_addr,
+                flow.remote_port
+            ),
             evidence,
         ));
     }
@@ -1182,8 +1256,90 @@ mod tests {
         snapshot
     }
 
+    fn flow(
+        process_name: &str,
+        remote: &str,
+        port: u16,
+        local_port: u16,
+        beacon: Option<crate::model::BeaconFact>,
+    ) -> crate::model::FlowFact {
+        crate::model::FlowFact {
+            protocol: Protocol::Tcp,
+            local_addr: "192.168.1.10".to_owned(),
+            local_port,
+            remote_addr: remote.to_owned(),
+            remote_port: port,
+            state: "ESTABLISHED".to_owned(),
+            pid: Some(77),
+            process: Some(process_name.to_owned()),
+            bytes: None,
+            beacon,
+        }
+    }
+
     fn has(findings: &[Finding], rule: &str) -> bool {
         findings.iter().any(|finding| finding.rule_id == rule)
+    }
+
+    #[test]
+    fn a_steady_rhythm_is_a_finding_and_a_flow_without_one_is_not() {
+        let mut snapshot = snapshot();
+        snapshot.flows.push(flow(
+            "agent.exe",
+            "203.0.113.9",
+            443,
+            51_000,
+            Some(crate::model::BeaconFact {
+                contacts: 8,
+                interval_s: 60,
+                jitter_bp: 300,
+            }),
+        ));
+        snapshot
+            .flows
+            .push(flow("editor.exe", "198.51.100.4", 80, 51_001, None));
+        let findings = evaluate(&snapshot, None);
+        let firing: Vec<&Finding> = findings
+            .iter()
+            .filter(|finding| finding.rule_id == "flow.beaconing")
+            .collect();
+        assert_eq!(firing.len(), 1, "one rhythm is one finding");
+        let finding = firing[0];
+        assert_eq!(finding.severity, Severity::Notice);
+        assert_eq!(finding.confidence, Confidence::Likely);
+        assert_eq!(finding.subject, "flow:agent.exe>203.0.113.9:443");
+        assert_eq!(finding.technique, None);
+        // The evidence is the observation, not a score: how many, how often, how steadily.
+        for line in ["8 times", "60 s", "3%", "203.0.113.9:443"] {
+            assert!(
+                finding.evidence.iter().any(|entry| entry.contains(line)),
+                "{line} is missing from {:?}",
+                finding.evidence
+            );
+        }
+        assert!(finding.benign.contains("updater"), "{}", finding.benign);
+    }
+
+    #[test]
+    fn the_same_program_beaconing_from_a_new_port_is_one_finding_not_two() {
+        let mut snapshot = snapshot();
+        let beacon = crate::model::BeaconFact {
+            contacts: 12,
+            interval_s: 300,
+            jitter_bp: 50,
+        };
+        snapshot
+            .flows
+            .push(flow("sync.exe", "203.0.113.20", 443, 51_000, Some(beacon)));
+        snapshot
+            .flows
+            .push(flow("sync.exe", "203.0.113.20", 443, 51_777, Some(beacon)));
+        let subjects: Vec<String> = evaluate(&snapshot, None)
+            .into_iter()
+            .filter(|finding| finding.rule_id == "flow.beaconing")
+            .map(|finding| finding.subject)
+            .collect();
+        assert_eq!(subjects, ["flow:sync.exe>203.0.113.20:443"]);
     }
 
     #[test]

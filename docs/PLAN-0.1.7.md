@@ -549,8 +549,10 @@ ranger":
 
 **Not started:** containers and structural facts (Wave 1 — the §14 dependencies are approved and unbuilt (see §14.4));
 events (Wave 2 — needs `evtx`); agents (Wave 4); the triage package and the sweep (Wave 5).
-The sampler has no caller yet: `FlowFact::beacon`, the poll that feeds it and the
-`flow.beaconing` rule are one unit and land together.
+**Beaconing is closed:** the two-second poll calls `Sampler::observe` for every connection it
+reads, the scan's flows are stamped with what the sampler saw, and `flow.beaconing` fires on
+a steady rhythm. Without a series there is nothing to stamp, so a one-shot scan reports no
+rhythm rather than guessing one — `FlowFact::beacon` is never set by a single photograph.
 
 Six waves, one gate, in order. A wave is done when its exit holds, and the release may
 take longer than a plan, but it may not take the shortcut.

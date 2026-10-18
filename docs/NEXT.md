@@ -11,9 +11,13 @@ fire does not ship.
 
 ## 1. Close Wave 3 — the sampler gets a caller
 
+**Done.** The poll feeds the sampler, a scan's flows are stamped from its answer, and
+`flow.beaconing` fires with fixtures for a steady rhythm and for none. The steps are kept
+below because they are the shape the next wave repeats.
+
 Everything else in the flow wave is done: `Sampler::observe`, `beacon()`, `BeaconFact`,
 `FlowFact::beacon`, and the `flow` fact fields (`beacon`, `beacon_interval`,
-`beacon_jitter`). What is missing is the producer and the rule.
+`beacon_jitter`). What was missing was the producer and the rule.
 
 | Step | File | What to do |
 |---|---|---|

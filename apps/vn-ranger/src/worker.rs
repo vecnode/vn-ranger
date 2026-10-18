@@ -5,6 +5,7 @@
 //! for it stays unelevated, and the privileged code path ends when the report is
 //! written.
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -13,7 +14,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use vnr_core::watch::{Debounce, FileTouch};
-use vnr_core::{Change, ChangeKind, EventKind, ProcessFact, Snapshot, TimelineEvent};
+use vnr_core::{BeaconFact, Change, ChangeKind, EventKind, ProcessFact, Snapshot, TimelineEvent};
 
 /// How often the process table is polled.
 pub const POLL_INTERVAL: Duration = Duration::from_secs(2);
@@ -106,6 +107,12 @@ pub enum WatchMessage {
     },
     /// Things that changed since the previous message.
     Events(Vec<TimelineEvent>),
+    /// The connections that are on a rhythm, keyed by [`vnr_core::FlowFact::beacon_key`].
+    ///
+    /// The sampler lives on this thread because the poll does, so its answers travel to the
+    /// window here rather than over a channel of their own. An empty list means every
+    /// rhythm it had seen has been forgotten, which is not an error.
+    Beacons(Vec<(String, BeaconFact)>),
     /// The folders being watched; both lists are empty when the watcher is off.
     Watching {
         /// The folders the operating system accepted.
@@ -215,6 +222,11 @@ fn run(
     let mut previous: Option<Vec<ProcessFact>> = None;
     let started = Instant::now();
     let mut next_poll = started;
+    // The poll is the only thing that keeps a clock, so it is what remembers when each
+    // connection was seen. One sampler per polling thread: the rhythms are this machine's,
+    // and a second window would be a second observation of the same sockets.
+    let mut sampler = vnr_core::Sampler::new();
+    let mut sent_beacons: Vec<(String, BeaconFact)> = Vec::new();
 
     loop {
         if stop.load(Ordering::Relaxed) {
@@ -295,6 +307,23 @@ fn run(
             // An empty table is not evidence that every process ended, so it neither
             // produces events nor replaces the list the next poll is compared against.
             log::debug!("polled {polled} process(es)");
+
+            // The same poll reads the connection table, because a rhythm is a question about
+            // time and this is the only loop with a clock. The table needs the process names
+            // the poll just read, which is why it is sampled here rather than on its own.
+            let beacons: Vec<(String, BeaconFact)> = if readable {
+                let names: HashMap<u32, String> = items
+                    .iter()
+                    .map(|process| (process.pid, process.name.clone()))
+                    .collect();
+                // The status is the scan's to report; a live sample says nothing about it.
+                let (flows, _) =
+                    vnr_native::collect::flows::collect(&names).into_parts("flows", "Connections");
+                sampler.observe_flows(&flows, now)
+            } else {
+                Vec::new()
+            };
+
             send_watch(
                 sender,
                 WatchMessage::Processes {
@@ -311,10 +340,28 @@ fn run(
                 );
                 send_watch(sender, WatchMessage::Events(events));
             }
+            // Sent when it changes rather than every two seconds: the window keeps the last
+            // answer, and an unchanged one is not news.
+            if beacons != sent_beacons {
+                log::debug!("{} connection(s) are on a rhythm", beacons.len());
+                send_watch(sender, WatchMessage::Beacons(beacons.clone()));
+                sent_beacons = beacons;
+            }
             next_poll = Instant::now() + POLL_INTERVAL;
             ctx.request_repaint();
         } else if !poll_on.load(Ordering::Relaxed) {
             previous = None;
+            // A poll that is not running is not evidence that a rhythm continued, so the
+            // sampler forgets and the window is told there is nothing to stamp. A scan taken
+            // with the poll off then reports connections with no rhythm, which is the truth.
+            if !sampler.is_empty() {
+                sampler.clear();
+            }
+            if !sent_beacons.is_empty() {
+                log::debug!("the poll stopped, so the rhythms are forgotten");
+                sent_beacons.clear();
+                send_watch(sender, WatchMessage::Beacons(Vec::new()));
+            }
         }
 
         let now_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
