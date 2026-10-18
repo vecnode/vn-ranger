@@ -28,7 +28,7 @@ pub mod timeline;
 pub mod watch;
 
 pub use diff::{Change, ChangeKind, diff_processes, diff_snapshots};
-pub use flows::{Beacon, beacon, zeek, zeek_row};
+pub use flows::{Beacon, Sampler, beacon, zeek, zeek_row};
 pub use journal::{
     Action, Confirmation, Draft, JournalEntry, Kind as JournalKind, Outcome, Read as JournalRead,
 };

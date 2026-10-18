@@ -183,6 +183,76 @@ pub fn beacon(observed: &[u64]) -> Option<Beacon> {
         jitter,
     })
 }
+
+/// How many connections one sampler remembers at a time.
+pub const MAX_SERIES: usize = 2_000;
+
+/// How many observations one connection keeps. Enough for a rhythm, small enough that a
+/// long-running window does not grow without a bound.
+pub const MAX_OBSERVATIONS: usize = 64;
+
+/// A bounded memory of when each connection was seen, so a rhythm can be read from more
+/// than one sample.
+///
+/// Time is a parameter, as everywhere in this crate: the caller decides what "now" is, and
+/// the sampler only remembers. It is deliberately not a clock and not a thread.
+#[derive(Clone, Debug, Default)]
+pub struct Sampler {
+    series: std::collections::BTreeMap<String, Vec<u64>>,
+}
+
+impl Sampler {
+    /// An empty sampler.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Record that a connection exists at `now`.
+    ///
+    /// A key that would take the sampler past [`MAX_SERIES`] is dropped rather than kept,
+    /// and the oldest series goes first, so memory follows the recent table rather than the
+    /// whole day's traffic.
+    pub fn observe(&mut self, key: &str, now: u64) {
+        if !self.series.contains_key(key) && self.series.len() >= MAX_SERIES {
+            if let Some(oldest) = self.series.keys().next().cloned() {
+                self.series.remove(&oldest);
+            }
+        }
+        let series = self.series.entry(key.to_owned()).or_default();
+        if series.last() == Some(&now) {
+            return;
+        }
+        series.push(now);
+        if series.len() > MAX_OBSERVATIONS {
+            let excess = series.len() - MAX_OBSERVATIONS;
+            series.drain(..excess);
+        }
+    }
+
+    /// The rhythm this connection is on, when it is on one.
+    #[must_use]
+    pub fn beacon(&self, key: &str) -> Option<Beacon> {
+        self.series.get(key).and_then(|series| beacon(series))
+    }
+
+    /// How many connections are being remembered.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.series.len()
+    }
+
+    /// Whether nothing is remembered.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.series.is_empty()
+    }
+
+    /// Forget one connection, when it has gone.
+    pub fn forget(&mut self, key: &str) {
+        self.series.remove(key);
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -297,5 +367,43 @@ mod tests {
         jittered[0] += 1;
         let found = beacon(&jittered).expect("one second of drift is still a rhythm");
         assert!((found.jitter - 0.005).abs() < 0.01, "{}", found.jitter);
+    }
+
+    #[test]
+    fn a_sampler_turns_repeated_observations_into_a_rhythm() {
+        let mut sampler = Sampler::new();
+        for step in 0..8 {
+            sampler.observe("agent.exe>203.0.113.9:443", 1_700_000_000 + step * 60);
+        }
+        let found = sampler.beacon("agent.exe>203.0.113.9:443").expect("a rhythm");
+        assert_eq!(found.interval_s, 60);
+        assert_eq!(found.contacts, 8);
+        assert!(sampler.beacon("another").is_none());
+        assert_eq!(sampler.len(), 1);
+        sampler.forget("agent.exe>203.0.113.9:443");
+        assert!(sampler.is_empty());
+    }
+
+    #[test]
+    fn one_instant_recorded_twice_is_still_one_contact() {
+        let mut sampler = Sampler::new();
+        for _ in 0..10 {
+            sampler.observe("x", 5);
+        }
+        assert!(sampler.beacon("x").is_none());
+    }
+
+    #[test]
+    fn a_series_stops_growing_at_its_bound_and_the_sampler_stops_remembering() {
+        let mut sampler = Sampler::new();
+        for step in 0..(MAX_OBSERVATIONS + 20) {
+            sampler.observe("x", u64::try_from(step).unwrap_or(0) * 60);
+        }
+        let found = sampler.beacon("x").expect("the tail is still a rhythm");
+        assert_eq!(found.contacts, MAX_OBSERVATIONS);
+        for index in 0..(MAX_SERIES + 5) {
+            sampler.observe(&format!("k{index}"), 1);
+        }
+        assert_eq!(sampler.len(), MAX_SERIES, "the oldest series is dropped");
     }
 }
