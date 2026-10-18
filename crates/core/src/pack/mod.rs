@@ -517,6 +517,14 @@ fn validate_rule(
 fn validate_match(wire: WireMatch, push: &mut impl FnMut(String), ok: &mut bool) -> Match {
     let subject = match wire.subject.as_deref() {
         Some(id) => match Subject::from_id(id) {
+            Some(subject) if !subject.has_source() => {
+                push(format!(
+                    "`{subject}` facts are not collected by this build, and a rule about a \
+                     subject nothing produces is a rule that never fires"
+                ));
+                *ok = false;
+                None
+            }
             Some(subject) => Some(subject),
             None => {
                 push(format!(

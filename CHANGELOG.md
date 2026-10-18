@@ -129,8 +129,26 @@ All notable changes to vn-ranger are recorded here. The format follows
 - **A service in a user-writable folder is a finding**: `startup.service-dll-user-writable`
   fires on a `ServiceDll` under `ProgramData`, `LocalAppData`, `AppData` or a temporary
   folder, with a positive and a negative case against the shipped pack itself.
-- A scan now reads 418 startup entries on the maintainer's machine where it read 132, and the
+- A scan now reads 429 startup entries on the maintainer's machine where it read 132, and the
   collector's status line names the techniques the table covers rather than only the count.
+- **Scheduled tasks**: every task file is parsed by a pure, fixture-tested reader (URI, action,
+  account, enabled, hidden, triggers), read with `quick-xml`, which the plist reader already
+  brought in. The task folder needs administrative rights to list, so a standard scan reports
+  the collector as unavailable with that reason instead of reporting no tasks.
+- **`hidden` is a fact**, so "a hidden scheduled task runs a program from a folder a user can
+  write" is a shipped rule with a positive and a negative case.
+- **The coverage table is generated** from the pack by `cargo xtask coverage`, and `ci` fails
+  when a rule exists and the table does not mention it.
+- **A rule about a subject nothing collects is now a load error.** `agent` and `file-event`
+  are in the vocabulary and not in a collector, so the one rule that named `agent` was
+  removed rather than left in the catalogue looking like coverage.
+
+### Fixed — the binary no longer contains a virus signature
+
+- The EICAR test string was a byte literal in the product, so **every antivirus engine
+  quarantines `vn-ranger.exe`** — Defender refused to execute this project's own test build
+  with `ERROR_VIRUS_INFECTED`. The self-test now assembles the bytes at run time; the test is
+  the same test, and the binary no longer looks like the thing it hunts.
 
 ### Not in this release
 

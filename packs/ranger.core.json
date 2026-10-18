@@ -205,22 +205,6 @@
       "why": "Task Scheduler's Hidden setting takes a task out of its own list while leaving it scheduled, so a hidden task in a writable folder is both a thing that runs on a trigger and a thing its owner does not see.",
       "benign": "Some updaters register a hidden maintenance task in ProgramData, and say so in their documentation.",
       "remediation": "Open Task Scheduler as an administrator, find the task by the name in the finding, and read its action before disabling it."
-    },    {
-      "id": "agent.hook-in-config",
-      "title": "An editor or agent configuration that names a command to run",
-      "severity": "notice",
-      "confidence": "possible",
-      "technique": "T1059",
-      "match": {
-        "subject": "agent",
-        "all": [
-          { "field": "tool", "op": "exists" },
-          { "field": "config", "op": "contains", "value": "command" }
-        ]
-      },
-      "why": "A configuration that runs a command is a startup path with a different name, and it is read by a program the person trusts.",
-      "benign": "A task or hook the person wrote themselves in their own editor.",
-      "remediation": "Read the configuration file the finding names, then remove the hook if you did not write it."
     }
   ]
 }

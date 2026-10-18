@@ -195,6 +195,21 @@ impl Subject {
     pub fn kind_of(self, field: &str) -> Option<FieldKind> {
         self.field(field).map(|entry| entry.kind)
     }
+
+    /// Whether this build collects facts for this subject.
+    ///
+    /// Two subjects are in the vocabulary and not in a collector: a watched file change and
+    /// an agent configuration. A rule about either would load, look like coverage, and never
+    /// fire — which is the failure mode the validator exists to prevent, so it is a load
+    /// error here too. Flipping one of these to `true` is what a collector landing looks
+    /// like.
+    #[must_use]
+    pub fn has_source(self) -> bool {
+        match self {
+            Self::Startup | Self::Process | Self::Listener | Self::Package => true,
+            Self::FileEvent | Self::Agent => false,
+        }
+    }
 }
 
 impl fmt::Display for Subject {
