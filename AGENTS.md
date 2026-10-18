@@ -5,11 +5,12 @@ machine, explains what is unusual, remembers a baseline, and — later, and care
 quarantines and cleans. It is written in **Rust only**: a native egui/eframe
 application, with **no Tauri, Electron, webview or JavaScript build step**.
 
-**Status:** v0.1.6 is code-complete and its release candidate is published; v0.1.7 is the
-next line, and its plan is [`docs/PLAN-0.1.7.md`](docs/PLAN-0.1.7.md), which supersedes the
-M6 milestone in `docs/PLAN.md` §9. The read-only inventory, the local hash signature
-engine, the one-shot administrator scan,
-the two-second process poll, the file watchers, the accepted baseline, fifteen rules, the
+**Status:** v0.1.7 is code-complete and cut from `main`; its plan is
+[`docs/PLAN-0.1.7.md`](docs/PLAN-0.1.7.md), which superseded the M6 milestone in
+`docs/PLAN.md` §9. [`docs/NEXT.md`](docs/NEXT.md) says, item by item, what is built with its
+tests and what is deliberately not in this release and why. The read-only inventory, the local
+hash signature engine, the one-shot administrator scan,
+the two-second process poll, the file watchers, the accepted baseline, thirty-four rules, the
 Findings view, the command palette and keyboard navigation work, with preferences saved
 and one window per data directory.
 

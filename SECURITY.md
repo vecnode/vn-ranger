@@ -144,6 +144,13 @@ If you find a way to make ranger move or delete something outside those rules, t
 high-severity report. Include the platform, the filesystem type and whether the file was
 reachable through a link, a junction, a reparse point or a rename race.
 
+From v0.1.7 the same path also **adds and removes a startup entry**, in user scope only:
+`HKCU`'s `Run` and `RunOnce`. That verb is named by the entry a scan produced rather than by a
+path or a key name, the value is re-read and compared with what the person was shown, the
+intent is journalled before the registry is touched, and a machine-wide entry is refused
+because changing it needs an administrator. What it removed is kept in the journal so it can
+be put back by hand. There is no verb that writes anywhere else in the registry.
+
 ## Data handling
 
 Everything is local. The data directory is documented in the plan (§6.4) and removable

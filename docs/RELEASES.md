@@ -1,7 +1,8 @@
 # Releases
 
-**Status:** v0.1.6 is cut from this tree; v0.1.7 (*Inside*) is in development on `dev`. The
-release workflow is [`.github/workflows/release.yml`](../.github/workflows/release.yml).
+**Status:** v0.1.7 (*Inside*) is the release this tree cuts: `Cargo.toml` says 0.1.7 and
+`CHANGELOG.md` carries the dated entry. `main` is exactly the commit a release tag names.
+The release workflow is [`.github/workflows/release.yml`](../.github/workflows/release.yml).
 **Audience:** whoever cuts a vn-ranger release, and the launcher that installs it.
 
 Ranger follows the vecnode release convention documented in

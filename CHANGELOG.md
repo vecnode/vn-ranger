@@ -4,7 +4,7 @@ All notable changes to vn-ranger are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.7] — Unreleased
+## [0.1.7] - 2026-10-20
 
 The release that stops treating a file, a log, a connection and an agent as opaque. Its
 plan is [`docs/PLAN-0.1.7.md`](docs/PLAN-0.1.7.md): four evidence domains, one rule
@@ -572,6 +572,8 @@ vocabulary, one evidence ledger, and a size budget that pays for them.
   built to the contract now.
 
 [Unreleased]: https://github.com/vecnode/vn-ranger/compare/v0.1.5...HEAD
+[0.1.7]: https://github.com/vecnode/vn-ranger/releases/tag/v0.1.7
+[0.1.6]: https://github.com/vecnode/vn-ranger/releases/tag/v0.1.6
 [0.1.5]: https://github.com/vecnode/vn-ranger/releases/tag/v0.1.5
 [0.1.4]: https://github.com/vecnode/vn-ranger/releases/tag/v0.1.4
 [0.1.3]: https://github.com/vecnode/vn-ranger/releases/tag/v0.1.3

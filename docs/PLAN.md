@@ -1,11 +1,14 @@
 # The plan — vn-ranger
 
-**Status:** v0.1.6 is code-complete and its release candidate is published: the journal and
+**Status:** v0.1.7 (*Inside*) is cut: four evidence domains — the bytes of a file, the flow of a
+connection, the configuration of an autonomous agent, and the shape of an executable — with the
+container and structural readers, three scan sizes, the triage export, a Clean view that
+measures, and one new destructive verb in user scope (adding and removing a startup entry).
+Its plan is a separate document — [`PLAN-0.1.7.md`](PLAN-0.1.7.md) — and
+[`NEXT.md`](NEXT.md) says what is built and what is deliberately not. **v0.1.6** was the
+release that stopped being read-only: the journal and
 the typed action API, quarantine and allowlisted cleaning, the tray with opt-in autostart, a
-scheduler, and signed first-party rule packs with an optional content scan. **v0.1.7 is the
-next line**, and its plan is a separate document — [`PLAN-0.1.7.md`](PLAN-0.1.7.md) — because
-it adds four evidence domains rather than finishing a wave, and because the reasoning behind
-them is longer than a milestone row.
+scheduler, and signed first-party rule packs with an optional content scan.
 
 **v0.1.6 was one large release, not three small ones.** The owner compressed the act,
 resident and rule-pack milestones into it, so it is the release that stopped being

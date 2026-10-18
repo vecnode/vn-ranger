@@ -40,7 +40,8 @@ cargo xtask test                 # the test suite
 | Document | What it answers |
 |---|---|
 | [docs/PLAN.md](docs/PLAN.md) | The research, the scope, the architecture and the roadmap |
-| [docs/PLAN-0.1.7.md](docs/PLAN-0.1.7.md) | The next release: four new evidence domains, the feature catalogue, the waves and the size budget |
+| [docs/PLAN-0.1.7.md](docs/PLAN-0.1.7.md) | The release: four new evidence domains, the feature catalogue, the waves and the size budget |
+| [docs/NEXT.md](docs/NEXT.md) | The work order, and what is deliberately not in this release |
 | [docs/BENCHMARKS.md](docs/BENCHMARKS.md) | What was measured, and what is still owed |
 | [docs/RELEASES.md](docs/RELEASES.md) | The release contract that makes ranger installable by vn-launcher |
 | [SECURITY.md](SECURITY.md) | What ranger protects, what it cannot, and how to report a flaw |
