@@ -76,15 +76,17 @@ read — that is what a decompression bomb looks like. What was skipped goes int
 refused list with a reason, in words, rather than leaving an archive that looks empty.
 
 `goblin` vs `object` and the structural facts (sections and entropy, imports and imphash, the
-overlay, the signature blob, `authenticode`) are **half built**: `object` 0.40 is the choice
-(one new crate, features `read,std`, no C), and `native/src/structs.rs` turns an executable's
-header into a `Structure`: format and machine, section count, how many sections are writable
-*and* executable, the highest section entropy in hundredths of a bit, import count, the import
-hash (libraries and symbols in table order, lower-cased — the open-source family hash), bytes
-after the last section, and whether an Authenticode blob is attached. The content engine
-records it on every file and every container member, and the `file` subject gains `sections`,
-`rwx`, `entropy`, `imports`, `overlay` and `imphash` for pack rules. **A rule that reads them
-and the `authenticode` digest are not built.**
+overlay, the signature blob, `authenticode`) are **built, except the digest**: `object` 0.40
+is the choice (one new crate, features `read,std`, no C — `goblin` was not taken, so nothing
+was measured against it), and `native/src/structs.rs` turns an executable's header into a
+`Structure`: format and machine, section count, how many sections are writable *and*
+executable, the highest section entropy in hundredths of a bit, import count, the import hash
+(libraries and symbols in table order, lower-cased — the open-source family hash), bytes after
+the last section, and whether an Authenticode blob is attached. The content engine records it
+on every file and every container member, the `file` subject gains `sections`, `rwx`,
+`entropy`, `imports`, `overlay` and `imphash` for pack rules, and
+`file.writable-executable-section` reads them. **The `authenticode` digest is not built** — it
+is in §8 with the reason and what it would take.
 
 `cargo add zip flate2 cfb`. One walker with a ratio cap, 256 MB total, 3 layers, and the
 `.ndb` library run on what it extracts — never to disk. Then `goblin` **or** `object`
@@ -252,14 +254,24 @@ cap, an unreadable file, a container dropped by the ratio cap, an extension it d
 
 ### Done when
 
+**Built:** the profile-aware, bounded, cancellable walk (steps 1 and 3 — though the structural
+parsers live in `native/src/structs.rs` because `object` is a native dependency, and the pure
+parts — entropy and the family hash — are tested there over built fixtures rather than over
+captured binaries); containers; the `Deep` profile that reads the programs which start on
+their own; and the visible self-test (step 5) in the Settings card.
+
+**Not in this release, and named in §8 or here:** the incremental cache (step 2), `.ldb`
+logical signatures (step 4), and the benchmark table (step 6). Without the cache a second deep
+scan costs what the first did.
+
 | Step | File | What to do |
 |---|---|---|
 | 1 | `native/src/content/scan.rs` | A profile-aware walk: `Deep` reads executables, scripts, documents and archives by extension first, then everything a person selected; bounded by bytes and wall clock, cancellable between files. |
-| 2 | `native/src/content/cache.rs` | An incremental cache keyed by `(path, size, mtime)` → digest and verdict, so the second deep scan costs seconds, written under the data directory and pruned by age. |
+| 2 | `native/src/content/cache.rs` | An incremental cache keyed by `(path, size, mtime)` → digest and verdict, so the second deep scan costs seconds, written under the data directory and pruned by age. **Not built.** |
 | 3 | `core/src/structs.rs` | The structural facts as pure parsers over a byte slice, with fixtures: a PE with an RWX section, a PE with no imports, an ELF with an executable stack, a Mach-O fat binary. |
-| 4 | `core/src/signature.rs` | `.ldb` parsing (logical signatures: sub-signatures, offsets, `flevel`), with a fixture of a real ClamAV line and a malformed one that is refused rather than guessed. |
+| 4 | `core/src/signature.rs` | `.ldb` parsing (logical signatures: sub-signatures, offsets, `flevel`), with a fixture of a real ClamAV line and a malformed one that is refused rather than guessed. **Not built.** |
 | 5 | `crates/ui` Sources card | One place that says which database is loaded, its version, its rule count, and the self-test result — the EICAR test that already exists becomes the visible proof the pipeline works. |
-| 6 | `docs/BENCHMARKS.md` | The deep scan measured on a synthetic 20 GB tree and on this repository: files/s, bytes/s, RSS, and the second-run (cached) numbers. |
+| 6 | `docs/BENCHMARKS.md` | The deep scan measured on a synthetic 20 GB tree and on this repository: files/s, bytes/s, RSS, and the second-run (cached) numbers. **Not built**, and it waits for the cache to make the second run mean anything. |
 
 **Performance is part of the product:** a deep scan that makes a laptop unusable is a failed
 deep scan. One thread pool bounded to `cores - 1`, hashing and matching chunked, no file read
