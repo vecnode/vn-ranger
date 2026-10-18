@@ -101,10 +101,18 @@ re-read the entry it is about to change, and five refusals — `MachineScope`,
 person can read. Name and command rules are pure functions with tests: a name cannot look
 like a key path, and a command must start with a program path, quoted or bare.
 
+**Step 2 is done for the registry.** `crates/native/src/startup.rs` reads and writes the two
+`HKCU` surfaces through a four-method `Key` trait: the registry is one implementation and a
+`BTreeMap` is the other, so every refusal is proved on any host rather than on a machine
+that will let a test binary write a real `Run` key. `Add` refuses a name that already exists
+(`DestinationOccupied`) rather than replacing a command nobody saw; `Remove` re-reads the
+value and refuses `Changed` when the command is not the one the scan reported, and
+`SourceMissing` when it is gone. A read never creates the key it reads. The Startup folder
+is still refused at the surface level — the `.lnk` move into the quarantine is step 2b.
+
 | Step | File | What to do |
 |---|---|---|
 | 1 | `core/src/action.rs` | A new `Action::StartupChange` with `Add`/`Remove`, one `Surface` row per writable startup surface (HKCU Run, HKCU RunOnce, machine Run needs elevation and is refused, the user Startup folder), each with its own refusal tests. **No path is accepted**: the identity is `AutorunFact.id`, resolved from the surface's own root. |
-| 2 | `native/src/act/startup.rs` (new) | Remove: delete the value by exact name under a `cap_std`-opened key (winreg on Windows, `key.DeleteValue`); the Startup folder: move the `.lnk` into the quarantine, never delete it. Add: write a value with the command a person typed and a preview that shows the exact data written. Refusals: machine scope without elevation, a value that changed since the scan (compare a re-read), a name that is not in the scan the interface showed, a `.lnk` that is a link or has `nlink > 1`. |
 | 3 | `apps/vn-ranger/src/app.rs` | The confirmation names the key **and** the value (or the folder and the file), then journal, act, result. The card says what undo exists: a removal writes the previous value into the journal entry so it can be put back by hand, and a quarantine move can be restored. |
 | 4 | `crates/ui/src/views.rs` | The Startup view's bottom card: `Open location`, `Remove…`, and `Add…` for a command a person types. Disabled, with the reason, where the entry is machine scope without elevation. |
 | 5 | `docs/RULES.md`/`SECURITY.md`/`PLAN.md` §6.10 | The new surface rows, the second reviewer's traversal table, and the sentence "removal is an act on the operating system, not on a file ranger owns". |

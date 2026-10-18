@@ -27,6 +27,7 @@ pub mod power;
 pub mod quarantine;
 pub mod signatures;
 pub mod soak;
+pub mod startup;
 pub mod store;
 pub mod tray;
 pub mod watch;
