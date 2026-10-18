@@ -10,6 +10,7 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 pub mod action;
+pub mod content;
 pub mod diff;
 pub mod fields;
 pub mod journal;
@@ -36,8 +37,8 @@ pub use model::{
 };
 pub use recovery::{Phase as RecoveryPhase, Verdict as RecoveryVerdict};
 pub use rules::{
-    Confidence, Finding, Severity, Suppression, apply_suppressions, evaluate, prune_suppressions,
-    sort_findings,
+    BUILTIN_RULES, Confidence, Finding, Rule, Severity, Suppression, apply_suppressions, builtin_rules,
+    evaluate, prune_suppressions, sort_findings,
 };
 pub use signature::{HashAlgorithm, HashSignature, SignatureSet};
 pub use timeline::{EventKind, Timeline, TimelineEvent};

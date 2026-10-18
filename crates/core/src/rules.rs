@@ -161,14 +161,33 @@ pub fn prune_suppressions(suppressions: &mut Vec<Suppression>, now: u64) {
     suppressions.retain(|suppression| suppression.is_active(now));
 }
 
-struct Rule {
-    id: &'static str,
-    title: &'static str,
-    severity: Severity,
-    confidence: Confidence,
-    why: &'static str,
-    benign: &'static str,
-    remediation: &'static str,
+/// One built-in rule: what it says, how serious it is, and why a person should care.
+///
+/// The same fields a pack rule declares, plus the ATT&CK technique it covers or the written
+/// reason it covers none. The table is public because `cargo xtask coverage` reads it: a
+/// coverage table generated from the packs alone counted 12 of the 27 rules that can
+/// actually fire (`docs/PLAN-0.1.7.md` §3.2).
+#[derive(Clone, Copy, Debug)]
+pub struct Rule {
+    /// The stable rule id, never reused for a different meaning.
+    pub id: &'static str,
+    /// The rule's short title.
+    pub title: &'static str,
+    /// Consequence, not confidence.
+    pub severity: Severity,
+    /// How sure the rule is of its own reading.
+    pub confidence: Confidence,
+    /// Why those facts matter.
+    pub why: &'static str,
+    /// The most likely innocent explanation.
+    pub benign: &'static str,
+    /// What a person can do about it.
+    pub remediation: &'static str,
+    /// The ATT&CK technique this rule covers, when one technique is the right answer.
+    pub technique: Option<&'static str>,
+    /// Why no technique is named. Empty when [`Rule::technique`] is set, so exactly one of
+    /// the two is ever populated and a rule that names neither cannot ship.
+    pub technique_note: &'static str,
 }
 
 /// Every built-in rule id, in the order the table below declares them.
@@ -214,6 +233,8 @@ const TEMP_PATH: Rule = Rule {
              it on their next run.",
     remediation: "Open the folder and check the file's publisher and signature. If you did not \
                   install it, remove the startup entry.",
+    technique: Some("T1547"),
+    technique_note: "",
 };
 
 const DOWNLOADS_PATH: Rule = Rule {
@@ -226,6 +247,8 @@ const DOWNLOADS_PATH: Rule = Rule {
     benign: "A portable application someone unzipped and pinned to start with the session.",
     remediation: "Open the folder, check where the file came from, and move or remove the entry \
                   if you do not recognise it.",
+    technique: Some("T1547"),
+    technique_note: "",
 };
 
 const SCRIPT_EXTENSION: Rule = Rule {
@@ -238,6 +261,8 @@ const SCRIPT_EXTENSION: Rule = Rule {
           changing its name.",
     benign: "A backup, sync or keyboard-remapping tool that ships its logic as a script.",
     remediation: "Open the script and read it. If it is unfamiliar, remove the startup entry.",
+    technique: Some("T1547"),
+    technique_note: "",
 };
 
 const BARE_COMMAND: Rule = Rule {
@@ -249,6 +274,8 @@ const BARE_COMMAND: Rule = Rule {
           depending on where it is launched from.",
     benign: "Many installers register `updater.exe` and rely on the working directory.",
     remediation: "Check the entry's command and its working directory; a full path is clearer.",
+    technique: None,
+    technique_note: "a startup command that is not a full path is how an entry is written, not an action an adversary takes; the same entry is covered as T1547 by the rule above",
 };
 
 const SHELL_INTERPRETER: Rule = Rule {
@@ -260,6 +287,8 @@ const SHELL_INTERPRETER: Rule = Rule {
           entry's name does not tell you what the code does.",
     benign: "Vendor updaters, backup scripts and terminal setups do this routinely.",
     remediation: "Read the script or command the interpreter is given.",
+    technique: Some("T1059"),
+    technique_note: "",
 };
 
 const USER_WRITABLE_SYSTEM: Rule = Rule {
@@ -272,6 +301,8 @@ const USER_WRITABLE_SYSTEM: Rule = Rule {
     benign: "An installer that registered a per-user installation machine-wide by mistake.",
     remediation: "Check the entry's target and whether it belongs to an application you \
                   installed deliberately.",
+    technique: Some("T1547"),
+    technique_note: "",
 };
 
 const HASH_CHANGED: Rule = Rule {
@@ -285,6 +316,8 @@ const HASH_CHANGED: Rule = Rule {
     benign: "The application updated itself since the baseline was accepted.",
     remediation: "Check the application's version and publisher. If it did not update, look at \
                   the file before trusting it.",
+    technique: Some("T1554"),
+    technique_note: "",
 };
 
 const NEW_SINCE_BASELINE: Rule = Rule {
@@ -297,6 +330,8 @@ const NEW_SINCE_BASELINE: Rule = Rule {
     benign: "You installed or updated an application that starts with the session.",
     remediation: "Approve it by accepting a new baseline once you recognise it, or remove the \
                   entry.",
+    technique: Some("T1547"),
+    technique_note: "",
 };
 
 const PROCESS_TEMP: Rule = Rule {
@@ -308,6 +343,8 @@ const PROCESS_TEMP: Rule = Rule {
           sense; the file may not be there after a reboot.",
     benign: "An installer, an unpacker, or a development tool running from a build directory.",
     remediation: "Identify the parent process that started it and whether it is still running.",
+    technique: None,
+    technique_note: "where a process runs is a location; it names a technique only when the execution context is known, and this rule does not know it",
 };
 
 const PROCESS_DOWNLOADS: Rule = Rule {
@@ -319,6 +356,8 @@ const PROCESS_DOWNLOADS: Rule = Rule {
           is worth a look, especially if it is long-lived.",
     benign: "A portable tool or a script someone launched directly.",
     remediation: "Check which process started it and whether you launched it.",
+    technique: Some("T1204.002"),
+    technique_note: "",
 };
 
 const PARENT_EXITED: Rule = Rule {
@@ -330,6 +369,8 @@ const PARENT_EXITED: Rule = Rule {
           the ancestry in the inventory stays honest.",
     benign: "Almost always: the launcher exits once the real program is running.",
     remediation: "None needed unless the process itself looks unfamiliar.",
+    technique: None,
+    technique_note: "a parent exiting is normal, and the rule exists so the ancestry stays honest rather than to describe an adversary",
 };
 
 const PUBLIC_NEW_PROCESS: Rule = Rule {
@@ -343,6 +384,8 @@ const PUBLIC_NEW_PROCESS: Rule = Rule {
              started or updated.",
     remediation: "Check whether the application is expected to accept network connections and \
                   whether the firewall allows it.",
+    technique: None,
+    technique_note: "reachability is a fact about a socket; which technique it serves depends on the program holding it",
 };
 
 const PUBLIC_UNKNOWN_OWNER: Rule = Rule {
@@ -354,6 +397,8 @@ const PUBLIC_UNKNOWN_OWNER: Rule = Rule {
           not evidence of a problem.",
     benign: "A system service or another user's process; an administrator scan may name it.",
     remediation: "Run an administrator scan on Windows if you want the owner named.",
+    technique: None,
+    technique_note: "the rule reports a gap in this program's view, not an adversary action",
 };
 
 const PERSISTENT_LISTENING: Rule = Rule {
@@ -367,6 +412,8 @@ const PERSISTENT_LISTENING: Rule = Rule {
              purpose.",
     remediation: "Check the startup entry and the socket together; if you did not set it up, \
                   remove the entry.",
+    technique: Some("T1547"),
+    technique_note: "",
 };
 
 const DUPLICATE_COMMAND: Rule = Rule {
@@ -379,6 +426,8 @@ const DUPLICATE_COMMAND: Rule = Rule {
     benign: "Two installers registering the same updater, or a user and machine entry for one \
              application.",
     remediation: "Remove the redundant entries if you want the list to say what actually runs.",
+    technique: None,
+    technique_note: "duplicates are a hygiene fact; no adversary needs two identical startup entries",
 };
 
 const UNQUOTED_SERVICE_PATH: Rule = Rule {
@@ -394,7 +443,39 @@ const UNQUOTED_SERVICE_PATH: Rule = Rule {
              written a file to the shorter path.",
     remediation: "Quote the whole path in the service's ImagePath, or reinstall the application \
                   from a path with no spaces.",
+    technique: Some("T1574.008"),
+    technique_note: "",
 };
+
+/// Every built-in rule, in the order [`RULE_IDS`] publishes them.
+///
+/// One table, read by the engine that fires the rules and by the command that writes the
+/// coverage table, so "what does ranger detect" has one answer in one place. A pack rule is
+/// the other half of the answer; the two are counted together by `cargo xtask coverage`.
+pub const BUILTIN_RULES: [Rule; 16] = [
+    TEMP_PATH,
+    DOWNLOADS_PATH,
+    SCRIPT_EXTENSION,
+    BARE_COMMAND,
+    SHELL_INTERPRETER,
+    USER_WRITABLE_SYSTEM,
+    HASH_CHANGED,
+    NEW_SINCE_BASELINE,
+    PROCESS_TEMP,
+    PROCESS_DOWNLOADS,
+    PARENT_EXITED,
+    PUBLIC_NEW_PROCESS,
+    PUBLIC_UNKNOWN_OWNER,
+    PERSISTENT_LISTENING,
+    DUPLICATE_COMMAND,
+    UNQUOTED_SERVICE_PATH,
+];
+
+/// The built-in rules, as a slice.
+#[must_use]
+pub fn builtin_rules() -> &'static [Rule] {
+    &BUILTIN_RULES
+}
 
 /// Evaluate every built-in rule against a scan and its baseline.
 ///
@@ -440,7 +521,7 @@ fn make(rule: &Rule, subject: String, subject_label: String, evidence: Vec<Strin
         title: rule.title.to_owned(),
         severity: rule.severity,
         confidence: rule.confidence,
-        technique: None,
+        technique: rule.technique.map(str::to_owned),
         subject,
         subject_label,
         evidence,
@@ -1435,5 +1516,60 @@ mod tests {
             declared, RULE_IDS,
             "the rule table and the published ids are one list"
         );
+    }
+
+    #[test]
+    fn every_built_in_rule_is_ready_to_ship() {
+        let rules = builtin_rules();
+        assert_eq!(rules.len(), RULE_IDS.len(), "the table and the list agree");
+        for (rule, id) in rules.iter().zip(RULE_IDS) {
+            assert_eq!(rule.id, id, "the table is in the published order");
+            assert!(!rule.title.is_empty(), "{} has no title", rule.id);
+            assert!(!rule.why.is_empty(), "{} has no reason", rule.id);
+            assert!(!rule.benign.is_empty(), "{} has no benign case", rule.id);
+            assert!(!rule.remediation.is_empty(), "{} has no remedy", rule.id);
+            assert!(
+                rule.technique.is_some() != !rule.technique_note.is_empty(),
+                "{} must name a technique or the reason it names none",
+                rule.id
+            );
+            if let Some(technique) = rule.technique {
+                assert!(valid_technique(technique), "{}: {technique}", rule.id);
+            }
+        }
+    }
+
+    #[test]
+    fn a_finding_carries_the_technique_its_rule_covers() {
+        let mut snapshot = snapshot();
+        snapshot.autoruns.push(autorun(
+            "run:user:L",
+            "L",
+            Some("C:\\Temp\\l.exe"),
+            "C:\\Temp\\l.exe",
+        ));
+        let findings = evaluate(&snapshot, None);
+        let finding = findings
+            .iter()
+            .find(|finding| finding.rule_id == "startup.temp-path")
+            .unwrap();
+        assert_eq!(finding.technique.as_deref(), Some("T1547"));
+        let none = findings
+            .iter()
+            .find(|finding| finding.rule_id == "startup.duplicate-command");
+        if let Some(finding) = none {
+            assert_eq!(finding.technique, None);
+        }
+    }
+
+    /// `T` and four digits, optionally `.` and three more.
+    fn valid_technique(technique: &str) -> bool {
+        let bytes = technique.as_bytes();
+        let digits = |slice: &[u8]| slice.iter().all(u8::is_ascii_digit);
+        match bytes {
+            [b'T', a, b, c, d] => digits(&[*a, *b, *c, *d]),
+            [b'T', a, b, c, d, b'.', e, f, g] => digits(&[*a, *b, *c, *d]) && digits(&[*e, *f, *g]),
+            _ => false,
+        }
     }
 }

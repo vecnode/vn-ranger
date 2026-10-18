@@ -4,6 +4,37 @@ All notable changes to vn-ranger are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.7] — Unreleased
+
+The release that stops treating a file, a log, a connection and an agent as opaque. Its
+plan is [`docs/PLAN-0.1.7.md`](docs/PLAN-0.1.7.md): four evidence domains, one rule
+vocabulary, one evidence ledger, and a size budget that pays for them.
+
+### Added
+
+- **The content engine's signature vocabulary** (`vnr_core::content`): a clean-room reader
+  for ClamAV extended body signatures (`.ndb`) — name, target type, offset and a hex
+  pattern with `??` wildcards, `{n-m}` gaps, `*`, `(aa|bb)` choices and the `EP`/`SL`/`SX`/
+  `EOF` offsets — with a matcher that is anchored on the first literal run, jumps to the
+  literal after a gap instead of walking it, and spends from a budget so a hostile
+  signature set cannot hang a scan. Every malformed line is refused with its number and the
+  field at fault; a scan that runs out of budget says so rather than reporting a clean file.
+- **One rule table.** `Rule` is public, every built-in rule carries the ATT&CK technique it
+  covers or the written reason it covers none, and `cargo xtask coverage` now counts both
+  engines: **28 rules over 14 techniques, 16 built in and 12 from the pack**, where it used
+  to list 12. `docs/RULES.md` lists the six rules with no technique and why.
+
+### Changed
+
+- `builtin_ids` in `xtask` reads the published list from `vnr-core` instead of scraping
+  string literals out of `rules.rs`, so the pack validator and the engine cannot disagree.
+
+### Notes
+
+- The release is in progress: the bytes are readable, and the walk that feeds them is the
+  next wave. Nothing here is a claim until it is written, tested and named in the plan's
+  wave exit.
+
 ## [0.1.6] - 2026-10-18
 
 ### Added
