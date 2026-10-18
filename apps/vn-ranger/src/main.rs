@@ -51,6 +51,13 @@ fn main() -> eframe::Result<()> {
         import_sigma(&path);
         return Ok(());
     }
+    // Where ranger keeps its files, and whether it may write them. It exists because the
+    // window's own sentence about a refused journal is only as good as the facts behind it,
+    // and a person can paste this into a message.
+    if std::env::args_os().any(|argument| argument.to_string_lossy() == "--diagnose") {
+        diagnose();
+        return Ok(());
+    }
 
     // One window per data directory. A second launch does not open a second window: it asks
     // the running one to come forward and exits.
@@ -204,6 +211,58 @@ fn pack_to_wire(pack: &vnr_core::pack::Pack) -> serde_json::Value {
         },
         "rules": rules,
     })
+}
+
+/// Print where ranger keeps its files and whether it may write them.
+///
+/// Every line is a fact that was checked just now, including the ones that would make the
+/// window's warning appear: a folder this program cannot write, a journal it cannot open, a
+/// pack that will not load. Nothing here changes a file.
+fn diagnose() {
+    let data = vnr_native::paths::data_dir();
+    println!("vn-ranger {}", env!("CARGO_PKG_VERSION"));
+    println!(
+        "host:    {} {} ({})",
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+        if vnr_native::elevation::is_elevated() {
+            "administrator"
+        } else {
+            "as the signed-in user"
+        }
+    );
+    println!("data:    {}", data.display());
+    let folder_writable = data.is_dir() && vnr_native::journal::folder_is_writable(&data);
+    println!(
+        "writable: {}",
+        if !data.is_dir() {
+            "the folder does not exist yet".to_owned()
+        } else if folder_writable {
+            "yes, this program can create files there".to_owned()
+        } else {
+            "NO — this program cannot create a file in that folder".to_owned()
+        }
+    );
+    for line in vnr_native::journal::diagnose_folder(&vnr_native::paths::journal_path()).lines() {
+        println!("{line}");
+    }
+    let packs = vnr_native::pack::directory();
+    let record = vnr_native::pack::record(&packs);
+    match record {
+        Ok(Some(active)) => println!(
+            "pack:    {} {} ({})",
+            active.id,
+            active.version,
+            active.fingerprint.as_deref().unwrap_or("built into ranger")
+        ),
+        Ok(None) => println!("pack:    no record, so the built-in rules only"),
+        Err(problem) => println!("pack:    {problem}"),
+    }
+    match vnr_native::pack::keys::Keys::load(&packs) {
+        Ok(keys) => println!("keys:    {} trusted", keys.keys.len()),
+        Err(problem) => println!("keys:    {problem}"),
+    }
+    println!("signals: {}", vnr_native::paths::signatures_dir().display());
 }
 
 fn write_headless_report(path: &Path, record: bool) {

@@ -156,13 +156,12 @@ impl App {
             Ok(journal) => journal,
             Err(error) => {
                 journal_reported = true;
+                // The error has already been diagnosed: it says whether the folder or the
+                // file is the problem, and what moves the folder. Repeating "check your
+                // antivirus" here would be a second guess in front of a fact.
                 world.error = Some(format!(
-                    "The journal at {} could not be opened: {error}. Nothing this session does will be recorded. \
-                     Ranger writes its journal beside its settings, so a security program or a folder policy \
-                     that blocks writes to {}/ will block this as well; VN_RANGER_DATA_DIR moves the whole \
-                     folder somewhere they allow.",
-                    journal_path.display(),
-                    vnr_native::paths::data_dir().display()
+                    "The journal at {} could not be opened: {error}. Nothing this session does will be recorded.",
+                    journal_path.display()
                 ));
                 vnr_native::journal::Journal::unavailable(journal_path, &error.to_string())
             }

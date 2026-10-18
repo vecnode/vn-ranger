@@ -175,6 +175,9 @@ cargo xtask language  # the §5.5 language audit, as a check
 cargo run --release   # the ranger
 cargo run --release -- --report report.json   # scan without a window
 cargo run --release -- --soak soak.ndjson     # sample a 24-hour run (from 0.1.6)
+cargo run --release -- --diagnose             # where the files are, and whether this
+                                              # program may write them
+cargo run --release -- --sigma rule.yml       # import one Sigma rule as a pack to sign
 ```
 
 The first build is the slow one: egui, wgpu and winit are most of the tree. After that,

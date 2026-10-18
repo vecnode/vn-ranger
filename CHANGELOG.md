@@ -86,6 +86,15 @@ All notable changes to vn-ranger are recorded here. The format follows
 
 ### Fixed
 
+- A journal that could not be opened said `Access is denied` and nothing a person could act
+  on. It now says which of the three problems it is: this program may not write in the folder
+  (a security program, a folder policy or a sandbox all look like this, and
+  `VN_RANGER_DATA_DIR` moves the folder), the journal file itself cannot be opened (it is
+  moved aside as `journal.kept-<time>.ndjson` and a new one starts, so the session is recorded
+  after all), or something else, reported as it came.
+- `--diagnose` prints the folder, whether this program can write in it, whether the journal
+  opens, which pack is loaded and how many keys are trusted — facts that were checked at that
+  moment, so a refusal can be quoted rather than described.
 - The live indicator toggled once per poll, which reads as a metronome and keeps looking
   alive after the thread that feeds it has stopped. It now flashes for 220 ms as each
   poll arrives, stays quietly lit in between, and turns amber after three missed beats.
