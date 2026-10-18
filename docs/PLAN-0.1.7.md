@@ -543,9 +543,9 @@ ranger":
 |---|---|---|
 | 0 | One rule table (`Rule` public, technique or written reason, coverage counts both engines); version and size truth | `910c5bd` |
 | 1 | `.ndb` reader and matcher with a budget; the bounded, cancellable deep check; `file` and `file-match` subjects; two content rules; the Settings card | `00d7bbe` |
-| 3 | The connection table with process ownership (Windows, Linux); the `flow` subject and its join; one rule; the Zeek export; the beaconing analytic and its bounded sampler | `54265cb`, `8066811`, `c5a2e7c` |
+| 3 | The connection table with process ownership (Windows, Linux); the `flow` subject and its join; one rule; the Zeek export; the beaconing analytic and its bounded sampler; the poll that feeds it and `flow.beaconing` | `54265cb`, `8066811`, `c5a2e7c`, `d3f3027` |
 | 5 | The journal hash chain with its three-state verdict and the Actions-view line; the timeline CSV export | `9d76250`, `4457935` |
-| 4 | The skill reader: `SKILL.md` frontmatter (an unclosed header is body, not metadata) and the five capability kinds with the line that proved each | `0a2135a` |
+| 4 | The skill reader: `SKILL.md` frontmatter (an unclosed header is body, not metadata) and the five capability kinds with the line that proved each; the collector that finds the folders, the package digest, the matrix as five booleans, and `agent.skill-executes-networked` | `0a2135a`, `9127da8` |
 
 **Not started:** containers and structural facts (Wave 1 — the §14 dependencies are approved and unbuilt (see §14.4));
 events (Wave 2 — needs `evtx`); the rest of agents (Wave 4: suite provenance and the
