@@ -196,7 +196,7 @@ pub struct Rule {
 /// rules with one id make it impossible to say which one a person meant. This is the list the
 /// pack validator is given, so it is the list a new built-in rule has to be added to — and a
 /// test below fails when a `Rule` constant's id is not in it.
-pub const RULE_IDS: [&str; 16] = [
+pub const RULE_IDS: [&str; 18] = [
     "startup.temp-path",
     "startup.downloads-path",
     "startup.script-extension",
@@ -213,6 +213,8 @@ pub const RULE_IDS: [&str; 16] = [
     "agent.persistent-listening",
     "startup.duplicate-command",
     "service.unquoted-path",
+    "file.hash-match",
+    "file.content-match",
 ];
 
 /// The built-in rule ids, in the form a pack validator wants them.
@@ -447,12 +449,45 @@ const UNQUOTED_SERVICE_PATH: Rule = Rule {
     technique_note: "",
 };
 
+const HASH_MATCH: Rule = Rule {
+    id: "file.hash-match",
+    title: "A file matched a signature by hash",
+    severity: Severity::Attention,
+    confidence: Confidence::Observed,
+    why: "The file's bytes are exactly the bytes a signature database names. That is a fact \
+          about the file: a hash match says this is the file the signature was written for, \
+          and it says nothing about the machine around it.",
+    benign: "A test file kept on purpose — the EICAR test file is the usual one — or a sample \
+             someone put in a folder deliberately.",
+    remediation: "Check the folder and where the file came from. Quarantine it if you did not \
+                  put it there.",
+    technique: None,
+    technique_note: "a hash names a file; which technique that file serves is the signature \
+                    author's knowledge, and a rule cannot inherit it",
+};
+
+const CONTENT_MATCH: Rule = Rule {
+    id: "file.content-match",
+    title: "A file holds the bytes a signature describes",
+    severity: Severity::Attention,
+    confidence: Confidence::Observed,
+    why: "A body signature matched at an offset inside the file. That says the pattern is \
+          there; it does not say the file is dangerous, and it does not say how it arrived.",
+    benign: "A signature can match a resource, a document or an older version of software. \
+             Check the publisher and the folder before acting on the signature's name.",
+    remediation: "Open the folder, check the publisher and where the file came from, then \
+                  quarantine it or leave it.",
+    technique: None,
+    technique_note: "the pattern is a fact; a technique is an interpretation of what the file \
+                    does, which this rule does not observe",
+};
+
 /// Every built-in rule, in the order [`RULE_IDS`] publishes them.
 ///
 /// One table, read by the engine that fires the rules and by the command that writes the
 /// coverage table, so "what does ranger detect" has one answer in one place. A pack rule is
 /// the other half of the answer; the two are counted together by `cargo xtask coverage`.
-pub const BUILTIN_RULES: [Rule; 16] = [
+pub const BUILTIN_RULES: [Rule; 18] = [
     TEMP_PATH,
     DOWNLOADS_PATH,
     SCRIPT_EXTENSION,
@@ -469,6 +504,8 @@ pub const BUILTIN_RULES: [Rule; 16] = [
     PERSISTENT_LISTENING,
     DUPLICATE_COMMAND,
     UNQUOTED_SERVICE_PATH,
+    HASH_MATCH,
+    CONTENT_MATCH,
 ];
 
 /// The built-in rules, as a slice.
@@ -495,9 +532,53 @@ pub fn evaluate(snapshot: &Snapshot, baseline: Option<&Snapshot>) -> Vec<Finding
     persistent_listeners(snapshot, &mut findings);
     duplicate_commands(snapshot, &mut findings);
     unquoted_service_paths(snapshot, &mut findings);
+    content_matches(snapshot, &mut findings);
 
     sort_findings(&mut findings);
     findings
+}
+
+/// What the content engine found in the files it read.
+///
+/// A hash match and a body-signature match are different statements and get different
+/// rules: one says the whole file is the file a signature names, the other says a pattern is
+/// somewhere inside it. Neither says the machine is compromised, which is why both name the
+/// file, the signature and the folder rather than a verdict.
+fn content_matches(snapshot: &Snapshot, findings: &mut Vec<Finding>) {
+    for file in &snapshot.files {
+        if let Some(name) = file.hash_match.as_deref() {
+            findings.push(make(
+                &HASH_MATCH,
+                format!("file:{}", file.path),
+                file.path.clone(),
+                vec![
+                    format!("Path: {}", file.path),
+                    format!("Size: {} bytes", file.size),
+                    format!("SHA-256: {}", file.digest.as_deref().unwrap_or("not computed")),
+                    format!("Signature: {name}"),
+                ],
+            ));
+        }
+        for hit in &file.matches {
+            let mut evidence = vec![
+                format!("Path: {}", file.path),
+                format!(
+                    "Signature: {} (line {} of the signature file)",
+                    hit.name, hit.line
+                ),
+                format!("Offset: 0x{:x}", hit.at),
+            ];
+            if !file.container.is_empty() {
+                evidence.push(format!("Container: {}", file.container.join(" > ")));
+            }
+            findings.push(make(
+                &CONTENT_MATCH,
+                format!("file-match:{}#{}", file.path, hit.name),
+                format!("{} — {}", file.path, hit.name),
+                evidence,
+            ));
+        }
+    }
 }
 
 /// Put findings in the one order the interface and the report both read them in.
@@ -1560,6 +1641,57 @@ mod tests {
         if let Some(finding) = none {
             assert_eq!(finding.technique, None);
         }
+    }
+
+    #[test]
+    fn a_hash_match_and_a_body_match_are_different_findings() {
+        let mut snapshot = snapshot();
+        snapshot.files.push(crate::model::FileFact {
+            path: "C:\\Users\\me\\Downloads\\sample.bin".to_owned(),
+            name: "sample.bin".to_owned(),
+            extension: Some("bin".to_owned()),
+            size: 68,
+            digest: Some("ab".repeat(32)),
+            kind: Some("unknown".to_owned()),
+            signature: crate::model::SignatureStatus::NotChecked,
+            signer: None,
+            container: Vec::new(),
+            hash_match: Some("Eicar-Test-Signature".to_owned()),
+            matches: vec![crate::model::ContentMatch {
+                name: "Win.Test.EICAR_HDB-1".to_owned(),
+                at: 0,
+                line: 5,
+            }],
+            read_bytes: Some(68),
+        });
+        let findings = evaluate(&snapshot, None);
+        let hash = findings
+            .iter()
+            .find(|finding| finding.rule_id == "file.hash-match")
+            .unwrap();
+        assert_eq!(hash.subject, "file:C:\\Users\\me\\Downloads\\sample.bin");
+        assert_eq!(hash.severity, Severity::Attention);
+        assert!(
+            hash.evidence
+                .iter()
+                .any(|line| line.contains("Eicar-Test-Signature")),
+            "the evidence names the signature: {:?}",
+            hash.evidence
+        );
+        let body = findings
+            .iter()
+            .find(|finding| finding.rule_id == "file.content-match")
+            .unwrap();
+        assert_eq!(
+            body.subject,
+            "file-match:C:\\Users\\me\\Downloads\\sample.bin#Win.Test.EICAR_HDB-1"
+        );
+        assert!(
+            body.evidence.iter().any(|line| line.contains("0x0")),
+            "the evidence names the offset: {:?}",
+            body.evidence
+        );
+        assert!(!body.benign.is_empty());
     }
 
     /// `T` and four digits, optionally `.` and three more.

@@ -402,6 +402,51 @@ pub struct ContentReport {
     pub problem: Option<String>,
 }
 
+/// The deep check: the content engine, over the folders a person names.
+///
+/// The card that owns this says what would be read, what is kept and what has been found,
+/// because this is the one thing ranger does that reads the inside of a person's files.
+#[derive(Clone, Debug, Default)]
+pub struct DeepCheck {
+    /// The folders it would read, as display strings.
+    pub folders: Vec<String>,
+    /// The sentence that names the folders, the limits and what is kept.
+    pub sentence: String,
+    /// Whether a check is running now.
+    pub running: bool,
+    /// Whether a person asked it to stop.
+    pub cancelling: bool,
+    /// What the last check did, when one has run.
+    pub summary: Option<DeepSummary>,
+    /// What the engine had to say about its signature library.
+    pub notes: Vec<String>,
+}
+
+/// What one deep check did.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DeepSummary {
+    /// How many files were hashed.
+    pub files: usize,
+    /// How many were read into memory for pattern matching.
+    pub read: usize,
+    /// How many bytes were read.
+    pub bytes: u64,
+    /// How many files matched a signature, by hash or by body.
+    pub matched: usize,
+    /// How many files could not be read, each with a reason in the report.
+    pub refused: usize,
+    /// How long it took.
+    pub elapsed_ms: u64,
+    /// Whether a person cancelled it.
+    pub cancelled: bool,
+    /// Whether a limit stopped it before it finished.
+    pub truncated: bool,
+    /// How many body signatures were loaded.
+    pub signatures: usize,
+    /// How many signature lines were refused when the library loaded.
+    pub signature_refusals: usize,
+}
+
 /// A key ranger trusts.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct KeyRow {
@@ -412,7 +457,6 @@ pub struct KeyRow {
     /// How many installed packs it signed, as far as the interface can tell.
     pub packs: usize,
 }
-
 /// What ranger knows about rule packs: the record, the files and the keys.
 #[derive(Clone, Debug, Default)]
 pub struct Packs {
@@ -507,6 +551,8 @@ pub struct World {
     pub packs: Packs,
     /// The optional content scan: what it would read, and what it found.
     pub content: ContentScan,
+    /// The deep check: the content engine over the folders a person names.
+    pub deep: DeepCheck,
 }
 
 impl World {
@@ -666,6 +712,10 @@ pub enum Action {
     RefreshPacks,
     /// Read the bytes of the files in the folders a person consented to.
     RunContentScan,
+    /// Run the content engine over the folders a person consented to.
+    RunDeepCheck,
+    /// Ask a running deep check to stop between files.
+    CancelDeepCheck,
     /// Open a file or directory in the platform's file manager.
     OpenPath(String),
     /// Close the application.

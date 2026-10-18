@@ -93,6 +93,24 @@ is refused rather than loaded as a rule that never fires.
 | `listener` | `public` | true/false |
 | `package` | `name`, `publisher`, `source`, `version` | text |
 | `file-event` | `kind`, `path`, `source` | text |
+| `agent` | `command`, `name`, `path`, `tool` | text |
+| `file` | `container`, `digest`, `extension`, `kind`, `name`, `path`, `signed`, `signer` | text |
+| `file` | `depth`, `size` | number |
+| `file-match` | `container`, `kind`, `name`, `path`, `signed`, `signer` | text |
+| `file-match` | `at`, `line` | number |
+
+The content engine produces two subjects. **`file`** is one fact per file it read: its shape,
+its digest, and what its signature says. **`file-match`** is one fact per signature that hit
+a file: `name` is the **signature's** name there (it is the file's name on `file`), `at` is
+the offset it matched at, and `line` is where the signature came from in the signature file.
+A match repeats the file's `path`, `kind`, `signed`, `signer` and `container`, so a rule can
+say "this signature, in an executable, in a user folder" and read all of it from one fact.
+The two subjects never answer each other's questions, which is why a rule about a file's
+shape cannot fire once per signature.
+
+`container` is the chain of containers a file was found inside, outermost first, joined with
+` > `; `depth` is how many links it has. A file that was hashed but not read has a `digest`
+and no match, which is a different statement from a file that was read and held nothing.
 
 
 The values a text field takes, where the machine has a fixed set:
@@ -301,6 +319,8 @@ table instead of leaving a blank.
 | `T1554` | `startup.hash-changed` | Attention | built-in | A startup binary changed since the baseline |
 | `T1574.008` | `service.unquoted-path` | Notice | built-in | A service path has a space in it and no quotes |
 | `T1611` | `listener.every-interface` | Notice | pack | A socket waiting for a connection on every interface |
+| `—` | `file.content-match` | Attention | built-in | A file holds the bytes a signature describes |
+| `—` | `file.hash-match` | Attention | built-in | A file matched a signature by hash |
 | `—` | `listener.public-new-process` | Notice | built-in | A recently started process listens beyond loopback |
 | `—` | `listener.public-unknown-owner` | Info | built-in | A public socket has no visible owner |
 | `—` | `process.parent-exited` | Info | built-in | A process outlived the process that started it |
@@ -308,7 +328,7 @@ table instead of leaving a blank.
 | `—` | `startup.bare-command` | Notice | built-in | A startup command does not name a full path |
 | `—` | `startup.duplicate-command` | Info | built-in | One command is registered as several startup items |
 
-28 rules covering 14 technique(s): 16 built in and 12 from `packs/ranger.core.json`.
+30 rules covering 14 technique(s): 18 built in and 12 from `packs/ranger.core.json`.
 
 No technique, and why — a rule that cannot name one says so:
 
@@ -318,6 +338,8 @@ No technique, and why — a rule that cannot name one says so:
 - `listener.public-new-process` — reachability is a fact about a socket; which technique it serves depends on the program holding it
 - `listener.public-unknown-owner` — the rule reports a gap in this program's view, not an adversary action
 - `startup.duplicate-command` — duplicates are a hygiene fact; no adversary needs two identical startup entries
+- `file.hash-match` — a hash names a file; which technique that file serves is the signature author's knowledge, and a rule cannot inherit it
+- `file.content-match` — the pattern is a fact; a technique is an interpretation of what the file does, which this rule does not observe
 <!-- coverage:end -->
 
 ## Importing a Sigma rule

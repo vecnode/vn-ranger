@@ -89,6 +89,10 @@ pub enum Subject {
     FileEvent,
     /// An editor, agent or package-manager configuration that can run something.
     Agent,
+    /// A file the content engine read.
+    File,
+    /// A content signature that matched a file.
+    FileMatch,
 }
 
 /// The fields of a startup entry, as the fact model carries them.
@@ -135,15 +139,48 @@ const FILE_EVENT: &[Field] = &[text("kind"), text("path"), text("source")];
 /// The fields of an editor, agent or package-manager configuration.
 const AGENT: &[Field] = &[text("command"), text("name"), text("path"), text("tool")];
 
+/// The fields of a file the content engine read.
+const FILE: &[Field] = &[
+    text("container"),
+    number("depth"),
+    text("digest"),
+    text("extension"),
+    text("hash_match"),
+    text("kind"),
+    text("name"),
+    text("path"),
+    text("signed"),
+    text("signer"),
+    number("size"),
+];
+
+/// The fields of one content signature that matched a file.
+///
+/// `name` is the signature's own name, not the file's; that is the one place in this
+/// vocabulary where two subjects share a field name with different meanings, and the
+/// documentation says so.
+const FILE_MATCH: &[Field] = &[
+    number("at"),
+    text("container"),
+    text("kind"),
+    number("line"),
+    text("name"),
+    text("path"),
+    text("signed"),
+    text("signer"),
+];
+
 impl Subject {
     /// Every subject, in the order `docs/RULES.md` lists them.
-    pub const ALL: [Subject; 6] = [
+    pub const ALL: [Subject; 8] = [
         Subject::Startup,
         Subject::Process,
         Subject::Listener,
         Subject::Package,
         Subject::FileEvent,
         Subject::Agent,
+        Subject::File,
+        Subject::FileMatch,
     ];
 
     /// The stable name a pack writes.
@@ -156,6 +193,8 @@ impl Subject {
             Self::Package => "package",
             Self::FileEvent => "file-event",
             Self::Agent => "agent",
+            Self::File => "file",
+            Self::FileMatch => "file-match",
         }
     }
 
@@ -175,6 +214,8 @@ impl Subject {
             Self::Package => PACKAGE,
             Self::FileEvent => FILE_EVENT,
             Self::Agent => AGENT,
+            Self::File => FILE,
+            Self::FileMatch => FILE_MATCH,
         }
     }
 
@@ -207,7 +248,13 @@ impl Subject {
     #[must_use]
     pub fn has_source(self) -> bool {
         match self {
-            Self::Startup | Self::Process | Self::Listener | Self::Package | Self::Agent => true,
+            Self::Startup
+            | Self::Process
+            | Self::Listener
+            | Self::Package
+            | Self::Agent
+            | Self::File
+            | Self::FileMatch => true,
             Self::FileEvent => false,
         }
     }

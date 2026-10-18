@@ -321,6 +321,55 @@ pub struct PackageFact {
     pub source: String,
 }
 
+/// One file the content engine read, and what it found in it.
+///
+/// A fact about bytes, not a verdict about the machine. `matches` is empty for a file that
+/// was read and held nothing, which is a different statement from a file that was never
+/// read: `read_bytes` is `None` when only the hash was taken, and the interface says so.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FileFact {
+    /// The full path, as the walk reached it.
+    pub path: String,
+    /// The file's name without its folder.
+    pub name: String,
+    /// The extension, lowercased, when there is one.
+    pub extension: Option<String>,
+    /// Size in bytes.
+    pub size: u64,
+    /// The SHA-256 of the whole file, when it was hashed.
+    pub digest: Option<String>,
+    /// What the bytes are: `pe`, `elf`, `mach-o`, `pdf`, `ole2` or `zip`, when identified.
+    pub kind: Option<String>,
+    /// What the platform says about the signature; `not_checked` when nothing asked.
+    pub signature: SignatureStatus,
+    /// The signer's name, when the signature names one.
+    pub signer: Option<String>,
+    /// The chain of containers this file was found inside, outermost first.
+    #[serde(default)]
+    pub container: Vec<String>,
+    /// The name of the hash signature whose digest matched this file, when one did.
+    pub hash_match: Option<String>,
+    /// Every signature that matched, in the order the library holds them.
+    #[serde(default)]
+    pub matches: Vec<ContentMatch>,
+    /// How many bytes of the file the scanner actually looked at.
+    ///
+    /// Equal to `size` for a file that was read whole, less for one that was truncated by a
+    /// cap, and `None` when the file was not read at all.
+    pub read_bytes: Option<u64>,
+}
+
+/// One content signature that matched a file.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ContentMatch {
+    /// The signature's name, as its author wrote it.
+    pub name: String,
+    /// Where in the file it matched.
+    pub at: u64,
+    /// The line of the signature file it came from.
+    pub line: u32,
+}
+
 /// How a collector finished.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -452,6 +501,12 @@ pub struct Snapshot {
     /// Configurations that can run something on the person's behalf.
     #[serde(default)]
     pub agents: Vec<AgentFact>,
+    /// Files the content engine read, and what it found in them.
+    ///
+    /// Empty on a scan that did not read bytes: a deep check fills it, an inventory scan
+    /// does not, and an empty list here means "not read" rather than "nothing found".
+    #[serde(default)]
+    pub files: Vec<FileFact>,
     /// Per-collector outcomes, including the ones that could not run.
     pub collectors: Vec<CollectorStatus>,
     /// Signature database state and matches.
@@ -486,6 +541,7 @@ impl Snapshot {
             listeners: Vec::new(),
             packages: Vec::new(),
             agents: Vec::new(),
+            files: Vec::new(),
             collectors: Vec::new(),
             signatures: SignatureReport::default(),
         }

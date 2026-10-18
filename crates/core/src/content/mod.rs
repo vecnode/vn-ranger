@@ -538,6 +538,111 @@ impl Scan {
     }
 }
 
+/// What a file's first bytes say it is.
+///
+/// The identifier is a fact about the bytes, and it is what a typed signature is checked
+/// against: a `.ndb` line written for a PE file must not fire on a text file that happens to
+/// contain the same bytes. `Unknown` is not an error — a file can be anything — and a
+/// signature that targets a type is skipped rather than guessed at when the type is unknown.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FileKind {
+    /// A PE executable or DLL.
+    Pe,
+    /// An ELF executable or library.
+    Elf,
+    /// A Mach-O executable or universal binary.
+    MachO,
+    /// A PDF document.
+    Pdf,
+    /// An OLE2 compound document, which is what a legacy Office file is.
+    Ole2,
+    /// A zip archive, including the formats built on it.
+    Zip,
+    /// A gzip stream.
+    Gzip,
+    /// A 7-zip archive.
+    SevenZip,
+    /// A RAR archive.
+    Rar,
+    /// None of the above, from the bytes this build looked at.
+    Unknown,
+}
+
+impl FileKind {
+    /// The stable name a fact and a rule carry.
+    #[must_use]
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Pe => "pe",
+            Self::Elf => "elf",
+            Self::MachO => "mach-o",
+            Self::Pdf => "pdf",
+            Self::Ole2 => "ole2",
+            Self::Zip => "zip",
+            Self::Gzip => "gzip",
+            Self::SevenZip => "7z",
+            Self::Rar => "rar",
+            Self::Unknown => "unknown",
+        }
+    }
+
+    /// The signature target this kind satisfies, when the format has one.
+    #[must_use]
+    pub fn target(self) -> Option<Target> {
+        match self {
+            Self::Pe => Some(Target::Pe),
+            Self::Elf => Some(Target::Elf),
+            Self::MachO => Some(Target::MachO),
+            Self::Pdf => Some(Target::Pdf),
+            Self::Ole2 => Some(Target::Ole2),
+            Self::Zip | Self::Gzip | Self::SevenZip | Self::Rar | Self::Unknown => None,
+        }
+    }
+}
+
+/// Identify a file from its first bytes.
+///
+/// The list is deliberately short: the formats a signature targets, and the containers
+/// ranger walks. A longer list is a file-type database, and a file-type database is a
+/// dependency with a size.
+#[must_use]
+pub fn identify(bytes: &[u8]) -> FileKind {
+    if bytes.starts_with(b"MZ") {
+        return FileKind::Pe;
+    }
+    if bytes.starts_with(b"\x7fELF") {
+        return FileKind::Elf;
+    }
+    if bytes.starts_with(b"%PDF") {
+        return FileKind::Pdf;
+    }
+    if bytes.starts_with(&[0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]) {
+        return FileKind::Ole2;
+    }
+    if bytes.starts_with(b"PK\x03\x04") || bytes.starts_with(b"PK\x05\x06") {
+        return FileKind::Zip;
+    }
+    if bytes.starts_with(&[0x1f, 0x8b]) {
+        return FileKind::Gzip;
+    }
+    if bytes.starts_with(b"7z\xbc\xaf\x27\x1c") {
+        return FileKind::SevenZip;
+    }
+    if bytes.starts_with(b"Rar!\x1a\x07") {
+        return FileKind::Rar;
+    }
+    if let Some(magic) = bytes.get(..4).and_then(|head| <[u8; 4]>::try_from(head).ok()) {
+        let magic = u32::from_be_bytes(magic);
+        if matches!(
+            magic,
+            0xfeed_face | 0xfeed_facf | 0xcefa_edfe | 0xcffa_edfe | 0xcafe_babe | 0xbeba_feca
+        ) {
+            return FileKind::MachO;
+        }
+    }
+    FileKind::Unknown
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -699,5 +804,55 @@ MZ.Literal:0:0:4d5a
         let library = Library::parse(&text);
         assert_eq!(library.signatures().len(), MAX_SIGNATURES);
         assert!(library.truncated());
+    }
+
+    #[test]
+    fn the_identifier_names_the_formats_a_signature_can_target() {
+        for (bytes, kind) in [
+            (b"MZ\x90\x00".as_slice(), FileKind::Pe),
+            (b"\x7fELF\x02\x01".as_slice(), FileKind::Elf),
+            (b"%PDF-1.7".as_slice(), FileKind::Pdf),
+            (
+                [0xd0_u8, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1].as_slice(),
+                FileKind::Ole2,
+            ),
+            (b"PK\x03\x04".as_slice(), FileKind::Zip),
+            ([0x1f_u8, 0x8b, 0x08].as_slice(), FileKind::Gzip),
+            (b"7z\xbc\xaf\x27\x1c".as_slice(), FileKind::SevenZip),
+            (b"Rar!\x1a\x07\x00".as_slice(), FileKind::Rar),
+            ([0xfe_u8, 0xed, 0xfa, 0xce].as_slice(), FileKind::MachO),
+            ([0xca_u8, 0xfe, 0xba, 0xbe].as_slice(), FileKind::MachO),
+            (b"hello".as_slice(), FileKind::Unknown),
+            (b"".as_slice(), FileKind::Unknown),
+        ] {
+            assert_eq!(identify(bytes), kind, "{:?}", String::from_utf8_lossy(bytes));
+        }
+    }
+
+    #[test]
+    fn a_kind_maps_to_the_target_a_signature_declares() {
+        assert_eq!(FileKind::Pe.target(), Some(Target::Pe));
+        assert_eq!(FileKind::Ole2.target(), Some(Target::Ole2));
+        assert_eq!(
+            FileKind::Zip.target(),
+            None,
+            "a container is not a signature target"
+        );
+        assert_eq!(FileKind::Unknown.id(), "unknown");
+    }
+
+    #[test]
+    fn a_typed_signature_fires_only_on_the_kind_it_names() {
+        let library = Library::parse("pe.only:1:*:4d5a\n");
+        let pe = Layout {
+            target: FileKind::Pe.target(),
+            ..Layout::default()
+        };
+        let elf = Layout {
+            target: FileKind::Elf.target(),
+            ..Layout::default()
+        };
+        assert_eq!(library.scan(b"MZ", Some(&pe), &mut budget()).hits.len(), 1);
+        assert!(library.scan(b"MZ", Some(&elf), &mut budget()).hits.is_empty());
     }
 }

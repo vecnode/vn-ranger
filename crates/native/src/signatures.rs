@@ -84,9 +84,14 @@ pub fn load() -> (SignatureSet, SignatureReport) {
                 let forced = match extension.as_str() {
                     "hdb" => Some(HashAlgorithm::Md5),
                     "hsb" => None,
-                    "ndb" | "ldb" | "mdb" | "msb" | "imp" => {
+                    // Body signatures are read by the content engine (`content::load_library`)
+                    // rather than here: a hash is a fact about a whole file, and a pattern is a
+                    // fact about bytes inside one.
+                    "ndb" => continue,
+                    "ldb" | "mdb" | "msb" | "imp" => {
                         report.notes.push(format!(
-                            "{} uses an extended ClamAV format that this build does not read yet.",
+                            "{} uses ClamAV's logical or metadata format, which this build does \
+                             not read yet.",
                             file_name(&path)
                         ));
                         continue;

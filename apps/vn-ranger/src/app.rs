@@ -68,6 +68,9 @@ pub struct App {
     background: bool,
     /// A content scan in flight: it reads bytes, so it never runs on the frame's thread.
     content: Option<Receiver<vnr_native::contentscan::Report>>,
+    /// A deep check in flight, and the flag that asks it to stop between files.
+    deep: Option<Receiver<(vnr_native::content::Report, Vec<String>)>>,
+    deep_cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// A clean dry run in flight. The walk reads a cache that can hold ten thousand files,
     /// and a frame cannot wait for it: the window stalled while it walked, which is the one
     /// thing an inspector must never do.
@@ -161,6 +164,14 @@ impl App {
                 running: false,
                 report: None,
             },
+            deep: vnr_ui::DeepCheck {
+                folders: vnr_native::content::folders()
+                    .iter()
+                    .map(|folder| folder.display().to_string())
+                    .collect(),
+                sentence: vnr_native::content::consent_sentence(),
+                ..vnr_ui::DeepCheck::default()
+            },
         };
         let mut ui = Ui::new(&cc.egui_ctx);
         if let Some(dark) = settings.dark {
@@ -220,6 +231,8 @@ impl App {
             pack,
             pack_keys,
             content: None,
+            deep: None,
+            deep_cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             clean_job: None,
             journal_reported,
             plan,
@@ -632,6 +645,47 @@ impl App {
         self.world.notice = Some("Reading the contents of those folders.".to_owned());
     }
 
+    /// Run the content engine over the folders a person consented to.
+    ///
+    /// It reads bytes, which is the slowest thing this program can do, so it runs on a
+    /// thread of its own and a stop request is honoured between files. What it keeps is a
+    /// fact per file — path, digest, kind, the signatures that matched — and nothing else.
+    fn start_deep_check(&mut self, ctx: &egui::Context) {
+        if self.deep.is_some() {
+            return;
+        }
+        let roots = vnr_native::content::folders();
+        if roots.is_empty() {
+            self.world.notice =
+                Some("There are no folders to check: Downloads, the Desktop and the temporary folder are all absent.".to_owned());
+            return;
+        }
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let flag = std::sync::Arc::clone(&cancel);
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            let (library, notes) = vnr_native::content::load_library();
+            let (hashes, _report) = vnr_native::signatures::load();
+            let report = vnr_native::content::scan(
+                &roots,
+                &library,
+                &hashes,
+                &vnr_native::content::Limits::default(),
+                &|| flag.load(std::sync::atomic::Ordering::Relaxed),
+            );
+            let _ = sender.send((report, notes));
+            ctx.request_repaint();
+        });
+        self.deep = Some(receiver);
+        self.deep_cancel = cancel;
+        self.world.deep.running = true;
+        self.world.deep.cancelling = false;
+        self.world.deep.summary = None;
+        self.world.deep.notes.clear();
+        self.world.notice = Some("Reading the bytes of the files in those folders.".to_owned());
+    }
+
     fn start_tray(&mut self, ctx: &egui::Context) {
         if self.tray_started {
             return;
@@ -770,8 +824,60 @@ impl App {
         );
     }
 
+    /// Collect a finished deep check, if one has finished.
+    ///
+    /// The file facts join the snapshot the rules already evaluate, so a deep check produces
+    /// findings through the same engine as everything else rather than through a second path
+    /// that could disagree with it.
+    fn drain_deep(&mut self) {
+        let Some(receiver) = &self.deep else {
+            return;
+        };
+        let Ok((report, notes)) = receiver.try_recv() else {
+            return;
+        };
+        self.deep = None;
+        self.deep_cancel
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+        self.world.deep.running = false;
+        self.world.deep.cancelling = false;
+        self.world.deep.notes = notes;
+        let files = report.files.len();
+        let matched = report.matched();
+        self.world.deep.summary = Some(vnr_ui::DeepSummary {
+            files,
+            read: report.read,
+            bytes: report.bytes,
+            matched,
+            refused: report.refused.len(),
+            elapsed_ms: report.elapsed_ms,
+            cancelled: report.cancelled,
+            truncated: report.truncated,
+            signatures: report.signatures,
+            signature_refusals: report.signature_refusals,
+        });
+        if let Some(snapshot) = self.world.snapshot.as_mut() {
+            snapshot.files = report.files;
+        }
+        self.refresh_findings(true);
+        let reason = if report.cancelled {
+            "deep check stopped before it finished".to_owned()
+        } else {
+            format!(
+                "deep check read {} of {files} file(s), {} byte(s); {matched} matched a signature",
+                report.read, report.bytes
+            )
+        };
+        let _ = self.journal.record(
+            Draft::event("deep check")
+                .with_action(vnr_core::Action::Scan)
+                .with_reason(&reason),
+        );
+    }
+
     fn drain(&mut self) {
         self.drain_content();
+        self.drain_deep();
         self.drain_clean();
         let mut messages = Vec::new();
         let mut disconnected = false;
@@ -1261,6 +1367,11 @@ impl App {
             Action::RollbackPack => self.rollback_pack(),
             Action::ActivateEmbeddedPack => self.activate_embedded_pack(),
             Action::RunContentScan => self.start_content_scan(ctx),
+            Action::RunDeepCheck => self.start_deep_check(ctx),
+            Action::CancelDeepCheck => {
+                self.deep_cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+                self.world.deep.cancelling = true;
+            }
             Action::RefreshPacks => {
                 self.pack_keys =
                     vnr_native::pack::Keys::load(&vnr_native::pack::directory()).unwrap_or_default();

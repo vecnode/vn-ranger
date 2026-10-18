@@ -1458,6 +1458,105 @@ impl Ui {
         });
         ui.add_space(10.0);
         widgets::card(ui, |ui| {
+            let deep = &world.deep;
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Deep check").family(theme::semibold()));
+                widgets::badge(ui, "READS BYTES", theme::ATTENTION);
+            });
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new(deep.sentence.as_str())
+                    .size(11.0)
+                    .color(theme::muted(ui)),
+            );
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                if deep.running {
+                    if ui.button("Stop").clicked() {
+                        actions.push(Action::CancelDeepCheck);
+                    }
+                    ui.spinner();
+                    ui.label(
+                        RichText::new(if deep.cancelling {
+                            "Stopping after this file…"
+                        } else {
+                            "Reading…"
+                        })
+                        .size(11.0)
+                        .color(theme::muted(ui)),
+                    );
+                } else {
+                    let button = ui.add(egui::Button::new("Run the deep check"));
+                    if button.clicked() {
+                        actions.push(Action::RunDeepCheck);
+                    }
+                    ui.label(
+                        RichText::new("It never runs on its own, and it writes no journal line per file.")
+                            .size(10.5)
+                            .color(theme::muted(ui)),
+                    );
+                }
+            });
+            if let Some(summary) = &deep.summary {
+                ui.add_space(4.0);
+                let files = if summary.files == 1 { "file" } else { "files" };
+                let matched = if summary.matched == 1 {
+                    "1 matched a signature".to_owned()
+                } else {
+                    format!("{} matched a signature", summary.matched)
+                };
+                ui.label(
+                    RichText::new(format!(
+                        "{} {files} hashed, {} read, {} in {} ms; {matched}; {} could not be read.",
+                        summary.files,
+                        summary.read,
+                        widgets::bytes(summary.bytes),
+                        summary.elapsed_ms,
+                        summary.refused
+                    ))
+                    .size(11.0),
+                );
+                if summary.cancelled {
+                    ui.label(
+                        RichText::new(
+                            "This check was stopped, so it says nothing about the files it had not reached.",
+                        )
+                        .size(10.5)
+                        .color(theme::ATTENTION),
+                    );
+                }
+                if summary.truncated {
+                    ui.label(
+                        RichText::new("A limit stopped it: the folders hold more than one check reads. Nothing was skipped silently — the count is the limit.")
+                            .size(10.5)
+                            .color(theme::ATTENTION),
+                    );
+                }
+                if summary.signatures == 0 {
+                    ui.label(
+                        RichText::new(
+                            "No .ndb body signatures were loaded, so this check looked for hashes only.",
+                        )
+                        .size(10.5)
+                        .color(theme::muted(ui)),
+                    );
+                } else {
+                    ui.label(
+                        RichText::new(format!(
+                            "{} body signature(s) loaded, {} line(s) refused.",
+                            summary.signatures, summary.signature_refusals
+                        ))
+                        .size(10.5)
+                        .color(theme::muted(ui)),
+                    );
+                }
+            }
+            for note in &deep.notes {
+                widgets::dot_line(ui, theme::muted(ui), note);
+            }
+        });
+        ui.add_space(10.0);
+        widgets::card(ui, |ui| {
             ui.label(RichText::new("Elevation").family(theme::semibold()));
             ui.add_space(4.0);
             if world.elevated {

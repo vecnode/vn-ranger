@@ -21,19 +21,39 @@ vocabulary, one evidence ledger, and a size budget that pays for them.
   field at fault; a scan that runs out of budget says so rather than reporting a clean file.
 - **One rule table.** `Rule` is public, every built-in rule carries the ATT&CK technique it
   covers or the written reason it covers none, and `cargo xtask coverage` now counts both
-  engines: **28 rules over 14 techniques, 16 built in and 12 from the pack**, where it used
-  to list 12. `docs/RULES.md` lists the six rules with no technique and why.
+  engines: **30 rules over 14 techniques, 18 built in and 12 from the pack**, where it used
+  to list 12. `docs/RULES.md` lists the rules with no technique and why.
+- **The deep check** (`vnr_native::content`): a bounded, cancellable walk over Downloads, the
+  Desktop and the temporary folder that hashes every file, identifies what the bytes are
+  (PE, ELF, Mach-O, PDF, OLE2, zip, gzip, 7z, rar), matches hash signatures by digest *and*
+  size, and runs the body signatures over the whole file. At most 20,000 files, eight folders
+  deep, 64 MB per file read, 2 GB per run — and a file over the cap is still hashed, because
+  a digest is a fact and "not read" is not "clean". It never runs on its own, it is stoppable
+  between files, and it stores no content.
+- **Two rules that make a deep check say something without a pack**: `file.hash-match` (the
+  whole file is the file a signature names) and `file.content-match` (a pattern is at an
+  offset inside it), each naming the file, the signature and the offset.
+- **Two new subjects for pack authors**: `file` (one fact per file read: shape, digest,
+  kind, signature, container chain) and `file-match` (one fact per signature hit: name,
+  offset, line, plus the file's fields so one rule can read both). A rule about a file's
+  shape cannot fire once per signature, because the two questions are two subjects.
+- **A Settings card for it**: what would be read, the folders, the caps, a run button, a
+  stop button, and what the last check did — including a sentence when a limit stopped it or
+  a person cancelled it, because a partial check is not a clean folder.
 
 ### Changed
 
 - `builtin_ids` in `xtask` reads the published list from `vnr-core` instead of scraping
   string literals out of `rules.rs`, so the pack validator and the engine cannot disagree.
+- `signatures::load` no longer reports `.ndb` as "an extended format this build does not
+  read": the content engine reads it, and the note now covers the logical formats it does
+  not.
 
 ### Notes
 
-- The release is in progress: the bytes are readable, and the walk that feeds them is the
-  next wave. Nothing here is a claim until it is written, tested and named in the plan's
-  wave exit.
+- The release is in progress. Bytes are readable end to end; events, flows, agents and the
+  evidence layer are the next waves. A file's Authenticode signature is still `not_checked`:
+  the fact is recorded as such rather than guessed at.
 
 ## [0.1.6] - 2026-10-18
 

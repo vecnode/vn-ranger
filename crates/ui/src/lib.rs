@@ -22,7 +22,8 @@ mod clean;
 
 pub use world::{
     Action, AutostartState, CleanChoice, CleanItem, CleanReport, CleanSurface, ContentReport, ContentScan,
-    JournalRow, KeyRow, Live, PackRow, Packs, QuarantineRow, ScanState, TrayState, View, WatchReport, World,
+    DeepCheck, DeepSummary, JournalRow, KeyRow, Live, PackRow, Packs, QuarantineRow, ScanState, TrayState,
+    View, WatchReport, World,
 };
 
 use egui::{Align2, CornerRadius, FontId, Margin, RichText, Sense, vec2};
@@ -1092,6 +1093,7 @@ mod tests {
             journal_damaged: false,
             packs: Packs::default(),
             content: crate::ContentScan::default(),
+            deep: crate::DeepCheck::default(),
         }
     }
 

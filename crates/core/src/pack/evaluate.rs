@@ -18,7 +18,7 @@
 //! refuses to emit.
 
 use crate::fields::Subject;
-use crate::model::{AgentFact, AutorunFact, ListenerFact, PackageFact, ProcessFact, Snapshot};
+use crate::model::{AgentFact, AutorunFact, FileFact, ListenerFact, PackageFact, ProcessFact, Snapshot};
 use crate::pack::{Operator, Pack, Rule};
 use crate::rules::Finding;
 
@@ -288,6 +288,58 @@ pub fn agent_fact(agent: &AgentFact) -> Fact {
     fact
 }
 
+/// A file the content engine read, as a rule sees it.
+///
+/// One fact per file. What a signature matched is a different subject ([`file_match_fact`]),
+/// so a rule about a file's shape and a rule about a signature that hit it cannot double
+/// count each other.
+#[must_use]
+pub fn file_fact(file: &FileFact) -> Fact {
+    let mut fact = Fact {
+        subject: format!("file:{}", file.path),
+        label: file.path.clone(),
+        fields: Vec::new(),
+    };
+    fact.push_text("path", Some(&file.path));
+    fact.push_text("name", Some(&file.name));
+    fact.push_text("extension", file.extension.as_deref());
+    fact.push_text("digest", file.digest.as_deref());
+    fact.push_text("kind", file.kind.as_deref());
+    fact.push_text("hash_match", file.hash_match.as_deref());
+    fact.push_text("signed", Some(file.signature.id()));
+    fact.push_text("signer", file.signer.as_deref());
+    fact.push_number("size", i64::try_from(file.size).ok());
+    if !file.container.is_empty() {
+        fact.push_text("container", Some(&file.container.join(" > ")));
+        fact.push_number("depth", i64::try_from(file.container.len()).ok());
+    }
+    fact
+}
+
+/// One content signature that matched a file, as a rule sees it.
+///
+/// The file's own fields are repeated here so a rule can say "this signature, in an
+/// executable, in a user folder" and read all three from one fact.
+#[must_use]
+pub fn file_match_fact(file: &FileFact, hit: &crate::model::ContentMatch) -> Fact {
+    let mut fact = Fact {
+        subject: format!("file-match:{}#{}", file.path, hit.name),
+        label: format!("{} — {}", file.path, hit.name),
+        fields: Vec::new(),
+    };
+    fact.push_text("name", Some(&hit.name));
+    fact.push_text("path", Some(&file.path));
+    fact.push_text("kind", file.kind.as_deref());
+    fact.push_text("signed", Some(file.signature.id()));
+    fact.push_text("signer", file.signer.as_deref());
+    fact.push_number("at", i64::try_from(hit.at).ok());
+    fact.push_number("line", Some(i64::from(hit.line)));
+    if !file.container.is_empty() {
+        fact.push_text("container", Some(&file.container.join(" > ")));
+    }
+    fact
+}
+
 /// Every fact in a snapshot that a rule could be about, as rule views.
 ///
 /// The order is the snapshot's own, so two scans of an unchanged machine produce the same
@@ -303,6 +355,12 @@ pub fn facts_of(snapshot: &Snapshot, subject: Subject) -> Vec<Fact> {
         // A watched change is a fact the scan does not carry: the watcher reports them as
         // they happen. A rule about it evaluates against the views it is handed.
         Subject::FileEvent => Vec::new(),
+        Subject::File => snapshot.files.iter().map(file_fact).collect(),
+        Subject::FileMatch => snapshot
+            .files
+            .iter()
+            .flat_map(|file| file.matches.iter().map(|hit| file_match_fact(file, hit)))
+            .collect(),
     }
 }
 
@@ -835,6 +893,91 @@ mod tests {
             vec![],
         );
         assert!(evaluate_rule(&rule, &subject, &Places::new()).is_none());
+    }
+
+    #[test]
+    fn a_file_fact_carries_its_shape_and_a_match_is_its_own_subject() {
+        let file = FileFact {
+            path: "C:\\Temp\\report.docx".to_owned(),
+            name: "report.docx".to_owned(),
+            extension: Some("docx".to_owned()),
+            size: 2048,
+            digest: Some("ab".repeat(32)),
+            kind: Some("ole2".to_owned()),
+            signature: SignatureStatus::Unsigned,
+            signer: None,
+            container: vec!["word/embeddings/oleObject1.bin".to_owned()],
+            hash_match: None,
+            matches: vec![crate::model::ContentMatch {
+                name: "Win.Trojan.X-1".to_owned(),
+                at: 512,
+                line: 3,
+            }],
+            read_bytes: Some(2048),
+        };
+        let fact = file_fact(&file);
+        assert_eq!(fact.subject, "file:C:\\Temp\\report.docx");
+        assert_eq!(fact.get("signed"), Some(&Value::Text("unsigned".to_owned())));
+        assert_eq!(fact.get("depth"), Some(&Value::Number(1)));
+        assert_eq!(
+            fact.get("container"),
+            Some(&Value::Text("word/embeddings/oleObject1.bin".to_owned()))
+        );
+        assert!(
+            fact.get("at").is_none(),
+            "where a signature matched belongs to the match, not the file"
+        );
+
+        let hit = file_match_fact(&file, &file.matches[0]);
+        assert_eq!(hit.subject, "file-match:C:\\Temp\\report.docx#Win.Trojan.X-1");
+        assert_eq!(hit.get("name"), Some(&Value::Text("Win.Trojan.X-1".to_owned())));
+        assert_eq!(hit.get("at"), Some(&Value::Number(512)));
+        assert_eq!(hit.get("line"), Some(&Value::Number(3)));
+        assert_eq!(
+            hit.get("signed"),
+            Some(&Value::Text("unsigned".to_owned())),
+            "the match repeats the file's shape so one rule can read both"
+        );
+
+        let mut snapshot = Snapshot::empty(crate::model::Host::default(), false);
+        snapshot.files.push(file);
+        let pack = |subject: Subject, field: &str, value: serde_json::Value| Pack {
+            header: crate::pack::Header {
+                id: "test.file".to_owned(),
+                version: "1".to_owned(),
+                title: "File rules".to_owned(),
+            },
+            rules: vec![rule(subject, vec![predicate(field, Operator::Eq, value)], vec![])],
+        };
+        assert_eq!(
+            evaluate(
+                &pack(Subject::File, "signed", json!("unsigned")),
+                &snapshot,
+                &Places::new()
+            )
+            .len(),
+            1,
+            "a rule about the file fires once"
+        );
+        assert_eq!(
+            evaluate(
+                &pack(Subject::FileMatch, "name", json!("Win.Trojan.X-1")),
+                &snapshot,
+                &Places::new()
+            )
+            .len(),
+            1,
+            "a rule about the match fires once per hit"
+        );
+        assert!(
+            evaluate(
+                &pack(Subject::File, "name", json!("Win.Trojan.X-1")),
+                &snapshot,
+                &Places::new()
+            )
+            .is_empty(),
+            "the two subjects do not answer each other's questions"
+        );
     }
 
     #[test]
