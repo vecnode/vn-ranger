@@ -269,6 +269,7 @@ mod tests {
             pid: Some(42),
             process: Some("agent.exe".to_owned()),
             bytes,
+            beacon: None,
         }
     }
 

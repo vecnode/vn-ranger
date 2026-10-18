@@ -370,6 +370,20 @@ pub struct ContentMatch {
     pub line: u32,
 }
 
+/// The rhythm a connection is on, when repeated samples showed one.
+///
+/// The jitter is in basis points rather than as a float: a fact is compared, sorted and
+/// serialised, and an `f64` would cost the first two for no gain the third can use.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BeaconFact {
+    /// How many times the connection was seen.
+    pub contacts: usize,
+    /// The middle interval between contacts, in seconds.
+    pub interval_s: u64,
+    /// The coefficient of variation, in basis points (150 means 1.5%).
+    pub jitter_bp: u32,
+}
+
 /// One network connection the machine holds right now.
 ///
 /// A listener is a socket waiting for something; this is a socket talking to somewhere. The
@@ -396,6 +410,9 @@ pub struct FlowFact {
     /// Bytes moved, when the platform reports it per socket. Most do not, and `None` is
     /// printed as unknown rather than as zero: a zero is a measurement.
     pub bytes: Option<u64>,
+    /// The rhythm this connection is on, when repeated samples showed one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub beacon: Option<BeaconFact>,
 }
 
 /// How a collector finished.

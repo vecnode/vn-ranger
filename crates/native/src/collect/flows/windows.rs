@@ -50,6 +50,7 @@ pub fn collect(process_names: &HashMap<u32, String>) -> Outcome<FlowFact> {
                 pid,
                 process: pid.and_then(|pid| process_names.get(&pid).cloned()),
                 bytes: None,
+                beacon: None,
             });
         }
     }

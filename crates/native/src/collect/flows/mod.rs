@@ -85,6 +85,7 @@ mod tests {
             pid: Some(1),
             process: Some(process.to_owned()),
             bytes: None,
+            beacon: None,
         }
     }
 

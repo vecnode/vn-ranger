@@ -84,6 +84,7 @@ fn parse_line(
         pid,
         process: pid.and_then(|pid| process_names.get(&pid).cloned()),
         bytes: None,
+        beacon: None,
     })
 }
 
