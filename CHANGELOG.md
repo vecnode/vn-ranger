@@ -150,8 +150,17 @@ All notable changes to vn-ranger are recorded here. The format follows
   program Windows starts before sign-in (`sethc.exe`, `utilman.exe` and the rest), and
   `service.unquoted-path` is a built-in rule for a service image path with a space and no
   quotes, which Windows resolves one folder at a time.
+- **The Linux loader surfaces**: `/etc/ld.so.preload`, `modprobe.d` `install` lines, `udev`
+  rules with `RUN+=`/`PROGRAM=`, and login scripts, each parsed by a pure reader and each
+  tested against a file **captured inside Ubuntu on WSL2** — including the absences, which are
+  the ordinary case: no `ld.so.preload`, no `install` line, an empty `/etc/udev/rules.d`.
+  `crates/native/fixtures/README.md` records where every capture came from.
 - **The coverage table is generated** from the pack by `cargo xtask coverage`, and `ci` fails
   when a rule exists and the table does not mention it.
+- **A cross-target check in CI**: the Windows runner type-checks the whole workspace for
+  `x86_64-unknown-linux-gnu`. It found two real bugs on its first run — a path that only
+  resolved on Unix, and a helper only Windows called — which is the failure mode `AGENTS.md`
+  §5 describes.
 - **A rule about a subject nothing collects is now a load error.** `agent` and `file-event`
   are in the vocabulary and not in a collector, so the one rule that named `agent` was
   removed rather than left in the catalogue looking like coverage.
@@ -247,8 +256,17 @@ All notable changes to vn-ranger are recorded here. The format follows
   program Windows starts before sign-in (`sethc.exe`, `utilman.exe` and the rest), and
   `service.unquoted-path` is a built-in rule for a service image path with a space and no
   quotes, which Windows resolves one folder at a time.
+- **The Linux loader surfaces**: `/etc/ld.so.preload`, `modprobe.d` `install` lines, `udev`
+  rules with `RUN+=`/`PROGRAM=`, and login scripts, each parsed by a pure reader and each
+  tested against a file **captured inside Ubuntu on WSL2** — including the absences, which are
+  the ordinary case: no `ld.so.preload`, no `install` line, an empty `/etc/udev/rules.d`.
+  `crates/native/fixtures/README.md` records where every capture came from.
 - **The coverage table is generated** from the pack by `cargo xtask coverage`, and `ci` fails
   when a rule exists and the table does not mention it.
+- **A cross-target check in CI**: the Windows runner type-checks the whole workspace for
+  `x86_64-unknown-linux-gnu`. It found two real bugs on its first run — a path that only
+  resolved on Unix, and a helper only Windows called — which is the failure mode `AGENTS.md`
+  §5 describes.
 - **A rule about a subject nothing collects is now a load error.** `agent` and `file-event`
   are in the vocabulary and not in a collector, so the one rule that named `agent` was
   removed rather than left in the catalogue looking like coverage.

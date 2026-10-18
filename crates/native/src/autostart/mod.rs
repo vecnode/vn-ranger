@@ -89,6 +89,12 @@ pub fn disable() -> Result<(), String> {
 }
 
 /// The command line a login launch runs.
+///
+/// Only the Windows backend builds one from a registry value: the macOS and Linux backends
+/// take the executable's path directly, so on those targets this function has no caller and
+/// `-D warnings` would refuse it. Gating it is the fix the platform rules in `AGENTS.md` §5
+/// ask for: an item, not a statement, so nothing else changes shape.
+#[cfg(windows)]
 fn command_line() -> Result<String, String> {
     let exe = std::env::current_exe()
         .map_err(|error| format!("Could not find where ranger is running from: {error}"))?;

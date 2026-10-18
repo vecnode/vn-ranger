@@ -76,6 +76,14 @@ pub enum AutorunKind {
     ShellExtension,
     /// A debugger that replaces the program it is registered for.
     Debugger,
+    /// A library the dynamic loader maps into every process.
+    Preload,
+    /// A shell startup file, which runs on every login.
+    ShellStartup,
+    /// A kernel module whose load is replaced by a command.
+    KernelModule,
+    /// A udev rule that runs a program on a device event.
+    UdevRule,
     /// A kind this build does not understand yet.
     Other,
 }
@@ -95,6 +103,10 @@ impl AutorunKind {
             Self::ScheduledTask => "scheduled_task",
             Self::XdgAutostart => "xdg_autostart",
             Self::Debugger => "debugger",
+            Self::Preload => "preload",
+            Self::ShellStartup => "shell_startup",
+            Self::KernelModule => "kernel_module",
+            Self::UdevRule => "udev_rule",
             Self::NetshHelper => "netsh_helper",
             Self::PrintMonitor => "print_monitor",
             Self::TimeProvider => "time_provider",
@@ -118,6 +130,10 @@ impl AutorunKind {
             Self::ScheduledTask => "Scheduled task",
             Self::XdgAutostart => "XDG autostart",
             Self::Debugger => "Debugger",
+            Self::Preload => "Preloaded library",
+            Self::ShellStartup => "Shell startup",
+            Self::KernelModule => "Kernel module",
+            Self::UdevRule => "udev rule",
             Self::NetshHelper => "netsh helper",
             Self::PrintMonitor => "Print monitor",
             Self::TimeProvider => "Time provider",

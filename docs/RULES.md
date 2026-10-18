@@ -101,7 +101,7 @@ The values a text field takes, where the machine has a fixed set:
 |---|---|
 | `scope` | `user`, `system` |
 | `signed` | `valid`, `invalid`, `unsigned`, `unknown`, `not_checked` |
-| `kind` | `run_key`, `startup_folder`, `service`, `scheduled_task`, `netsh_helper`, `print_monitor`, `time_provider`, `screensaver`, `shell_extension`, `launch_agent`, `launch_daemon`, `systemd_unit`, `cron`, `xdg_autostart`, `debugger`, `other` |
+| `kind` | `run_key`, `startup_folder`, `service`, `scheduled_task`, `netsh_helper`, `print_monitor`, `time_provider`, `screensaver`, `shell_extension`, `launch_agent`, `launch_daemon`, `systemd_unit`, `cron`, `xdg_autostart`, `debugger`, `preload`, `shell_startup`, `kernel_module`, `udev_rule`, `other` |
 | `protocol` | `TCP`, `UDP` |
 
 A field is absent when the fact does not carry it — a startup entry with no resolvable path has
@@ -241,6 +241,13 @@ parsed by a reader with its own captured fixture, and the facts carry `kind eq
 "scheduled_task"`, the account the task runs as in `scope`, whether it hides itself in
 `hidden`, and its action in `command` and `path`. The task folder needs administrative rights
 to list, so a standard scan reports that collector as unavailable rather than as empty.
+
+On Linux the startup subject is filled by systemd units, XDG autostart entries, system cron,
+and the four surfaces that load code before anything a person clicks: `/etc/ld.so.preload`
+(one library per line, mapped into every process), `modprobe.d` `install` lines (a module's
+load replaced by a command), `udev` rules with `RUN+=` or `PROGRAM=`, and login scripts
+(`/etc/profile.d`, `~/.profile`, `~/.bashrc`, `~/.zshrc`). Each is a fact with the file that
+named it; none of them is a verdict.
 
 A key that is not there produces no entries, and that is the ordinary case: `RunOnce`,
 `RunServices` and `Notify` do not exist on a clean machine. The fixture that proves it is a
