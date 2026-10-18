@@ -112,6 +112,77 @@ fn state_label(state: &str) -> String {
     }
 }
 
+/// A steady rhythm in a process's connections: the shape a beacon has.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Beacon {
+    /// How many times the connection was seen.
+    pub contacts: usize,
+    /// The middle interval between contacts, in seconds.
+    pub interval_s: u64,
+    /// The coefficient of variation of the intervals: smaller is steadier.
+    pub jitter: f64,
+}
+
+/// The fewest contacts a rhythm can be read from.
+pub const MIN_CONTACTS: usize = 6;
+/// The shortest interval a beacon can have, in seconds.
+pub const MIN_INTERVAL_S: u64 = 20;
+/// The longest interval a beacon can have, in seconds (two hours).
+pub const MAX_INTERVAL_S: u64 = 7_200;
+/// How much the intervals may vary and still count as one rhythm.
+pub const MAX_JITTER: f64 = 0.15;
+
+/// Whether a series of observations is one steady rhythm, and what that rhythm is.
+///
+/// A pure function of the times: sorted, differences taken, the middle interval read, and
+/// the spread of the intervals compared with the middle. A scheduled client looks exactly
+/// like this, which is why a finding that uses it names the client as the benign case
+/// before it names anything else (`docs/PLAN-0.1.7.md` §4.3).
+#[must_use]
+pub fn beacon(observed: &[u64]) -> Option<Beacon> {
+    if observed.len() < MIN_CONTACTS {
+        return None;
+    }
+    let mut times = observed.to_vec();
+    times.sort_unstable();
+    times.dedup();
+    if times.len() < MIN_CONTACTS {
+        return None;
+    }
+    let mut intervals: Vec<f64> = times
+        .windows(2)
+        .filter_map(|pair| match pair {
+            [earlier, later] if later > earlier => Some((later - earlier) as f64),
+            _ => None,
+        })
+        .collect();
+    if intervals.len() < MIN_CONTACTS - 1 {
+        return None;
+    }
+    intervals.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let median = intervals[intervals.len() / 2];
+    if !(MIN_INTERVAL_S as f64..=MAX_INTERVAL_S as f64).contains(&median) {
+        return None;
+    }
+    let mean = intervals.iter().sum::<f64>() / intervals.len() as f64;
+    if mean <= 0.0 {
+        return None;
+    }
+    let variance = intervals
+        .iter()
+        .map(|interval| (interval - mean) * (interval - mean))
+        .sum::<f64>()
+        / intervals.len() as f64;
+    let jitter = variance.sqrt() / mean;
+    if jitter > MAX_JITTER {
+        return None;
+    }
+    Some(Beacon {
+        contacts: times.len(),
+        interval_s: median.round().max(0.0) as u64,
+        jitter,
+    })
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -184,5 +255,47 @@ mod tests {
         let text = zeek(&[], 1);
         assert!(text.contains("#fields"));
         assert_eq!(text.lines().count(), 6);
+    }
+
+    #[test]
+    fn a_steady_rhythm_is_a_beacon_and_a_noisy_one_is_not() {
+        let steady: Vec<u64> = (0..10).map(|index| 1_700_000_000 + index * 60).collect();
+        assert_eq!(steady.len(), 10);
+        let found = beacon(&steady).expect("a 60 s rhythm is a beacon");
+        assert_eq!(found.interval_s, 60);
+        assert_eq!(found.contacts, 10);
+        assert!(found.jitter < 0.01);
+
+        let noisy: Vec<u64> = vec![
+            1_700_000_000,
+            1_700_000_030,
+            1_700_000_120,
+            1_700_000_150,
+            1_700_000_240,
+            1_700_000_300,
+        ];
+        assert!(beacon(&noisy).is_none(), "a wobbling series is not a rhythm");
+    }
+
+    #[test]
+    fn a_beacon_needs_contacts_inside_the_interval_window() {
+        assert!(beacon(&[1, 61, 121, 181, 241]).is_none(), "five is too few");
+        let slow: Vec<u64> = (0..8).map(|index| 1_700_000_000 + index * 20).collect();
+        assert!(beacon(&slow).is_some(), "20 s is the shortest interval");
+        let too_slow: Vec<u64> = (0..8).map(|index| 1_700_000_000 + index * 7_201).collect();
+        assert!(beacon(&too_slow).is_none(), "two hours is the longest");
+        let duplicates = vec![1_700_000_000; 8];
+        assert!(beacon(&duplicates).is_none(), "one instant is not a series");
+    }
+
+    #[test]
+    fn unsorted_observations_are_sorted_before_they_are_read() {
+        let mut times: Vec<u64> = (0..8).map(|index| 1_700_000_000 + index * 30).collect();
+        times.reverse();
+        assert!(beacon(&times).is_some());
+        let mut jittered = times.clone();
+        jittered[0] += 1;
+        let found = beacon(&jittered).expect("one second of drift is still a rhythm");
+        assert!((found.jitter - 0.005).abs() < 0.01, "{}", found.jitter);
     }
 }
