@@ -558,7 +558,7 @@ ranger":
 
 ## 8. The waves
 
-**Progress, 2026-10-19.** Built on `dev`, in order, each with its tests and a green
+**Progress, 2026-10-20.** Built on `dev`, in order, each with its tests and a green
 `cargo xtask ci`:
 
 | Wave | Built | Commit |
@@ -568,10 +568,15 @@ ranger":
 | 3 | The connection table with process ownership (Windows, Linux); the `flow` subject and its join; one rule; the Zeek export; the beaconing analytic and its bounded sampler; the poll that feeds it and `flow.beaconing` | `54265cb`, `8066811`, `c5a2e7c`, `d3f3027` |
 | 5 | The journal hash chain with its three-state verdict and the Actions-view line; the timeline CSV export | `9d76250`, `4457935` |
 | 4 | The skill reader: `SKILL.md` frontmatter (an unclosed header is body, not metadata) and the five capability kinds with the line that proved each; the collector that finds the folders, the package digest, the matrix as five booleans, and `agent.skill-executes-networked` | `0a2135a`, `9127da8` |
+| 1 | Containers read in memory (zip and OLE, three deep, ratio-capped) and the structural facts from `object` (sections, entropy, imports, family hash, overlay, signature blob) with `file.writable-executable-section` | `0f60858`, `53362ac`, `ecdf6d2` |
+| 5 | The triage folder: snapshot, findings, timeline, a README that repeats every collector's status, and a manifest written last | `ecdf6d2` |
+| — | The owner's order of 2026-10-20: grouped processes, the startup verb (add and remove through the typed path), `--replace`, three scan sizes and the Clean view | `685f72b`, `c609496`, `e144797`, `d814ef5`, `310cd41`, `89b07e5`, `3f372f4`, `c348911` |
 
-**Not started:** containers and structural facts (Wave 1 — the §14 dependencies are approved and unbuilt (see §14.4));
-events (Wave 2 — needs `evtx`); the rest of agents (Wave 4: suite provenance and the
-baseline diff); the triage package and the sweep (Wave 5).
+**Not started, and named in [`NEXT.md`](NEXT.md) §8 with its reason:** event records
+(Wave 2 — `evtx` measured at 34 crates with default features off), the Authenticode digest,
+the sweep, the Startup folder's `.lnk`, the action path's second reviewer, `yara-x` and the
+`bodyfile`. The rest of agents (Wave 4: suite provenance and the baseline diff) is also
+unbuilt and listed there.
 **Beaconing is closed:** the two-second poll calls `Sampler::observe` for every connection it
 reads, the scan's flows are stamped with what the sampler saw, and `flow.beaconing` fires on
 a steady rhythm. Without a series there is nothing to stamp, so a one-shot scan reports no

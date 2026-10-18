@@ -62,6 +62,49 @@ vocabulary, one evidence ledger, and a size budget that pays for them.
 - **A Settings card for it**: what would be read, the folders, the caps, a run button, a
   stop button, and what the last check did — including a sentence when a limit stopped it or
   a person cancelled it, because a partial check is not a clean folder.
+- **A rhythm in a connection**: the two-second poll reads the connection table and remembers
+  when each process was seen talking to each peer; a scan is stamped with what the sampler
+  saw, and `flow.beaconing` reports the interval, the spread in basis points and the number of
+  contacts. **One rhythm is one finding**, however many sockets a client holds to that peer,
+  and a poll that stops forgets, because a rhythm is a claim about now.
+- **The skill inventory** (`vnr_native::collect::agentstack::skills`): a `SKILL.md` found in
+  the folders a client keeps one is one fact — the package's own files, the five capabilities
+  with the file and line that proved each, and one digest of the whole folder (the
+  `sha256sum` text, hashed again). `agent.skill-executes-networked` reads that matrix; the
+  `agent` subject gains the five booleans, present only where a file proved them.
+- **Containers, read without unpacking** (`vnr_native::content::containers`): zip-shaped and
+  OLE containers are opened in memory and each member is scanned as a file of its own
+  (`outer.zip!inside/payload.txt`, with its container chain), three deep. Bounded at 32
+  members, 16 MB a member, 64 MB a container, and a member claiming more than 200 bytes per
+  byte it occupies is not read — a decompression bomb has that shape.
+- **Structural facts** (`vnr_native::structs`): section count, writable-and-executable
+  sections, the highest section entropy, import count, the import (family) hash, bytes after
+  the last section, and whether an Authenticode blob is attached — recorded on every file and
+  every container member, and exposed to pack rules as `sections`, `rwx`, `entropy`,
+  `imports`, `overlay` and `imphash` on the `file` subject.
+- **`file.writable-executable-section`**: an executable whose header says a section can be
+  written to and run, with the JIT compiler and the self-extracting installer named as the
+  benign case. 34 rules in total.
+- **The triage folder** (`vnr_native::export`): `<data>/exports/triage-<utc>/` with
+  `snapshot.json`, `findings.md`, `timeline.csv`, a README that repeats every collector's own
+  status, and a `manifest.txt` written last so it names the hash and size of every file that
+  is there.
+- **Three scan sizes**: `Quick` (what is running and what starts), `Standard` (everything the
+  read-only collectors reach), and `Deep` (and then the bytes of the programs that start on
+  their own). The profile is recorded in every snapshot, and a profile chooses which
+  collectors run rather than how honestly each reports.
+- **Processes grouped by name**, with a `Group` dropdown offering `Name`, `None` and `Parent`;
+  the keyboard walks what is on screen, and a selection made elsewhere opens its own group.
+- **A startup entry can be removed and added** (`vnr_native::startup`): `HKCU`'s `Run` and
+  `RunOnce`, identified by the scan's entry rather than by a path, journalled before the act,
+  with the previous value kept so it can be put back. A machine-wide entry is refused with the
+  reason, because changing it needs an administrator and there is no standing elevation.
+- **A Clean view** that measures the allowlisted places and offers nothing to delete: "not
+  measured", "none here" and a number are three different answers, and the removal stays where
+  it was, in the Actions card with its totals and its journal.
+- **`--replace`**: ask a running window to stop, wait for the instance lock, and take over —
+  a flag rather than the default, because ending a window somebody is reading is not
+  something a shortcut should do quietly.
 
 ### Changed
 
@@ -70,12 +113,19 @@ vocabulary, one evidence ledger, and a size budget that pays for them.
 - `signatures::load` no longer reports `.ndb` as "an extended format this build does not
   read": the content engine reads it, and the note now covers the logical formats it does
   not.
+- A status sentence is a message in the corner that goes away by itself, not a line under
+  the page header that stays for the session. A message card wraps, and takes at most half
+  the window's height with a scrollbar past that.
+- The data directory falls back to the local application folder when the roaming one refuses
+  a create, and says which folder it is using rather than leaving a person to find out.
 
 ### Notes
 
-- The release is in progress. Bytes are readable end to end; events, flows, agents and the
-  evidence layer are the next waves. A file's Authenticode signature is still `not_checked`:
-  the fact is recorded as such rather than guessed at.
+- The release is in progress. Bytes, connections and agents are readable end to end; event
+  records are **not** in this release, and `docs/NEXT.md` §8 says why and what each one would
+  take — together with the Authenticode digest, the sweep, the Startup folder's `.lnk`, and
+  the second reviewer the action path requires. A file's Authenticode signature is still
+  `not_checked`: the fact is recorded as such rather than guessed at.
 
 ## [0.1.6] - 2026-10-18
 
