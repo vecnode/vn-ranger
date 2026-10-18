@@ -23,6 +23,7 @@ pub mod rules;
 pub mod schedule;
 pub mod sigma;
 pub mod signature;
+pub mod skills;
 pub mod time;
 pub mod timeline;
 pub mod watch;
@@ -43,5 +44,6 @@ pub use rules::{
     evaluate, prune_suppressions, sort_findings,
 };
 pub use signature::{HashAlgorithm, HashSignature, SignatureSet};
+pub use skills::{Capability, Kind as SkillKind, SkillMeta, capabilities, read_meta};
 pub use timeline::{CSV_HEADER, EventKind, Timeline, TimelineEvent, to_csv};
 pub use watch::{Debounce, FileTouch};
