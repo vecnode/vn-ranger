@@ -214,10 +214,11 @@ impl Sampler {
     /// and the oldest series goes first, so memory follows the recent table rather than the
     /// whole day's traffic.
     pub fn observe(&mut self, key: &str, now: u64) {
-        if !self.series.contains_key(key) && self.series.len() >= MAX_SERIES {
-            if let Some(oldest) = self.series.keys().next().cloned() {
-                self.series.remove(&oldest);
-            }
+        if !self.series.contains_key(key)
+            && self.series.len() >= MAX_SERIES
+            && let Some(oldest) = self.series.keys().next().cloned()
+        {
+            self.series.remove(&oldest);
         }
         let series = self.series.entry(key.to_owned()).or_default();
         if series.last() == Some(&now) {
