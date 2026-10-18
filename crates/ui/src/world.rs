@@ -494,6 +494,11 @@ pub struct World {
     pub quarantine: Vec<QuarantineRow>,
     /// What the last clean dry run found, and nothing else: the walk writes no file.
     pub clean: Option<CleanReport>,
+    /// Whether a dry run is walking the folders right now.
+    ///
+    /// The walk reads a cache with ten thousand files in it, which is not work a frame can
+    /// wait for; the card says "counting" while a thread does it.
+    pub clean_running: bool,
     /// The journal's newest entries, newest first.
     pub journal: Vec<JournalRow>,
     /// Whether the journal reports a damaged line or a torn tail.

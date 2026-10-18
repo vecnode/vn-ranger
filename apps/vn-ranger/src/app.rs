@@ -14,6 +14,13 @@ use crate::worker::{self, ScanMessage};
 /// How often the soak recorder appends a sample.
 const SOAK_INTERVAL_SECONDS: u64 = 60;
 
+/// What one dry run sends back from its thread: the report the interface draws, and the walk
+/// itself, which is the only list the action path may remove from.
+type CleanJob = (
+    vnr_ui::CleanReport,
+    Vec<(vnr_core::action::Surface, vnr_native::clean::Preview)>,
+);
+
 /// The eframe application.
 pub struct App {
     ui: Ui,
@@ -61,6 +68,10 @@ pub struct App {
     background: bool,
     /// A content scan in flight: it reads bytes, so it never runs on the frame's thread.
     content: Option<Receiver<vnr_native::contentscan::Report>>,
+    /// A clean dry run in flight. The walk reads a cache that can hold ten thousand files,
+    /// and a frame cannot wait for it: the window stalled while it walked, which is the one
+    /// thing an inspector must never do.
+    clean_job: Option<Receiver<CleanJob>>,
     /// The soak recorder, when `--soak` asked for one.
     soak: Option<vnr_native::soak::Soak>,
     /// What the shell has done since the last sample.
@@ -140,6 +151,7 @@ impl App {
             watch_extra,
             quarantine: Vec::new(),
             clean: None,
+            clean_running: false,
             journal: Vec::new(),
             journal_damaged: false,
             packs: vnr_ui::Packs::default(),
@@ -208,6 +220,7 @@ impl App {
             pack,
             pack_keys,
             content: None,
+            clean_job: None,
             journal_reported,
             plan,
             schedule_seed,
@@ -517,46 +530,71 @@ impl App {
     /// resets the person's ticks; keeping them after a clean is what lets an entry they had
     /// unticked stay unticked instead of quietly returning to a default.
     fn refresh_clean(&mut self, fresh: bool) {
-        let now = now_unix();
-        let cancel = || false;
+        if self.clean_job.is_some() {
+            // A walk is already running; a second one would only compete with it.
+            return;
+        }
         if fresh {
             self.clean_run = self.clean_run.saturating_add(1);
         }
-        self.clean_previews.clear();
-        let mut report = vnr_ui::CleanReport {
-            run: self.clean_run,
-            ..vnr_ui::CleanReport::default()
-        };
-        for surface in vnr_core::action::Surface::ALL {
-            let roots = vnr_native::clean::roots(surface);
-            if roots.is_empty() {
-                // A surface with no folder on this machine is not offered: the list is
-                // what exists here, not what the table names.
-                continue;
+        let run = self.clean_run;
+        let now = now_unix();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let cancel = || false;
+            let mut report = vnr_ui::CleanReport {
+                run,
+                ..vnr_ui::CleanReport::default()
+            };
+            let mut previews = Vec::new();
+            for surface in vnr_core::action::Surface::ALL {
+                let roots = vnr_native::clean::roots(surface);
+                if roots.is_empty() {
+                    // A surface with no folder on this machine is not offered: the list is
+                    // what exists here, not what the table names.
+                    continue;
+                }
+                let preview = vnr_native::clean::preview_roots(surface, &roots, now, &cancel);
+                report.cancelled |= preview.cancelled;
+                report.surfaces.push(vnr_ui::CleanSurface {
+                    id: surface.id().to_owned(),
+                    label: surface.label().to_owned(),
+                    roots: roots.len(),
+                    opt_in: surface.is_opt_in(),
+                    items: preview
+                        .items
+                        .iter()
+                        .map(|item| vnr_ui::CleanItem {
+                            path: item.path.display().to_string(),
+                            bytes: item.bytes,
+                            is_dir: item.is_dir,
+                        })
+                        .collect(),
+                    skipped_young: preview.skipped_young,
+                    skipped_links: preview.skipped_links,
+                    skipped_devices: preview.skipped_devices,
+                    skipped_excluded: preview.skipped_excluded,
+                });
+                previews.push((surface, preview));
             }
-            let preview = vnr_native::clean::preview_roots(surface, &roots, now, &cancel);
-            report.cancelled |= preview.cancelled;
-            report.surfaces.push(vnr_ui::CleanSurface {
-                id: surface.id().to_owned(),
-                label: surface.label().to_owned(),
-                roots: roots.len(),
-                opt_in: surface.is_opt_in(),
-                items: preview
-                    .items
-                    .iter()
-                    .map(|item| vnr_ui::CleanItem {
-                        path: item.path.display().to_string(),
-                        bytes: item.bytes,
-                        is_dir: item.is_dir,
-                    })
-                    .collect(),
-                skipped_young: preview.skipped_young,
-                skipped_links: preview.skipped_links,
-                skipped_devices: preview.skipped_devices,
-                skipped_excluded: preview.skipped_excluded,
-            });
-            self.clean_previews.push((surface, preview));
-        }
+            let _ = sender.send((report, previews));
+        });
+        self.clean_job = Some(receiver);
+        self.world.clean_running = true;
+    }
+
+    /// Take a finished dry run, if one has finished.
+    fn drain_clean(&mut self) {
+        let Some(receiver) = &self.clean_job else {
+            return;
+        };
+        let Ok((report, previews)) = receiver.try_recv() else {
+            return;
+        };
+        self.clean_job = None;
+        self.world.clean_running = false;
+        self.clean_run = report.run;
+        self.clean_previews = previews;
         self.world.clean = Some(report);
     }
 
@@ -734,6 +772,7 @@ impl App {
 
     fn drain(&mut self) {
         self.drain_content();
+        self.drain_clean();
         let mut messages = Vec::new();
         let mut disconnected = false;
         if let Some(receiver) = &self.receiver {

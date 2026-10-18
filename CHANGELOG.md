@@ -95,6 +95,14 @@ All notable changes to vn-ranger are recorded here. The format follows
 - `--diagnose` prints the folder, whether this program can write in it, whether the journal
   opens, which pack is loaded and how many keys are trusted — facts that were checked at that
   moment, so a refusal can be quoted rather than described.
+- **The clean dry run no longer freezes the window.** The walk moved to its own thread: the
+  button reads "Counting…", a spinner turns beside it, and the rest of the window keeps
+  drawing while a cache with ten thousand files in it is counted. A second click while a
+  walk is running is ignored rather than queued.
+- **The clean list says what would go, more precisely**: each surface row now reads "1,204
+  files · 3.2 GB in 4 folders · 6 empty folders · Kept 40 too new, 3 links", with the
+  Show/Hide control beside the name it opens instead of floating to the right, and the
+  "off by default" badge on the right where a badge belongs.
 - The live indicator toggled once per poll, which reads as a metronome and keeps looking
   alive after the thread that feeds it has stopped. It now flashes for 220 ms as each
   poll arrives, stays quietly lit in between, and turns amber after three missed beats.
@@ -201,6 +209,14 @@ All notable changes to vn-ranger are recorded here. The format follows
 - `--diagnose` prints the folder, whether this program can write in it, whether the journal
   opens, which pack is loaded and how many keys are trusted — facts that were checked at that
   moment, so a refusal can be quoted rather than described.
+- **The clean dry run no longer freezes the window.** The walk moved to its own thread: the
+  button reads "Counting…", a spinner turns beside it, and the rest of the window keeps
+  drawing while a cache with ten thousand files in it is counted. A second click while a
+  walk is running is ignored rather than queued.
+- **The clean list says what would go, more precisely**: each surface row now reads "1,204
+  files · 3.2 GB in 4 folders · 6 empty folders · Kept 40 too new, 3 links", with the
+  Show/Hide control beside the name it opens instead of floating to the right, and the
+  "off by default" badge on the right where a badge belongs.
 - The live indicator toggled once per poll, which reads as a metronome and keeps looking
   alive after the thread that feeds it has stopped. It now flashes for 220 ms as each
   poll arrives, stays quietly lit in between, and turns amber after three missed beats.

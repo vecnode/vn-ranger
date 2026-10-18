@@ -1087,6 +1087,7 @@ mod tests {
             watch_extra: Vec::new(),
             quarantine: Vec::new(),
             clean: None,
+            clean_running: false,
             journal: Vec::new(),
             journal_damaged: false,
             packs: Packs::default(),

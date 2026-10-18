@@ -265,13 +265,21 @@ fn header(ui: &mut egui::Ui, world: &World, actions: &mut Vec<Action>) {
              counts them; nothing moves until you say so.",
         );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let label = if world.clean.is_some() {
+            if world.clean_running {
+                ui.spinner();
+            }
+            let label = if world.clean_running {
+                "Counting…"
+            } else if world.clean.is_some() {
                 "Run again"
             } else {
                 "Dry run"
             };
             if ui
-                .add(egui::Button::new(RichText::new(label).size(11.5)))
+                .add_enabled(
+                    !world.clean_running,
+                    egui::Button::new(RichText::new(label).size(11.5)),
+                )
                 .on_hover_text(
                     "Walk the allowlisted folders and count what is past each surface's age. \
                      This writes nothing.",
@@ -314,23 +322,26 @@ fn surface_row(ui: &mut egui::Ui, surface: &CleanSurface, state: &mut CleanState
             if check.changed() {
                 state.set_surface(surface, on);
             }
-            if surface.opt_in {
-                widgets::badge(ui, "off by default", theme::ATTENTION);
+            // The list's control sits beside the name it opens, where the eye already is.
+            // Right-aligned it looked like a stray link in the middle of the row, and a row
+            // of five of them read as a column of centred text rather than as controls.
+            if has_items {
+                let open = state.open.contains(&surface.id);
+                let label = if open {
+                    "Hide".to_owned()
+                } else {
+                    format!("Show {}", count(surface.entries()))
+                };
+                if ui
+                    .add(egui::Button::new(RichText::new(label).size(10.5)).frame(false))
+                    .clicked()
+                {
+                    state.toggle_open(&surface.id);
+                }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if has_items {
-                    let open = state.open.contains(&surface.id);
-                    let label = if open {
-                        "Hide".to_owned()
-                    } else {
-                        format!("Show {}", count(surface.entries()))
-                    };
-                    if ui
-                        .add(egui::Button::new(RichText::new(label).size(11.0)).frame(false))
-                        .clicked()
-                    {
-                        state.toggle_open(&surface.id);
-                    }
+                if surface.opt_in {
+                    widgets::badge(ui, "off by default", theme::ATTENTION);
                 }
             });
         });
@@ -353,11 +364,24 @@ fn detail(surface: &CleanSurface) -> String {
         return "Nothing here is old enough to offer.".to_owned();
     }
     let folders = plural(surface.roots, "folder", "folders");
-    format!(
-        "{} in {folders} · {}",
-        plural(surface.entries(), "entry", "entries"),
-        widgets::bytes(surface.bytes())
-    )
+    let files = plural(
+        surface.items.iter().filter(|item| !item.is_dir).count(),
+        "file",
+        "files",
+    );
+    let folders_found = surface.items.iter().filter(|item| item.is_dir).count();
+    let mut line = format!("{files} · {} in {folders}", widgets::bytes(surface.bytes()));
+    if folders_found > 0 {
+        line.push_str(&format!(
+            " · {} empty",
+            plural(folders_found, "folder", "folders")
+        ));
+    }
+    let kept = surface.kept_sentence();
+    if !kept.is_empty() {
+        line.push_str(&format!(" · {kept}"));
+    }
+    line
 }
 
 fn entries(ui: &mut egui::Ui, surface: &CleanSurface, state: &mut CleanState) {
