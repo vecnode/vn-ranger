@@ -824,7 +824,7 @@ release turns into `●`; this table is rewritten at that tag, not before it.
 | Processes, parent, command line | ● `sysinfo` | ● `sysinfo` | ● `sysinfo` |
 | Binary hash | ● SHA-256 | ● SHA-256 | ● SHA-256 |
 | Signature / provenance | ○ v0.2 (WinVerifyTrust, cache-only) | ○ v0.2 (`codesign` / Security framework) | ◐ package owner, later |
-| Autoruns | ◐ HKCU/HKLM Run, Startup, services; tasks, WMI, IFEO, COM not yet | ◐ LaunchAgents/Daemons; login items, periodic and cron not yet | ◐ systemd units, system cron, XDG; user crontabs, rc files, `ld.so.preload` not yet |
+| Autoruns | ◐ 21 registry surfaces (Run, RunOnce, Winlogon, `AppInit_DLLs`, IFEO, Active Setup, `ServiceDll`, print monitors, LSA packages, netsh helpers, screensaver, time providers, COM in-process servers, shell extensions), scheduled tasks when elevated, both Startup folders; WMI and kernel drivers not read | ◐ LaunchAgents/Daemons, `periodic`, system crontab, `ScriptingAdditions`, Folder Actions; login items not read, and the loader parsers have no captured fixture yet | ◐ systemd units, system cron, XDG autostart, `ld.so.preload`, `modprobe.d`, udev rules, login scripts; user crontabs and `at` jobs need elevation |
 | Listeners → process | ● IP helper via `netstat2` | ○ no safe, C-free path yet | ● `/proc/net` + fd inode |
 | Installed packages | ◐ registry uninstall keys; MSIX not yet | ◐ Applications, Homebrew; receipts not yet | ◐ dpkg, pacman; Snap/Flatpak not yet |
 | File-change watch | ● ReadDirectoryChangesW | ● kqueue | ● inotify |
@@ -1055,7 +1055,7 @@ part that exists):
 | 2 Quarantine and cleaning | quarantine with a manifest, verified restore, irreversible purge, all four acts journaled, the allowlist walk with preview and removal, the clean preview (a dry run, per-surface totals, per-item selection, one confirmation naming them), the language audit as a check, the Actions view, the quarantine entry point, the typed-`DELETE` dialog | the data-directory size in Settings; the second reviewer on every deletion path, which is a process row and not code |
 | 3 Resident | the schedule (six hours ±10 %, seeded jitter), resume detection, a scan on resume, the tray and its menu (open, scan now, pause an hour, quit), "no tray" as a state with a reason, the pause it offers in Settings, close-to-tray off by default with a quit that still quits, opt-in autostart (one `HKCU\...\Run` value, one LaunchAgent plist, one desktop file; written idempotently, removed by name only, shown with its path, a missing entry a success), activation through the `wake` file (a second launch raises the running window and exits; a stale file is cleared at start) and `--background` for the login launch | the soak recorder, the battery preference |
 | 4 Packs | the pack schema and its validator (a closed subject/operator vocabulary, a **typed** per-subject field table, `benign` required, `attention` as the ceiling, the six limits, and every refusal naming its rule, its line and what to write instead), the **matcher** (a rule and a fact view in, a `Finding` out: `all`/`any`, text compared case-insensitively, an absent field matching nothing, `glob` as a two-pointer walk rather than a regex, `under` as a directory relationship, `{TEMP}`-style places resolved by the caller so the core stays IO-free, and evidence naming the observed value), signature verification (minisign, detached, before a byte is parsed), the first-party pack (`packs/ranger.core.json`, checked in `ci` by the same validator, **compiled in with `include_str!`**), `docs/RULES.md` (the authoring guide: subjects, field kinds, places, operators, the six limits, refusals, and the Sigma mapping), the `active.json` record, the trust store (`packs/keys.json`), **activation and rollback with their journal entries** (`previous.json` written first, so a crash leaves a way back, and a rollback that touches no other file), **the Rule packs page** (the loaded pack and its key, the packs in the folder with what verification says about each, keys added behind a typed fingerprint and removed by fingerprint — which unloads what they signed), **the optional `content-scan` feature** (off in the default build, proved by `cargo xtask ci` with `cargo tree`; the consent sentence names the folders, the file cap and the depth; no content is stored), and **the Sigma importer** (a restricted YAML reader that refuses anchors, aliases, tags and multi-document files; a mapping for `Image`, `CommandLine` and `User` with three modifiers; everything else counted by reason; the output has to be signed before it is active) | the content scan\u2019s consent screen in the window (the engine and the sentence exist; the button that asks does not), the coverage table generated from the packs, and a deeper Sigma mapping |
-| 5 Coverage | **the Windows registry surface table**: 13 surfaces read through one `KeyReader` trait and one parser, so every surface has a captured fixture that runs on any host — Run/RunOnce/RunServices in both views, Winlogon `Shell`/`Userinit`/`Notify`, `AppInit_DLLs`, IFEO `Debugger`, Active Setup `StubPath` and `ServiceDll`; a service DLL, a netsh helper, a print monitor, a time provider and a screenshot saver in a user-writable folder are shipped rules with a positive and a negative case; scheduled tasks are read from their XML by a fixture-tested parser and report that the folder needs elevation rather than claiming there are none; absent keys are an absence rather than an error; the coverage table is generated by `cargo xtask coverage` and `ci` fails when it drifts; a rule about a subject nothing collects is a load error; the agent stack is read from `authorized_keys`, `~/.ssh/rc`, `ProxyCommand`/`LocalCommand` and an MCP client's `mcpServers`, with the `agent` subject now loadable | WMI, the macOS and Linux surfaces, the agent-stack files, COM `InprocServer32`, shell extensions, the accessibility swap, Print Monitors, LSA packages, netsh helpers, the screensaver and the time providers, and a positive and a negative fixture per rule. **The fixtures for macOS and Linux have to be captured on those systems**; inventing one is the thing this repository forbids, so a surface without a capture ships without a rule rather than with a made-up one |
+| 5 Coverage | **the Windows registry surface table**: 13 surfaces read through one `KeyReader` trait and one parser, so every surface has a captured fixture that runs on any host — Run/RunOnce/RunServices in both views, Winlogon `Shell`/`Userinit`/`Notify`, `AppInit_DLLs`, IFEO `Debugger`, Active Setup `StubPath` and `ServiceDll`; a service DLL, a netsh helper, a print monitor, a time provider and a screenshot saver in a user-writable folder are shipped rules with a positive and a negative case; scheduled tasks are read from their XML by a fixture-tested parser and report that the folder needs elevation rather than claiming there are none; absent keys are an absence rather than an error; the coverage table is generated by `cargo xtask coverage` and `ci` fails when it drifts; a rule about a subject nothing collects is a load error; the agent stack is read from `authorized_keys`, `~/.ssh/rc`, `ProxyCommand`/`LocalCommand` and an MCP client's `mcpServers`, with the `agent` subject now loadable; the COM in-process servers, a thousand classes at a time with the cap stated; the macOS loader surfaces written and **compile-checked for `x86_64-apple-darwin` in `ci`**, with captures owed | WMI subscriptions (the owner dropped this row from 0.1.6; §14.2 records it and M6 carries it), **captured macOS fixtures** for the parsers that are written and compile-checked, user `crontab`/`at` jobs on Linux (they need elevation), and a positive and a negative fixture for the rules still to be written. The Linux fixtures are captures from a real Ubuntu on WSL2, not constructions; the macOS ones are owed, and inventing them is the thing this repository forbids — a surface without a capture ships without a rule rather than with a made-up one |
 
 Two deviations from what was written below are recorded in §6.10 and §7 rather than
 silently taken: the link rule is about the acted entry and not its ancestors (macOS
@@ -1226,7 +1226,32 @@ in the §6.10 table, deleting a file the running system holds mapped, automatic 
 quarantine, macOS login items (needs a new Objective-C wrapper), a network lookup, a
 model, and self-update.
 
-### M6 — v0.2.0, Distribution (minor)
+### M6 — v0.1.7, Coverage completed (patch)
+
+The release that finishes what wave 5 could not: the rows that need a machine this project
+does not have, and the row the owner dropped from 0.1.6.
+
+**What 0.1.6 already carries toward it**, so this is an increment and not a rewrite: the
+Windows registry table (21 surfaces, one `KeyReader`), scheduled tasks, the Linux collector
+with captured fixtures from a real Ubuntu, the four loader surfaces, the agent stack, the
+macOS loader parsers (compile-checked for `x86_64-apple-darwin` in `ci`), twelve pack rules
+over eleven techniques with a generated coverage table, the optional content scan behind its
+consent screen, and the one act-and-record path that everything destructive goes through.
+
+| # | Work | Where | Done when |
+|---|---|---|---|
+| 1 | **WMI subscriptions**, dropped from 0.1.6 by the owner (`§14.2`) | `native/src/collect/wmi/` | The `wmi` crate is a decision with a reason; a subscription is a fact with its consumer named; and the collector says **unavailable** without elevation rather than empty. It is not shipped until a machine can show it working |
+| 2 | **macOS captures**: `periodic`, the system crontab, `ScriptingAdditions`, Folder Actions, and the launchd plists already read | `crates/native/fixtures/macos/` | Every macOS parser has a **captured** fixture from a real Mac, the way the Linux ones came from Ubuntu on WSL2; until then the collector's status says the captures are owed |
+| 3 | The coverage table for the waves' rules, and a rule per surface where one is honest | `packs/ranger.core.json`, `docs/RULES.md` | Every shipped rule has a positive and a negative case and a technique id; the table stays generated |
+| 4 | The 24-hour soak on the released binary, published | `docs/BENCHMARKS.md` | The §11 budgets hold over a day with the configuration a person leaves open, and the numbers are in the file with the build they were taken on |
+| 5 | A second reviewer on every deletion path | process | The traversal table is written from §6.10 by the second reviewer, without reading the first's tests |
+
+**Exit for 0.1.7:** a Mac has captured the macOS fixtures, WMI is either shipped with a reason
+or still refused with one, the coverage table is generated from a pack that covers the
+surfaces in §7, and the soak numbers are published. If a row cannot be reached, it is named in
+the release notes and in §7, exactly as this release does.
+
+### M7 — v0.2.0, Distribution (minor)
 
 This is deliberately a minor release, not another 0.1.x. It is held until the 0.1.x line
 has settled; it is not part of that line.
@@ -1240,7 +1265,7 @@ has settled; it is not part of that line.
   the application; no unsigned asset is published; the keys and the release process are
   documented.
 
-### M7 — v1.0.0, Deep and done
+### M8 — v1.0.0, Deep and done
 
 - External security audit, reproducible builds, accessibility pass, benchmarks, and
   complete documentation.
@@ -1494,6 +1519,11 @@ and that is the launcher's, not ranger's.
 ### 14.2 Decisions
 
 **Taken**
+
+0. **WMI subscriptions are out of 0.1.6** (owner, 2026-10-18). The row needs COM and
+   administrator rights to read `root\subscription`, and it could not be tested on the machine
+   this release was built on. An untested collector that reports facts about a person's machine
+   is worse than a named gap, so the row is carried into M6 and the release notes say so.
 
 1. **Licence:** MIT only, matching vn-launcher. ClamAV code is not copied; the app reads
    ClamAV's documented hash formats instead (§3.3). If the owner wants the actual

@@ -101,11 +101,14 @@ jobs:
       # has just had two: a path that only resolves on Unix, and a helper only Windows called.
       # The Windows runner is the one that can type-check the Linux code without spending a
       # matrix slot on it.
-      - name: Type-check for Linux from Windows
+      - name: Type-check the other two platforms from Windows
         if: runner.os == 'Windows'
         run: |
-          rustup target add x86_64-unknown-linux-gnu
+          rustup target add x86_64-unknown-linux-gnu x86_64-apple-darwin
           cargo clippy --workspace --all-targets --target x86_64-unknown-linux-gnu -- -D warnings
+          # The macOS collectors compile without a Mac; only the linking and the running
+          # need one, and `check` does neither.
+          cargo clippy --package vnr-native --all-targets --target x86_64-apple-darwin -- -D warnings
 
       # The optional features are deliberately not in the default build, which is exactly
       # why they need their own step: code behind a feature flag is code no default check

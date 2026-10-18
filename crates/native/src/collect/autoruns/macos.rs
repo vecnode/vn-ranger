@@ -8,6 +8,8 @@ use std::path::{Path, PathBuf};
 use plist::Value;
 use vnr_core::{AutorunFact, AutorunKind, AutorunScope, SignatureStatus};
 
+mod loader;
+
 use super::super::unixutil;
 use crate::collect::Outcome;
 use crate::hash::Hasher;
@@ -49,14 +51,45 @@ pub fn collect(hasher: &mut Hasher) -> Outcome<AutorunFact> {
             }
         }
     }
+    collect_loaders(&mut items, &mut reasons);
     reasons.push(
-        "Login items and per-user cron tabs are not listed by this build; cron tabs need elevation."
+        "Login items and per-user cron tabs are not listed by this build; cron tabs need \
+         elevation. The loader surfaces were written without a Mac to capture against, so \
+         their parsers are tested against the documented shapes and not against a machine."
             .to_owned(),
     );
     hash_items(&mut items, hasher);
     Outcome::Partial {
         items,
         reason: reasons.join(" "),
+    }
+}
+
+/// The four surfaces that are not launchd: `periodic`, the system crontab, scripting
+/// additions and Folder Actions.
+fn collect_loaders(items: &mut Vec<AutorunFact>, reasons: &mut Vec<String>) {
+    let mut read = 0_usize;
+    for (path, source) in loader::sources() {
+        let path = Path::new(path);
+        if !path.exists() {
+            continue;
+        }
+        // A directory contributes its entries; a file is read whole.
+        if path.is_dir() {
+            let Ok(entries) = std::fs::read_dir(path) else {
+                continue;
+            };
+            read = read.saturating_add(1);
+            for entry in entries.flatten() {
+                items.extend(loader::read(&entry.path(), source));
+            }
+        } else {
+            read = read.saturating_add(1);
+            items.extend(loader::read(path, source));
+        }
+    }
+    if read == 0 {
+        reasons.push("None of the loader surfaces exist on this machine.".to_owned());
     }
 }
 
