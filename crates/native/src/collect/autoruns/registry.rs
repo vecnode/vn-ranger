@@ -296,7 +296,7 @@ pub(crate) const SURFACES: &[Surface] = &[
             path: "",
             value: "Debugger",
         },
-        kind: AutorunKind::Other,
+        kind: AutorunKind::Debugger,
         scope: AutorunScope::System,
         technique: Some("T1546.012"),
     },

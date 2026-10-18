@@ -74,6 +74,8 @@ pub enum AutorunKind {
     Screensaver,
     /// A COM object registered for the shell, such as a context-menu handler.
     ShellExtension,
+    /// A debugger that replaces the program it is registered for.
+    Debugger,
     /// A kind this build does not understand yet.
     Other,
 }
@@ -92,6 +94,7 @@ impl AutorunKind {
             Self::Cron => "cron",
             Self::ScheduledTask => "scheduled_task",
             Self::XdgAutostart => "xdg_autostart",
+            Self::Debugger => "debugger",
             Self::NetshHelper => "netsh_helper",
             Self::PrintMonitor => "print_monitor",
             Self::TimeProvider => "time_provider",
@@ -114,6 +117,7 @@ impl AutorunKind {
             Self::Cron => "Cron",
             Self::ScheduledTask => "Scheduled task",
             Self::XdgAutostart => "XDG autostart",
+            Self::Debugger => "Debugger",
             Self::NetshHelper => "netsh helper",
             Self::PrintMonitor => "Print monitor",
             Self::TimeProvider => "Time provider",

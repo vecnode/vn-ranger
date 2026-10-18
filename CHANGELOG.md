@@ -142,6 +142,10 @@ All notable changes to vn-ranger are recorded here. The format follows
   `LocalCommand` in `~/.ssh/config`, and an MCP client's `mcpServers` — and says what each
   would run. A private key, a known-hosts file and every browser profile are never read, and
   the status line names which files were read and which were not there.
+- **Two more detections**: `startup.accessibility-swap` fires on a debugger registered for a
+  program Windows starts before sign-in (`sethc.exe`, `utilman.exe` and the rest), and
+  `service.unquoted-path` is a built-in rule for a service image path with a space and no
+  quotes, which Windows resolves one folder at a time.
 - **The coverage table is generated** from the pack by `cargo xtask coverage`, and `ci` fails
   when a rule exists and the table does not mention it.
 - **A rule about a subject nothing collects is now a load error.** `agent` and `file-event`

@@ -12,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
-use crate::model::{AutorunFact, AutorunScope, ProcessFact, Snapshot};
+use crate::model::{AutorunFact, AutorunKind, AutorunScope, ProcessFact, Snapshot};
 
 /// How much a finding deserves attention. It is about consequence, not confidence.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -177,7 +177,7 @@ struct Rule {
 /// rules with one id make it impossible to say which one a person meant. This is the list the
 /// pack validator is given, so it is the list a new built-in rule has to be added to — and a
 /// test below fails when a `Rule` constant's id is not in it.
-pub const RULE_IDS: [&str; 15] = [
+pub const RULE_IDS: [&str; 16] = [
     "startup.temp-path",
     "startup.downloads-path",
     "startup.script-extension",
@@ -193,6 +193,7 @@ pub const RULE_IDS: [&str; 15] = [
     "listener.public-unknown-owner",
     "agent.persistent-listening",
     "startup.duplicate-command",
+    "service.unquoted-path",
 ];
 
 /// The built-in rule ids, in the form a pack validator wants them.
@@ -380,6 +381,21 @@ const DUPLICATE_COMMAND: Rule = Rule {
     remediation: "Remove the redundant entries if you want the list to say what actually runs.",
 };
 
+const UNQUOTED_SERVICE_PATH: Rule = Rule {
+    id: "service.unquoted-path",
+    title: "A service path has a space in it and no quotes",
+    severity: Severity::Notice,
+    confidence: Confidence::Observed,
+    why: "Windows resolves an unquoted service path one folder at a time, so a service whose \
+          image path is `C:\\Program Files\\Acme\\agent.exe` will try `C:\\Program.exe` first. \
+          Whoever can write to one of those earlier folders decides what the service runs, as \
+          SYSTEM.",
+    benign: "Many installers register a service this way and it works, because nobody has ever \
+             written a file to the shorter path.",
+    remediation: "Quote the whole path in the service's ImagePath, or reinstall the application \
+                  from a path with no spaces.",
+};
+
 /// Evaluate every built-in rule against a scan and its baseline.
 ///
 /// The result is sorted by severity and then by rule and subject, so two evaluations of the
@@ -397,6 +413,7 @@ pub fn evaluate(snapshot: &Snapshot, baseline: Option<&Snapshot>) -> Vec<Finding
     public_listeners(snapshot, &mut findings);
     persistent_listeners(snapshot, &mut findings);
     duplicate_commands(snapshot, &mut findings);
+    unquoted_service_paths(snapshot, &mut findings);
 
     sort_findings(&mut findings);
     findings
@@ -754,6 +771,52 @@ fn persistent_listeners(snapshot: &Snapshot, findings: &mut Vec<Finding>) {
                     listener.port
                 ),
                 format!("Executable: {exe}"),
+            ],
+        ));
+    }
+}
+
+/// A service whose image path has a space and no quotes.
+///
+/// Windows resolves an unquoted image path one folder at a time, so the service tries an
+/// earlier, shorter path first. This is a fact about the command as registered; whether
+/// anything is at the shorter path is another question, and this rule does not answer it.
+fn unquoted_service_paths(snapshot: &Snapshot, findings: &mut Vec<Finding>) {
+    for entry in &snapshot.autoruns {
+        if entry.kind != AutorunKind::Service {
+            continue;
+        }
+        let command = entry.command.trim();
+        if command.starts_with('"') {
+            continue;
+        }
+        // The image path is everything up to the first `.exe`, and the bug is a space
+        // inside it: Windows then tries each shorter prefix before the real one.
+        let lower = command.to_ascii_lowercase();
+        let Some(at) = lower.find(".exe") else {
+            continue;
+        };
+        let image = &command[..at.saturating_add(4)];
+        let arguments = &command[at.saturating_add(4)..];
+        let image_has_space = image.contains(' ');
+        let arguments_begin = arguments.is_empty() || arguments.starts_with(' ');
+        if !image_has_space || !arguments_begin {
+            continue;
+        }
+        if !image.contains('\\') && !image.contains('/') {
+            continue;
+        }
+        findings.push(make(
+            &UNQUOTED_SERVICE_PATH,
+            format!("autorun:{}", entry.id),
+            format!("{} ({})", entry.name, entry.kind.label()),
+            vec![
+                format!("Image path: {command}"),
+                format!(
+                    "Windows tries first: {}",
+                    image.split(' ').next().unwrap_or(image)
+                ),
+                format!("Registered at: {}", entry.location),
             ],
         ));
     }
@@ -1223,6 +1286,57 @@ mod tests {
     }
 
     #[test]
+    fn an_unquoted_service_path_with_a_space_fires_and_a_quoted_one_does_not() {
+        let mut scan = snapshot();
+        scan.autoruns.push(AutorunFact {
+            id: "service:Acme".to_owned(),
+            name: "Acme Agent".to_owned(),
+            command: r"C:\Program Files\Acme\agent.exe -k netsvcs".to_owned(),
+            location: r"HKLM\SYSTEM\CurrentControlSet\Services\Acme".to_owned(),
+            kind: AutorunKind::Service,
+            scope: AutorunScope::System,
+            enabled: true,
+            hidden: false,
+            exe: Some(r"C:\Program Files\Acme\agent.exe".to_owned()),
+            sha256: None,
+            signature: crate::model::SignatureStatus::NotChecked,
+        });
+        let findings = evaluate(&scan, None);
+        let fired = findings
+            .iter()
+            .find(|finding| finding.rule_id == "service.unquoted-path")
+            .expect("an unquoted image path with a space fires");
+        assert_eq!(fired.severity, Severity::Notice);
+        assert!(
+            fired
+                .evidence
+                .iter()
+                .any(|line| line.contains("Windows tries first")),
+            "{:?}",
+            fired.evidence
+        );
+
+        // Quoted is the fix, and a path with no space does not have the problem at all.
+        let one = scan.autoruns.first().cloned().expect("one entry was pushed");
+        for command in [
+            r#""C:\Program Files\Acme\agent.exe" -k netsvcs"#,
+            r"C:\Acme\agent.exe -k netsvcs",
+        ] {
+            let mut quiet = Snapshot::empty(Host::default(), false);
+            let mut entry = one.clone();
+            entry.command = command.to_owned();
+            quiet.autoruns.push(entry);
+            let findings = evaluate(&quiet, None);
+            assert!(
+                findings
+                    .iter()
+                    .all(|finding| finding.rule_id != "service.unquoted-path"),
+                "{command} should not fire"
+            );
+        }
+    }
+
+    #[test]
     fn suppressions_cover_one_rule_and_expire() {
         let mut snapshot = snapshot();
         snapshot.autoruns.push(autorun(
@@ -1313,6 +1427,9 @@ mod tests {
             .lines()
             .filter_map(|line| line.trim().strip_prefix("id: \""))
             .filter_map(|rest| rest.find('"').map(|end| &rest[..end]))
+            // Only the rule ids, not a fixture's id: a test's own struct literal is not a
+            // rule, and a rule id is the lowercase dotted shape the pack validator accepts.
+            .filter(|id| crate::pack::valid_id(id))
             .collect();
         assert_eq!(
             declared, RULE_IDS,

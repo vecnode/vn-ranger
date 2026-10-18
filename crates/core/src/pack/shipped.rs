@@ -296,3 +296,29 @@ fn a_configuration_that_names_a_command_fires_and_one_that_does_not_stays_quiet(
         "a server with a URL and no command starts nothing: {quiet:?}"
     );
 }
+
+#[test]
+fn the_accessibility_swap_fires_and_a_debugger_for_any_other_program_does_not() {
+    let pack = shipped();
+    let debugger = |name: &str| {
+        let mut fact = loader(AutorunKind::Debugger, r"C:\Windows\System32\cmd.exe");
+        fact.name = name.to_owned();
+        fact.id = format!("ifeo-debugger:HKLM:64:{name}");
+        fact
+    };
+    let fires = evaluate(&pack, &snapshot(vec![debugger("sethc.exe")]), &places());
+    let finding = fires
+        .iter()
+        .find(|finding| finding.rule_id == "startup.accessibility-swap")
+        .expect("a debugger on an accessibility program fires");
+    assert_eq!(finding.severity, Severity::Attention);
+    assert_eq!(finding.technique.as_deref(), Some("T1546.008"));
+
+    let quiet = evaluate(&pack, &snapshot(vec![debugger("notepad.exe")]), &places());
+    assert!(
+        quiet
+            .iter()
+            .all(|finding| finding.rule_id != "startup.accessibility-swap"),
+        "an ordinary program is not this rule's business: {quiet:?}"
+    );
+}

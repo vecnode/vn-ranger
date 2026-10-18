@@ -101,7 +101,7 @@ The values a text field takes, where the machine has a fixed set:
 |---|---|
 | `scope` | `user`, `system` |
 | `signed` | `valid`, `invalid`, `unsigned`, `unknown`, `not_checked` |
-| `kind` | `run_key`, `startup_folder`, `service`, `scheduled_task`, `netsh_helper`, `print_monitor`, `time_provider`, `screensaver`, `shell_extension`, `launch_agent`, `launch_daemon`, `systemd_unit`, `cron`, `xdg_autostart`, `other` |
+| `kind` | `run_key`, `startup_folder`, `service`, `scheduled_task`, `netsh_helper`, `print_monitor`, `time_provider`, `screensaver`, `shell_extension`, `launch_agent`, `launch_daemon`, `systemd_unit`, `cron`, `xdg_autostart`, `debugger`, `other` |
 | `protocol` | `TCP`, `UDP` |
 
 A field is absent when the fact does not carry it — a startup entry with no resolvable path has
@@ -275,13 +275,14 @@ actually covers.
 | `T1543.003` | `startup.service-dll-user-writable` | Attention | A service's DLL is in a folder a user can write |
 | `T1546.002` | `startup.screensaver-user-writable` | Notice | The screensaver runs a program from a user-writable folder |
 | `T1546.007` | `startup.netsh-helper-user-writable` | Attention | A netsh helper DLL is named by a full path in a user-writable folder |
+| `T1546.008` | `startup.accessibility-swap` | Attention | An accessibility program is replaced by another program |
 | `T1547.001` | `startup.under-temp` | Attention | A startup entry that runs something out of a temporary folder |
 | `T1547.001` | `startup.unsigned-user-scope` | Notice | An unsigned startup entry in the user's own scope |
 | `T1547.003` | `startup.time-provider-user-writable` | Attention | A time provider DLL is in a user-writable folder |
 | `T1547.012` | `startup.print-monitor-user-writable` | Attention | A print monitor DLL is named by a full path in a user-writable folder |
 | `T1611` | `listener.every-interface` | Notice | A socket waiting for a connection on every interface |
 
-11 rules covering 10 technique(s), from `packs/ranger.core.json`.
+12 rules covering 11 technique(s), from `packs/ranger.core.json`.
 <!-- coverage:end -->
 
 ## Importing a Sigma rule
