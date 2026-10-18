@@ -26,6 +26,14 @@ table with process ownership, never a packet), and the configuration of an auton
 agent (a capability matrix and provenance). It adds no network call, no kernel component
 and no score, and every new destructive verb still goes through the one typed action path.
 
+**0.1.7 also starts acting, in user scope.** The owner's decision of 2026-10-20 makes adding
+and removing a startup entry the first destructive verb since quarantine: `HKCU` run keys
+and the user's Startup folder, identified by the `AutorunFact` the scan produced rather than
+by a path, journalled before the act, with the previous value kept so it can be put back. A
+machine-scope entry is refused, because removing it needs an administrator and there is no
+standing elevation — so "no new privilege" is still true, and the §2 order (journal, act,
+result) is what makes the verb admissible at all.
+
 `docs/PLAN.md` explains the research, the scope and the architecture.
 `docs/RELEASES.md` is the distribution contract. `SECURITY.md` is the promise to the
 person running it.

@@ -885,20 +885,7 @@ impl Ui {
             .anchor(Align2::RIGHT_TOP, vec2(-16.0, 72.0))
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
-                egui::Frame::new()
-                    .fill(theme::panel(self.dark))
-                    .stroke(egui::Stroke::new(1.0, theme::BAD))
-                    .corner_radius(egui::CornerRadius::same(8))
-                    .inner_margin(Margin::same(10))
-                    .show(ui, |ui| {
-                        ui.set_max_width(380.0);
-                        ui.horizontal(|ui| {
-                            ui.label(RichText::new(error.as_str()).size(11.5).color(theme::BAD));
-                            if ui.small_button("✕").clicked() {
-                                dismiss = true;
-                            }
-                        });
-                    });
+                dismiss = message_card(ui, self.dark, theme::BAD, error.as_str());
             });
         if dismiss {
             self.error_dismissed = Some(error);
@@ -938,20 +925,7 @@ impl Ui {
             .anchor(Align2::RIGHT_BOTTOM, vec2(-16.0, -16.0))
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
-                egui::Frame::new()
-                    .fill(theme::panel(self.dark))
-                    .stroke(egui::Stroke::new(1.0, theme::OK))
-                    .corner_radius(egui::CornerRadius::same(8))
-                    .inner_margin(Margin::same(10))
-                    .show(ui, |ui| {
-                        ui.set_max_width(380.0);
-                        ui.horizontal(|ui| {
-                            ui.label(RichText::new(text.as_str()).size(11.5).color(theme::OK));
-                            if ui.small_button("✕").clicked() {
-                                dismiss = true;
-                            }
-                        });
-                    });
+                dismiss = message_card(ui, self.dark, theme::OK, text.as_str());
             });
         if dismiss {
             self.notice_dismissed = Some(text);
@@ -1099,6 +1073,46 @@ fn notice_id() -> egui::Id {
 
 /// How long a status sentence stays on screen, in seconds.
 pub(crate) const NOTICE_SECONDS: u64 = 6;
+
+/// The widest a message card grows before its sentence has to wrap.
+pub(crate) const MESSAGE_WIDTH: f32 = 420.0;
+
+/// The most of the window's height a message card may take.
+pub(crate) const MESSAGE_HEIGHT: f32 = 0.5;
+
+/// Draw one message card, and answer whether its dismiss button was pressed.
+///
+/// A message is a sentence with paths in it, so it is bounded on both axes: a fixed width so
+/// it wraps instead of running off the screen, and half the window's height at most, with a
+/// scrollbar for the rest. A card that grew with its text would cover the thing it is
+/// telling a person about.
+fn message_card(ui: &mut egui::Ui, dark: bool, colour: egui::Color32, text: &str) -> bool {
+    let mut dismiss = false;
+    egui::Frame::new()
+        .fill(theme::panel(dark))
+        .stroke(egui::Stroke::new(1.0, colour))
+        .corner_radius(egui::CornerRadius::same(8))
+        .inner_margin(Margin::same(10))
+        .show(ui, |ui| {
+            ui.set_max_width(MESSAGE_WIDTH);
+            ui.vertical(|ui| {
+                let room = ui.ctx().viewport_rect().height() * MESSAGE_HEIGHT;
+                egui::ScrollArea::vertical()
+                    .max_height(room)
+                    .auto_shrink([false, true])
+                    .show(ui, |ui| {
+                        ui.add(egui::Label::new(RichText::new(text).size(11.5).color(colour)).wrap());
+                    });
+                ui.add_space(4.0);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.small_button("✕ dismiss").clicked() {
+                        dismiss = true;
+                    }
+                });
+            });
+        });
+    dismiss
+}
 
 /// Whether a notice that appeared at `at` is still worth showing at `now`.
 ///

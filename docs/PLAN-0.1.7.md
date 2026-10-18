@@ -345,7 +345,29 @@ A pack declares `vocabulary: 2`. A 0.1.6 binary refuses a v2 pack with a reason 
 than loading half of it; a 0.1.7 binary loads a v1 pack unchanged. The coverage table
 counts both engines (§3.2) and the refusal a rule with no fixture gets is a build error.
 
-### 4.6 Evidence — the product
+### 4.6 Acting, from 0.1.7
+
+The four domains are read-only, and a program that only reads cannot fix what it finds. The
+owner's decision of 2026-10-20 adds the first destructive verb since quarantine, in the
+same release: **add and remove a startup entry**, user scope, through the typed action path
+and nothing else.
+
+- **No new privilege.** `HKCU\…\Run`, `HKCU\…\RunOnce` and the user's Startup folder are
+  writable by the account ranger already runs as. A machine-scope entry is refused with a
+  reason, because removing it needs an administrator and there is no standing elevation.
+- **Nothing takes a path.** The identity is the `AutorunFact` id the scan produced, resolved
+  from the surface's own root; a path a person types is not a way to reach the registry.
+- **Journal, then act, then result.** A removal writes the previous value into the journal
+  entry, so what was removed can be put back by hand, and a `.lnk` is moved into the
+  quarantine rather than deleted.
+- **The four refusals still apply**, and each has a test: a machine-scope surface, a link or
+  a hard link, a value that changed between the scan and the act, and a name that was not in
+  the scan the interface showed.
+
+Wave 4 of [`NEXT.md`](NEXT.md) carries the steps; the deletion matrix in `AGENTS.md` §12 and
+the second reviewer are required before it ships.
+
+### 4.7 Evidence — the product
 
 The four domains are only worth what a person can hand to somebody else.
 
