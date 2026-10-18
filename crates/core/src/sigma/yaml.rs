@@ -414,9 +414,6 @@ falsepositives:
     #[test]
     fn a_byte_order_mark_does_not_become_part_of_the_first_key() {
         let node = parse("\u{feff}title: With a mark\ndetection:\n  selection:\n    Image: x\n").unwrap();
-        assert_eq!(
-            node.get("title").and_then(Node::as_str),
-            Some("With a mark")
-        );
+        assert_eq!(node.get("title").and_then(Node::as_str), Some("With a mark"));
     }
 }
