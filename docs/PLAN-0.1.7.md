@@ -547,7 +547,7 @@ ranger":
 | 5 | The journal hash chain with its three-state verdict and the Actions-view line; the timeline CSV export | `9d76250`, `4457935` |
 | 4 | The skill reader: `SKILL.md` frontmatter (an unclosed header is body, not metadata) and the five capability kinds with the line that proved each | `0a2135a` |
 
-**Not started:** containers and structural facts (Wave 1 — needs the §14 dependency answers);
+**Not started:** containers and structural facts (Wave 1 — the §14 dependencies are approved and unbuilt (see §14.4));
 events (Wave 2 — needs `evtx`); agents (Wave 4); the triage package and the sweep (Wave 5).
 The sampler has no caller yet: `FlowFact::beacon`, the poll that feeds it and the
 `flow.beaconing` rule are one unit and land together.
