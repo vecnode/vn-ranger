@@ -10,6 +10,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+mod packs;
 mod worker;
 
 use std::path::{Path, PathBuf};
@@ -42,6 +43,12 @@ fn main() -> eframe::Result<()> {
     }
     if let Some(path) = arg_value("--report") {
         write_headless_report(&path, true);
+        return Ok(());
+    }
+    // A Sigma rule becomes a pack file that still has to be signed before ranger will load
+    // it. The importer writes; the author signs; ranger verifies. No step here is skipped.
+    if let Some(path) = arg_value("--sigma") {
+        import_sigma(&path);
         return Ok(());
     }
 
@@ -94,6 +101,109 @@ fn main() -> eframe::Result<()> {
         options,
         Box::new(move |cc| Ok(Box::new(app::App::new(cc, background, instance, soak)))),
     )
+}
+
+/// Convert one Sigma rule into a pack file beside it, and say what did and did not map.
+///
+/// The output is a pack, not an active rule set: it has no signature, so the Packs view will
+/// list it as refused until its author signs it. That is the whole point of the footnote —
+/// an import is a translation a person checks, not an adoption.
+fn import_sigma(path: &Path) {
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) => {
+            eprintln!("vn-ranger: could not read {}: {error}", path.display());
+            std::process::exit(1);
+        }
+    };
+    let import = match vnr_core::sigma::import(&text) {
+        Ok(import) => import,
+        Err(problem) => {
+            eprintln!("vn-ranger: {} was refused: {problem}", path.display());
+            std::process::exit(1);
+        }
+    };
+    let stem = path.file_stem().map_or_else(
+        || "imported".to_owned(),
+        |stem| stem.to_string_lossy().into_owned(),
+    );
+    let id = format!("imported.{stem}");
+    let pack = import.pack(&id, "1");
+    let out = path.with_file_name(format!("{stem}.pack.json"));
+    let bytes = match serde_json::to_vec_pretty(&pack_to_wire(&pack)) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            eprintln!("vn-ranger: could not serialise the pack: {error}");
+            std::process::exit(1);
+        }
+    };
+    if let Err(error) = std::fs::write(&out, &bytes) {
+        eprintln!("vn-ranger: could not write {}: {error}", out.display());
+        std::process::exit(1);
+    }
+    println!(
+        "vn-ranger: {} rule(s) mapped, {} skipped",
+        import.rules.len(),
+        import.skipped.len()
+    );
+    for skipped in &import.skipped {
+        println!("  skipped {}: {}", skipped.title, skipped.reason);
+    }
+    println!("vn-ranger: wrote {}", out.display());
+    println!("vn-ranger: it is not active until it is signed; ranger never signs anything");
+}
+
+/// The wire shape a pack file has, written from a validated pack.
+fn pack_to_wire(pack: &vnr_core::pack::Pack) -> serde_json::Value {
+    let rules: Vec<serde_json::Value> = pack
+        .rules
+        .iter()
+        .map(|rule| {
+            let predicates: Vec<serde_json::Value> = rule
+                .matches
+                .all
+                .iter()
+                .map(|predicate| {
+                    serde_json::json!({
+                        "field": predicate.field,
+                        "op": predicate.operator.id(),
+                        "value": predicate.value,
+                    })
+                })
+                .collect();
+            serde_json::json!({
+                "id": rule.id,
+                "title": rule.title,
+                "severity": match rule.severity {
+                    vnr_core::Severity::Attention => "attention",
+                    vnr_core::Severity::Notice => "notice",
+                    vnr_core::Severity::Info => "info",
+                },
+                "confidence": match rule.confidence {
+                    vnr_core::Confidence::Observed => "observed",
+                    vnr_core::Confidence::Likely => "likely",
+                    vnr_core::Confidence::Possible => "possible",
+                },
+                "technique": rule.technique,
+                "match": {
+                    "subject": rule.matches.subject.map(vnr_core::fields::Subject::id),
+                    "all": predicates,
+                },
+                "why": rule.why,
+                "benign": rule.benign,
+                "remediation": rule.remediation,
+            })
+        })
+        .collect();
+    serde_json::json!({
+        "schema": vnr_core::pack::SCHEMA,
+        "pack": {
+            "id": pack.header.id,
+            "version": pack.header.version,
+            "title": pack.header.title,
+        },
+        "rules": rules,
+    })
 }
 
 fn write_headless_report(path: &Path, record: bool) {
