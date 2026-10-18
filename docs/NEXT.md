@@ -75,6 +75,12 @@ preview before the act, a refusal with a reason, and the allowlist table.
 
 ### 5a. Processes: group by name
 
+**Done.** One row per name with its count and the executable it shares, a `Group` dropdown
+(`Name`, `None`, `Parent`), the tree for `Parent`, keyboard navigation over what is on
+screen, and a selection made elsewhere opens its group. Tests: a name is one closed row and
+opens to its pids, two executables under one name share no path, a tree nests and a parent
+that has gone is a root, and a cycle costs a row its place but never its existence.
+
 | Step | File | What to do |
 |---|---|---|
 | 1 | `crates/ui/src/views.rs` | Group rows by process name (case-insensitive), one row per group with the count, its pids nested under a disclosure triangle, and the exe path / signature / start time shown only where the group agrees. Keep the existing sort keys applied to the *groups*. |

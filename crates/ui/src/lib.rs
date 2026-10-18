@@ -114,6 +114,37 @@ impl SortKey {
     }
 }
 
+/// How the process table gathers its rows.
+///
+/// A busy machine runs the same executable a dozen times, so a flat list answers "what is
+/// running" with twelve identical rows. Grouping is the view's own decision and changes
+/// nothing about the facts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ProcessGrouping {
+    /// One row per name, with its pids under it.
+    Name,
+    /// One row per process, the flat list.
+    None,
+    /// One row per process, indented under the one that started it.
+    Parent,
+}
+
+impl ProcessGrouping {
+    const ALL: [ProcessGrouping; 3] = [
+        ProcessGrouping::Name,
+        ProcessGrouping::None,
+        ProcessGrouping::Parent,
+    ];
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Name => "Name",
+            Self::None => "None",
+            Self::Parent => "Parent",
+        }
+    }
+}
+
 /// The quick filters above the process table.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ProcessFilter {
@@ -224,6 +255,9 @@ pub struct Ui {
     process_sort: SortKey,
     process_sort_desc: bool,
     process_filter: ProcessFilter,
+    process_group: ProcessGrouping,
+    /// The name groups a person has opened, so a collapse survives the next frame.
+    process_expanded: std::collections::HashSet<String>,
     autorun_scope: Option<vnr_core::AutorunScope>,
     show_disabled: bool,
     change_filter: ChangeFilter,
@@ -311,6 +345,8 @@ impl Ui {
             process_sort: SortKey::Name,
             process_sort_desc: false,
             process_filter: ProcessFilter::All,
+            process_group: ProcessGrouping::Name,
+            process_expanded: std::collections::HashSet::new(),
             autorun_scope: None,
             show_disabled: true,
             change_filter: ChangeFilter::All,

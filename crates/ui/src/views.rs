@@ -346,6 +346,16 @@ impl Ui {
                     self.process_filter = filter;
                 }
             }
+            ui.add_space(10.0);
+            ui.label(RichText::new("Group").size(10.5).color(theme::muted(ui)));
+            egui::ComboBox::from_id_salt("process-group")
+                .selected_text(self.process_group.label())
+                .width(88.0)
+                .show_ui(ui, |ui| {
+                    for grouping in crate::ProcessGrouping::ALL {
+                        ui.selectable_value(&mut self.process_group, grouping, grouping.label());
+                    }
+                });
         });
 
         let listening: std::collections::HashSet<u32> = world
@@ -390,23 +400,40 @@ impl Ui {
                 ordering
             }
         });
+        // A selection made somewhere else — the palette, a finding, a listener — must not
+        // land in a closed group where nobody can see it, so the group of the selected
+        // process stays open for as long as it is selected.
+        if self.process_group == crate::ProcessGrouping::Name
+            && let Some(pid) = self.selected_process
+            && let Some(selected) = processes.iter().find(|process| process.pid == pid)
+        {
+            self.process_expanded.insert(selected.name.to_lowercase());
+        }
+        let lines = process_lines(&rows, self.process_group, &self.process_expanded);
+        // What the keyboard walks: the processes on screen, in the order they are on screen.
+        // A collapsed group contributes no stops, which is what keeps j and k honest.
+        let visible: Vec<u32> = lines
+            .iter()
+            .filter_map(|line| match line {
+                ProcessLine::Process { process, .. } => Some(process.pid),
+                ProcessLine::Group { .. } => None,
+            })
+            .collect();
         if !ui.ctx().memory(|memory| memory.focused().is_some()) && !self.palette_open {
             let down =
                 ui.input(|input| input.key_pressed(egui::Key::J) || input.key_pressed(egui::Key::ArrowDown));
             let up =
                 ui.input(|input| input.key_pressed(egui::Key::K) || input.key_pressed(egui::Key::ArrowUp));
             if down || up {
-                let current = rows
-                    .iter()
-                    .position(|process| Some(process.pid) == self.selected_process);
+                let current = visible.iter().position(|pid| Some(*pid) == self.selected_process);
                 let next = match current {
-                    Some(index) if down => Some((index + 1).min(rows.len().saturating_sub(1))),
+                    Some(index) if down => Some((index + 1).min(visible.len().saturating_sub(1))),
                     Some(index) => Some(index.saturating_sub(1)),
                     None if down => Some(0),
                     None => None,
                 };
-                if let Some(process) = next.and_then(|index| rows.get(index)) {
-                    self.selected_process = Some(process.pid);
+                if let Some(pid) = next.and_then(|index| visible.get(index)) {
+                    self.selected_process = Some(*pid);
                 }
             }
         }
@@ -416,11 +443,21 @@ impl Ui {
             .filter(|live| !live.items.is_empty())
             .map(|live| describe_age(world.now_unix, live.at_unix));
         let live_note = if live_age.is_some() { " · live" } else { "" };
+        let groups = lines
+            .iter()
+            .filter(|line| matches!(line, ProcessLine::Group { .. }))
+            .count();
+        let group_note = if self.process_group == crate::ProcessGrouping::Name {
+            format!(" · {groups} group(s)")
+        } else {
+            String::new()
+        };
         let caption = ui.label(
             RichText::new(format!(
-                "{} of {} processes{}",
-                rows.len(),
+                "{} of {} processes{}{}",
+                visible.len(),
                 processes.len(),
+                group_note,
                 live_note
             ))
             .size(11.0)
@@ -447,6 +484,7 @@ impl Ui {
         let column_space = ui.spacing().item_spacing.x;
         let process_width = (ui.available_width() - 64.0 - 140.0 - 110.0 - 3.0 * column_space).max(180.0);
         let mut clicked = None;
+        let mut toggle: Option<String> = None;
         ui.allocate_ui_with_layout(
             egui::vec2(ui.available_width(), table_height),
             Layout::top_down(Align::Min),
@@ -472,45 +510,96 @@ impl Ui {
                         head.col(|ui| table_header(ui, "Started"));
                     })
                     .body(|body| {
-                        body.rows(TABLE_ROW, rows.len(), |mut row| {
-                            let process = rows[row.index()];
-                            row.set_selected(self.selected_process == Some(process.pid));
-                            let mut row_clicked = false;
-                            let (_, response) = row.col(|ui| {
-                                ui.label(RichText::new(process.pid.to_string()).size(11.5).monospace());
-                            });
-                            row_clicked |= response.clicked();
-                            let (_, response) = row.col(|ui| {
-                                ui.add(
-                                    egui::Label::new(RichText::new(process.name.as_str()).size(11.5))
-                                        .truncate(),
-                                );
-                            });
-                            row_clicked |= response.clicked();
-                            let (_, response) = row.col(|ui| {
-                                ui.add(
-                                    egui::Label::new(
-                                        RichText::new(process.user.as_deref().unwrap_or("—"))
-                                            .size(11.5)
+                        body.rows(TABLE_ROW, lines.len(), |mut row| match &lines[row.index()] {
+                            ProcessLine::Group {
+                                key,
+                                name,
+                                count,
+                                shared_path,
+                                open,
+                            } => {
+                                let (_, response) = row.col(|ui| {
+                                    ui.label(
+                                        RichText::new(format!("×{count}"))
+                                            .size(11.0)
                                             .color(theme::muted(ui)),
+                                    );
+                                });
+                                let mut row_clicked = response.clicked();
+                                let (_, response) = row.col(|ui| {
+                                    let triangle = if *open { "▾" } else { "▸" };
+                                    let label = egui::Label::new(
+                                        RichText::new(format!("{triangle} {name}"))
+                                            .size(11.5)
+                                            .family(theme::semibold()),
                                     )
-                                    .truncate(),
-                                );
-                            });
-                            row_clicked |= response.clicked();
-                            let (_, response) = row.col(|ui| {
-                                ui.label(
-                                    RichText::new(process.started_at_unix.map_or_else(
-                                        || "—".to_owned(),
-                                        |then| describe_age(world.now_unix, then),
-                                    ))
-                                    .size(11.5)
-                                    .color(theme::muted(ui)),
-                                );
-                            });
-                            row_clicked |= response.clicked();
-                            if row_clicked || row.response().clicked() {
-                                clicked = Some(process.pid);
+                                    .truncate();
+                                    row_clicked |= ui.add(label).clicked();
+                                });
+                                row_clicked |= response.clicked();
+                                let (_, response) = row.col(|ui| {
+                                    if let Some(path) = shared_path {
+                                        ui.add(
+                                            egui::Label::new(
+                                                RichText::new(path.as_str())
+                                                    .size(10.5)
+                                                    .color(theme::muted(ui)),
+                                            )
+                                            .truncate(),
+                                        );
+                                    }
+                                });
+                                row_clicked |= response.clicked();
+                                let (_, response) = row.col(|ui| {
+                                    ui.label(RichText::new("").size(11.5));
+                                });
+                                row_clicked |= response.clicked();
+                                if row_clicked || row.response().clicked() {
+                                    toggle = Some(key.clone());
+                                }
+                            }
+                            ProcessLine::Process { process, depth } => {
+                                row.set_selected(self.selected_process == Some(process.pid));
+                                let mut row_clicked = false;
+                                let (_, response) = row.col(|ui| {
+                                    ui.label(RichText::new(process.pid.to_string()).size(11.5).monospace());
+                                });
+                                row_clicked |= response.clicked();
+                                let (_, response) = row.col(|ui| {
+                                    let indent = "   ".repeat(*depth);
+                                    ui.add(
+                                        egui::Label::new(
+                                            RichText::new(format!("{indent}{}", process.name)).size(11.5),
+                                        )
+                                        .truncate(),
+                                    );
+                                });
+                                row_clicked |= response.clicked();
+                                let (_, response) = row.col(|ui| {
+                                    ui.add(
+                                        egui::Label::new(
+                                            RichText::new(process.user.as_deref().unwrap_or("—"))
+                                                .size(11.5)
+                                                .color(theme::muted(ui)),
+                                        )
+                                        .truncate(),
+                                    );
+                                });
+                                row_clicked |= response.clicked();
+                                let (_, response) = row.col(|ui| {
+                                    ui.label(
+                                        RichText::new(process.started_at_unix.map_or_else(
+                                            || "—".to_owned(),
+                                            |then| describe_age(world.now_unix, then),
+                                        ))
+                                        .size(11.5)
+                                        .color(theme::muted(ui)),
+                                    );
+                                });
+                                row_clicked |= response.clicked();
+                                if row_clicked || row.response().clicked() {
+                                    clicked = Some(process.pid);
+                                }
                             }
                         });
                     });
@@ -518,6 +607,14 @@ impl Ui {
         );
         if let Some(pid) = clicked {
             self.selected_process = Some(pid);
+            ui.ctx().request_repaint();
+        }
+        if let Some(key) = toggle {
+            // Opening and closing are one gesture: the set holds what is open, so a key that
+            // is already there is a close.
+            if !self.process_expanded.remove(&key) {
+                self.process_expanded.insert(key);
+            }
             ui.ctx().request_repaint();
         }
         if let Some(process) = selected {
@@ -2225,6 +2322,142 @@ fn change_matches(filter: ChangeFilter, source: &str) -> bool {
     }
 }
 
+/// One line of the process table.
+///
+/// A group is a line a person can open, and a process is a line they can select. The two are
+/// one list rather than two tables, so the scroll position, the striping and the row height
+/// are the same for both and a collapse does not renumber anything.
+enum ProcessLine<'a> {
+    /// Every process of one name.
+    Group {
+        /// The name as the first member spells it, lowercased for the key.
+        key: String,
+        /// The name to show, as the first member spells it.
+        name: String,
+        /// How many processes carry it.
+        count: usize,
+        /// The one executable they share, when they share one.
+        shared_path: Option<String>,
+        /// Whether the group is open.
+        open: bool,
+    },
+    /// One process, indented under its parent when the table is a tree.
+    Process {
+        /// The process.
+        process: &'a ProcessFact,
+        /// How deep in the tree, 0 for a root.
+        depth: usize,
+    },
+}
+
+/// How deep a tree may go before the rest is listed flat.
+///
+/// A parent chain from a hand-edited snapshot can be circular, and a walk that trusts it
+/// would hang the frame. The bound is a floor on how wrong the data can be.
+const MAX_TREE_DEPTH: usize = 12;
+
+/// Turn sorted rows into the lines the table draws.
+///
+/// Grouping by name orders the groups by name; the sort keys order the members inside a
+/// group. Grouping by parent walks the parent chain, so a process whose parent is gone is a
+/// root, and anything a cycle hides is listed flat rather than dropped.
+fn process_lines<'a>(
+    rows: &[&'a ProcessFact],
+    grouping: crate::ProcessGrouping,
+    expanded: &std::collections::HashSet<String>,
+) -> Vec<ProcessLine<'a>> {
+    match grouping {
+        crate::ProcessGrouping::None => rows
+            .iter()
+            .map(|process| ProcessLine::Process { process, depth: 0 })
+            .collect(),
+        crate::ProcessGrouping::Name => {
+            let mut lines = Vec::new();
+            let mut sorted: Vec<&ProcessFact> = rows.to_vec();
+            sorted.sort_by_key(|process| process.name.to_lowercase());
+            let mut index = 0;
+            while index < sorted.len() {
+                let key = sorted[index].name.to_lowercase();
+                let mut end = index + 1;
+                while end < sorted.len() && sorted[end].name.to_lowercase() == key {
+                    end += 1;
+                }
+                let members = &sorted[index..end];
+                let open = expanded.contains(&key);
+                let shared_path = shared_exe(members);
+                lines.push(ProcessLine::Group {
+                    key,
+                    name: sorted[index].name.clone(),
+                    count: members.len(),
+                    shared_path,
+                    open,
+                });
+                if open {
+                    lines.extend(
+                        members
+                            .iter()
+                            .map(|process| ProcessLine::Process { process, depth: 0 }),
+                    );
+                }
+                index = end;
+            }
+            lines
+        }
+        crate::ProcessGrouping::Parent => tree_lines(rows),
+    }
+}
+
+/// The executable every member of a group runs, when it is one executable.
+fn shared_exe(members: &[&ProcessFact]) -> Option<String> {
+    let first = members.first()?.exe.as_deref()?;
+    if members
+        .iter()
+        .all(|process| process.exe.as_deref() == Some(first))
+    {
+        Some(first.to_owned())
+    } else {
+        None
+    }
+}
+
+/// Depth-first order from the roots, so a child sits under the process that started it.
+fn tree_lines<'a>(rows: &[&'a ProcessFact]) -> Vec<ProcessLine<'a>> {
+    let known: std::collections::HashSet<u32> = rows.iter().map(|process| process.pid).collect();
+    let mut children: std::collections::HashMap<u32, Vec<&ProcessFact>> = std::collections::HashMap::new();
+    let mut roots: Vec<&ProcessFact> = Vec::new();
+    for process in rows {
+        match process
+            .parent
+            .filter(|parent| known.contains(parent) && *parent != process.pid)
+        {
+            Some(parent) => children.entry(parent).or_default().push(process),
+            None => roots.push(process),
+        }
+    }
+    let mut lines = Vec::new();
+    let mut seen: std::collections::HashSet<u32> = std::collections::HashSet::new();
+    let mut stack: Vec<(&ProcessFact, usize)> = roots.into_iter().rev().map(|process| (process, 0)).collect();
+    while let Some((process, depth)) = stack.pop() {
+        if depth > MAX_TREE_DEPTH || !seen.insert(process.pid) {
+            continue;
+        }
+        lines.push(ProcessLine::Process { process, depth });
+        if let Some(kids) = children.get(&process.pid) {
+            for kid in kids.iter().rev() {
+                stack.push((kid, depth.saturating_add(1)));
+            }
+        }
+    }
+    // A cycle leaves processes unreachable from any root. They are listed flat rather than
+    // dropped: a table that silently loses a row is worse than one that shows it oddly.
+    for process in rows {
+        if seen.insert(process.pid) {
+            lines.push(ProcessLine::Process { process, depth: 0 });
+        }
+    }
+    lines
+}
+
 /// Whether a path sits in a temporary, download or desktop folder.
 fn scratch_path(path: &str) -> bool {
     let lower = path.replace('/', "\\").to_lowercase();
@@ -2265,4 +2498,128 @@ fn filter_listener(listener: &vnr_core::ListenerFact, needle: &str) -> bool {
             .as_deref()
             .is_some_and(|process| process.to_lowercase().contains(needle))
         || listener.port.to_string().contains(needle)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn process(pid: u32, parent: Option<u32>, name: &str, exe: Option<&str>) -> ProcessFact {
+        ProcessFact {
+            pid,
+            parent,
+            name: name.to_owned(),
+            exe: exe.map(str::to_owned),
+            command: None,
+            user: None,
+            started_at_unix: None,
+        }
+    }
+
+    fn lines_for<'a>(
+        rows: &[&'a ProcessFact],
+        grouping: crate::ProcessGrouping,
+        expanded: &[&str],
+    ) -> Vec<ProcessLine<'a>> {
+        let expanded: std::collections::HashSet<String> =
+            expanded.iter().map(|name| (*name).to_owned()).collect();
+        process_lines(rows, grouping, &expanded)
+    }
+
+    fn counts(lines: &[ProcessLine<'_>]) -> (usize, usize) {
+        let groups = lines
+            .iter()
+            .filter(|line| matches!(line, ProcessLine::Group { .. }))
+            .count();
+        let processes = lines
+            .iter()
+            .filter(|line| matches!(line, ProcessLine::Process { .. }))
+            .count();
+        (groups, processes)
+    }
+
+    #[test]
+    fn one_name_is_one_row_until_it_is_opened() {
+        let svchost = [
+            process(1, None, "svchost.exe", Some(r"C:\Windows\System32\svchost.exe")),
+            process(2, None, "svchost.exe", Some(r"C:\Windows\System32\svchost.exe")),
+            process(3, None, "svchost.exe", Some(r"C:\Windows\System32\svchost.exe")),
+        ];
+        let explorer = [process(4, None, "explorer.exe", Some(r"C:\Windows\explorer.exe"))];
+        let mut rows: Vec<&ProcessFact> = Vec::new();
+        rows.extend(svchost.iter());
+        rows.extend(explorer.iter());
+
+        let closed = lines_for(&rows, crate::ProcessGrouping::Name, &[]);
+        assert_eq!(counts(&closed), (2, 0), "two names are two closed rows");
+        let ProcessLine::Group {
+            name,
+            count,
+            shared_path,
+            open,
+            ..
+        } = &closed[0]
+        else {
+            panic!("the first line is a group");
+        };
+        assert_eq!(name, "explorer.exe");
+        assert_eq!(*count, 1);
+        assert!(!open);
+        assert!(shared_path.is_some());
+        let ProcessLine::Group { count, key, .. } = &closed[1] else {
+            panic!("the second line is a group");
+        };
+        assert_eq!(*count, 3);
+        assert_eq!(key, "svchost.exe");
+
+        let open = lines_for(&rows, crate::ProcessGrouping::Name, &["svchost.exe"]);
+        assert_eq!(counts(&open), (2, 3), "opening one group shows its three pids");
+
+        let flat = lines_for(&rows, crate::ProcessGrouping::None, &[]);
+        assert_eq!(counts(&flat), (0, 4));
+    }
+
+    #[test]
+    fn a_group_says_nothing_about_a_path_its_members_do_not_share() {
+        let one = process(1, None, "node.exe", Some(r"C:\a\node.exe"));
+        let two = process(2, None, "node.exe", Some(r"D:\b\node.exe"));
+        let rows = [&one, &two];
+        let lines = lines_for(&rows, crate::ProcessGrouping::Name, &[]);
+        let ProcessLine::Group {
+            shared_path, count, ..
+        } = &lines[0]
+        else {
+            panic!("a group");
+        };
+        assert_eq!(*count, 2);
+        assert_eq!(*shared_path, None, "two executables are not one path");
+    }
+
+    #[test]
+    fn the_tree_puts_a_child_under_its_parent_and_a_cycle_costs_a_row_a_place_only() {
+        let root = process(1, None, "init.exe", None);
+        let child = process(2, Some(1), "child.exe", None);
+        let grandchild = process(3, Some(2), "grandchild.exe", None);
+        let orphan = process(4, Some(999), "orphan.exe", None);
+        let rows = [&root, &child, &grandchild, &orphan];
+        let lines = lines_for(&rows, crate::ProcessGrouping::Parent, &[]);
+        let depth: Vec<(u32, usize)> = lines
+            .iter()
+            .filter_map(|line| match line {
+                ProcessLine::Process { process, depth } => Some((process.pid, *depth)),
+                ProcessLine::Group { .. } => None,
+            })
+            .collect();
+        assert_eq!(
+            depth,
+            vec![(1, 0), (2, 1), (3, 2), (4, 0)],
+            "a parent that has gone is a root, not a lost row"
+        );
+
+        let a = process(10, Some(11), "a.exe", None);
+        let b = process(11, Some(10), "b.exe", None);
+        let cycle = [&a, &b];
+        let lines = lines_for(&cycle, crate::ProcessGrouping::Parent, &[]);
+        assert_eq!(counts(&lines), (0, 2), "a cycle is listed, never dropped");
+    }
 }
