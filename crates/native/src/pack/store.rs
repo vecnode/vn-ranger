@@ -243,6 +243,7 @@ pub fn rollback(
     // ranger pointing at a pack it cannot load.
     let loaded = load_named(directory, &previous, builtin_ids, keys)?;
     let intent = Draft::intent(Action::Pack)
+        .with_id(&act_id(now_unix, &previous.sha256))
         .with_subject(&previous.id)
         .with_path(&directory.join(ACTIVE_FILE).display().to_string())
         .with_hash(&previous.sha256)
@@ -316,6 +317,7 @@ fn write_record(
         .map_err(|error| format!("Could not prepare {}: {error}", directory.display()))?;
     let path = directory.join(ACTIVE_FILE);
     let intent = Draft::intent(Action::Pack)
+        .with_id(&act_id(active.activated_at_unix, &active.sha256))
         .with_subject(&active.id)
         .with_path(&path.display().to_string())
         .with_hash(&active.sha256)
@@ -334,7 +336,6 @@ fn write_record(
             .with_id(intent.id.as_deref().unwrap_or_default())
             .with_subject(&active.id)
             .with_hash(&active.sha256)
-            .with_size(u64::try_from(pack.rules.len()).unwrap_or(u64::MAX))
             .with_reason(&format!("{} rules now active", pack.rules.len())),
     );
     if let Err(error) = result {
@@ -343,6 +344,15 @@ fn write_record(
         ));
     }
     Ok(())
+}
+
+/// The identifier an activation and its result share.
+///
+/// The journal pairs an intent with a result by this id, so an activation with an empty one
+/// would look like an intent that never finished. It is the time and the first bytes of the
+/// digest, which names the act and the bytes it was about.
+fn act_id(now_unix: u64, sha256: &str) -> String {
+    format!("{now_unix}-{}", &sha256[..sha256.len().min(12)])
 }
 
 fn write_json_record(directory: &Path, name: &str, active: &Active) -> Result<(), String> {
