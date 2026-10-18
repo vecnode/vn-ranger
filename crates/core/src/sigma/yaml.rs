@@ -116,6 +116,13 @@ fn split(text: &str) -> Result<Vec<Line>, Refusal> {
     let mut lines = Vec::new();
     let mut documents: u32 = 0;
     for (index, raw) in text.lines().enumerate() {
+        // A byte-order mark is what an editor on Windows writes when asked for UTF-8, and
+        // left in it becomes part of the first key: the title would quietly go missing.
+        let raw = if index == 0 {
+            raw.trim_start_matches('\u{feff}')
+        } else {
+            raw
+        };
         let number = index.saturating_add(1);
         if raw.contains('\t') {
             return Err(Refusal {
@@ -402,5 +409,14 @@ falsepositives:
     fn an_empty_file_says_so_rather_than_producing_nothing() {
         assert!(parse("").is_err());
         assert!(parse("\n\n").is_err());
+    }
+
+    #[test]
+    fn a_byte_order_mark_does_not_become_part_of_the_first_key() {
+        let node = parse("\u{feff}title: With a mark\ndetection:\n  selection:\n    Image: x\n").unwrap();
+        assert_eq!(
+            node.get("title").and_then(Node::as_str),
+            Some("With a mark")
+        );
     }
 }
