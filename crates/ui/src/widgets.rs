@@ -78,20 +78,109 @@ pub fn health(ui: &mut egui::Ui, state: vnr_core::CollectorState) {
     badge(ui, state.label(), color);
 }
 
-/// One number and its label, inline.
+/// The counts an inspector opens with: one row, the number first and its label after.
 ///
-/// Inline rather than on its own card: an overview of four counts is a sentence about the
-/// machine, and four boxes made it a dashboard. The number still leads, because it is what
-/// the eye is looking for.
-pub fn statistic(ui: &mut egui::Ui, value: usize, label: &str) {
-    ui.vertical(|ui| {
-        ui.label(
-            RichText::new(value.to_string())
-                .size(15.0)
-                .family(theme::semibold()),
-        );
-        ui.label(RichText::new(label).size(10.0).color(theme::muted(ui)));
+/// A row rather than four cards. Four boxes of equal size made the overview read as a
+/// dashboard, where the eye compares boxes instead of reading the machine; a row of
+/// small figures reads as the top line of an inventory, which is what it is.
+pub fn inventory(ui: &mut egui::Ui, items: &[(usize, &str)]) {
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
+        for (index, (value, label)) in items.iter().enumerate() {
+            if index > 0 {
+                ui.label(RichText::new("·").size(11.0).color(theme::muted(ui)));
+            }
+            ui.label(
+                RichText::new(value.to_string())
+                    .size(12.5)
+                    .family(theme::semibold()),
+            );
+            ui.label(RichText::new(*label).size(11.0).color(theme::muted(ui)));
+        }
     });
+}
+
+/// A quiet line under a heading, or a fact about the last scan.
+pub fn caption(ui: &mut egui::Ui, text: &str) {
+    ui.label(RichText::new(text).size(11.0).color(theme::muted(ui)));
+}
+
+/// A compact, selectable control for the row above a table.
+///
+/// `selectable_label` draws a link at the body size, which at twelve to a row reads as
+/// prose with underlines in it. A chip is a control: one line of eleven-point text, a
+/// border, an ember tint when it is the choice, and the same height as the search field
+/// beside it, so the top of every table is one row of controls rather than two styles.
+pub fn chip(ui: &mut egui::Ui, selected: bool, text: &str) -> egui::Response {
+    let family = if selected {
+        theme::semibold()
+    } else {
+        egui::FontFamily::Proportional
+    };
+    let colour = if selected {
+        ui.visuals().strong_text_color()
+    } else {
+        theme::muted(ui)
+    };
+    let fill = if selected {
+        theme::EMBER.gamma_multiply(0.14)
+    } else {
+        Color32::TRANSPARENT
+    };
+    let stroke = if selected {
+        Stroke::new(1.0, theme::EMBER.gamma_multiply(0.45))
+    } else {
+        Stroke::new(1.0, theme::border(ui))
+    };
+    ui.add(
+        egui::Button::new(RichText::new(text).size(11.0).family(family).color(colour))
+            .fill(fill)
+            .stroke(stroke)
+            .corner_radius(CornerRadius::same(6))
+            .min_size(vec2(0.0, 22.0)),
+    )
+}
+
+/// The search field that sits at the top right of a table.
+pub fn filter_field(ui: &mut egui::Ui, text: &mut String, hint: &str) -> egui::Response {
+    ui.add_sized(
+        vec2(230.0, 24.0),
+        egui::TextEdit::singleline(text)
+            .hint_text(hint)
+            .font(FontId::proportional(12.0))
+            .margin(Margin::symmetric(9, 5)),
+    )
+}
+
+/// A dialog, with one header size and one padding wherever it appears.
+///
+/// egui titles a window with `TextStyle::Heading`, which the page headings also use at
+/// [`theme::PAGE_TITLE`], so a dialog opened at that size reads as a page in a box. The
+/// scale is lowered for the lifetime of the window and put back afterwards, from the one
+/// table in [`theme::text_styles`], so the two sizes cannot drift apart.
+///
+/// Returns what the body returned, and whether the dialog is still open.
+pub fn dialog<R>(
+    ctx: &egui::Context,
+    title: &str,
+    width: f32,
+    add: impl FnOnce(&mut egui::Ui) -> R,
+) -> (Option<R>, bool) {
+    ctx.all_styles_mut(|style| style.text_styles = theme::text_styles(theme::DIALOG_TITLE));
+    let mut open = true;
+    let inner = egui::Window::new(title)
+        .collapsible(false)
+        .resizable(false)
+        .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+        .open(&mut open)
+        .show(ctx, |ui| {
+            ui.set_max_width(width);
+            ui.spacing_mut().item_spacing.y = 7.0;
+            add(ui)
+        })
+        .and_then(|response| response.inner);
+    ctx.all_styles_mut(|style| style.text_styles = theme::text_styles(theme::PAGE_TITLE));
+    (inner, open)
 }
 
 /// A heading with a quiet subtitle.

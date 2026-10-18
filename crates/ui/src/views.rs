@@ -38,32 +38,28 @@ impl Ui {
         let counts = snapshot.counts();
         let process_count = world.processes().len();
         let width = ui.available_width();
-        if width >= 720.0 {
-            ui.columns(4, |columns| {
-                widgets::statistic(&mut columns[0], process_count, "Processes");
-                widgets::statistic(&mut columns[1], counts.autoruns, "Startup items");
-                widgets::statistic(&mut columns[2], counts.listeners, "Listeners");
-                widgets::statistic(&mut columns[3], counts.packages, "Packages");
-            });
-        } else if width >= 560.0 {
-            ui.columns(2, |columns| {
-                widgets::statistic(&mut columns[0], process_count, "Processes");
-                widgets::statistic(&mut columns[1], counts.autoruns, "Startup items");
-            });
-            ui.add_space(6.0);
-            ui.columns(2, |columns| {
-                widgets::statistic(&mut columns[0], counts.listeners, "Listeners");
-                widgets::statistic(&mut columns[1], counts.packages, "Packages");
-            });
-        } else {
-            widgets::statistic(ui, process_count, "Processes");
-            ui.add_space(6.0);
-            widgets::statistic(ui, counts.autoruns, "Startup items");
-            ui.add_space(6.0);
-            widgets::statistic(ui, counts.listeners, "Listeners");
-            ui.add_space(6.0);
-            widgets::statistic(ui, counts.packages, "Packages");
+        // What the last scan was, where a person reads about the scan, and in the order
+        // they ask it: how long ago, how long it took, and what it covered.
+        widgets::caption(
+            ui,
+            &format!(
+                "Scanned {} · took {} · {} collectors",
+                describe_age(world.now_unix, snapshot.taken_at_unix),
+                describe_duration(snapshot.duration_ms),
+                snapshot.collectors.len()
+            ),
+        );
+        ui.add_space(6.0);
+        let mut facts = vec![
+            (process_count, "processes"),
+            (counts.autoruns, "startup items"),
+            (counts.listeners, "listeners"),
+            (counts.packages, "packages"),
+        ];
+        if !world.changes.is_empty() {
+            facts.push((world.changes.len(), "changes from the baseline"));
         }
+        widgets::inventory(ui, &facts);
         ui.add_space(10.0);
 
         let attention = world
@@ -166,12 +162,6 @@ impl Ui {
         }
         ui.add_space(10.0);
         collectors_card(ui, snapshot);
-        ui.add_space(10.0);
-        widgets::dot_line(
-            ui,
-            theme::OK,
-            "Every count above is a fact read from this machine, and none of it is sent anywhere.",
-        );
     }
 
     /// The rules' findings, with the evidence behind each one.
@@ -216,20 +206,12 @@ impl Ui {
                 ("Info", Some(vnr_core::Severity::Info), info),
             ] {
                 let selected = self.finding_severity == value;
-                if ui
-                    .selectable_label(selected, format!("{label} ({count})"))
-                    .clicked()
-                {
+                if widgets::chip(ui, selected, &format!("{label} ({count})")).clicked() {
                     self.finding_severity = value;
                 }
             }
             ui.add_space(8.0);
-            ui.add(
-                egui::TextEdit::singleline(&mut self.finding_query)
-                    .hint_text("Filter by rule, subject or evidence")
-                    .desired_width(230.0)
-                    .margin(egui::Margin::symmetric(8, 4)),
-            );
+            widgets::filter_field(ui, &mut self.finding_query, "Filter by rule, subject or evidence");
             if (self.finding_severity.is_some() || !self.finding_query.trim().is_empty())
                 && ui.button("Clear").clicked()
             {
@@ -262,26 +244,23 @@ impl Ui {
                 .severity
                 .rank()
                 .cmp(&a.severity.rank())
-                .then_with(|| a.rule_id.cmp(b.rule_id))
+                .then_with(|| a.rule_id.cmp(&b.rule_id))
                 .then_with(|| a.subject.cmp(&b.subject)),
             FindingSort::Rule => a
                 .rule_id
-                .cmp(b.rule_id)
+                .cmp(&b.rule_id)
                 .then_with(|| b.severity.rank().cmp(&a.severity.rank()))
                 .then_with(|| a.subject.cmp(&b.subject)),
             FindingSort::Subject => a
                 .subject_label
                 .to_lowercase()
                 .cmp(&b.subject_label.to_lowercase())
-                .then_with(|| a.rule_id.cmp(b.rule_id)),
+                .then_with(|| a.rule_id.cmp(&b.rule_id)),
         });
         ui.horizontal_wrapped(|ui| {
             ui.label(RichText::new("Sort").size(10.5).color(theme::muted(ui)));
             for sort in FindingSort::ALL {
-                if ui
-                    .selectable_label(self.finding_sort == sort, sort.label())
-                    .clicked()
-                {
+                if widgets::chip(ui, self.finding_sort == sort, sort.label()).clicked() {
                     self.finding_sort = sort;
                 }
             }
@@ -351,7 +330,7 @@ impl Ui {
                 } else {
                     key.label().to_owned()
                 };
-                if ui.selectable_label(selected, label).clicked() {
+                if widgets::chip(ui, selected, &label).clicked() {
                     if selected {
                         self.process_sort_desc = !self.process_sort_desc;
                     } else {
@@ -363,10 +342,7 @@ impl Ui {
             ui.add_space(10.0);
             ui.label(RichText::new("Filter").size(10.5).color(theme::muted(ui)));
             for filter in ProcessFilter::ALL {
-                if ui
-                    .selectable_label(self.process_filter == filter, filter.label())
-                    .clicked()
-                {
+                if widgets::chip(ui, self.process_filter == filter, filter.label()).clicked() {
                     self.process_filter = filter;
                 }
             }
@@ -582,7 +558,7 @@ impl Ui {
                 ("User", Some(AutorunScope::User)),
                 ("Machine", Some(AutorunScope::System)),
             ] {
-                if ui.selectable_label(self.autorun_scope == value, label).clicked() {
+                if widgets::chip(ui, self.autorun_scope == value, label).clicked() {
                     self.autorun_scope = value;
                 }
             }
@@ -857,10 +833,7 @@ impl Ui {
         ui.horizontal_wrapped(|ui| {
             ui.label(RichText::new("Source").size(10.5).color(theme::muted(ui)));
             for filter in ChangeFilter::ALL {
-                if ui
-                    .selectable_label(self.change_filter == filter, filter.label())
-                    .clicked()
-                {
+                if widgets::chip(ui, self.change_filter == filter, filter.label()).clicked() {
                     self.change_filter = filter;
                 }
             }
@@ -1063,7 +1036,260 @@ impl Ui {
     }
 
     /// Preferences, elevation and privacy.
+    /// The rule packs: which one is loaded, what is installed, and the keys trusted.
+    pub(crate) fn packs(&mut self, ui: &mut egui::Ui, world: &crate::World, actions: &mut Vec<Action>) {
+        let packs = &world.packs;
+        if let Some(error) = &packs.error {
+            widgets::card(ui, |ui| {
+                ui.label(RichText::new("The last pack action failed").family(theme::semibold()));
+                ui.add_space(4.0);
+                ui.label(RichText::new(error.as_str()).size(11.5).color(theme::ATTENTION));
+            });
+            ui.add_space(10.0);
+        }
+
+        widgets::card(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Loaded pack").family(theme::semibold()));
+                if packs.active.is_some() {
+                    widgets::badge(ui, "ACTIVE", theme::OK);
+                }
+            });
+            ui.add_space(4.0);
+            match &packs.active {
+                Some(active) => {
+                    ui.label(
+                        RichText::new(format!("{} · {}", active.id, active.version))
+                            .size(12.5)
+                            .family(theme::semibold()),
+                    );
+                    ui.label(
+                        RichText::new(format!("{} · {} rules", active.title, active.rules))
+                            .size(11.0)
+                            .color(theme::muted(ui)),
+                    );
+                    ui.add_space(2.0);
+                    match &packs.signed_by {
+                        Some(fingerprint) => {
+                            widgets::key_value(ui, "Signed by", fingerprint);
+                        }
+                        None => {
+                            widgets::dot_line(
+                                ui,
+                                theme::OK,
+                                "Built into ranger: the bytes travel with the build, not a file on disk.",
+                            );
+                        }
+                    }
+                    ui.add_space(4.0);
+                    ui.horizontal(|ui| {
+                        let rollback = ui.add_enabled(
+                            packs.can_roll_back,
+                            egui::Button::new("Roll back to the previous pack"),
+                        );
+                        if rollback.clicked() {
+                            actions.push(Action::RollbackPack);
+                        }
+                        if !packs.can_roll_back {
+                            rollback.on_hover_text("No previous pack is recorded on this machine yet.");
+                        }
+                        if ui.button("Use the pack built into ranger").clicked() {
+                            actions.push(Action::ActivateEmbeddedPack);
+                        }
+                    });
+                }
+                None => {
+                    ui.label(
+                        RichText::new(
+                            "No pack is loaded, so only the built-in rules are running. That is what this data folder says, not an error: nothing was read on ranger's behalf while no record was active.",
+                        )
+                        .size(11.0)
+                        .color(theme::muted(ui)),
+                    );
+                    if ui.button("Load the pack built into ranger").clicked() {
+                        actions.push(Action::ActivateEmbeddedPack);
+                    }
+                }
+            }
+        });
+        ui.add_space(10.0);
+
+        widgets::card(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Packs in this folder").family(theme::semibold()));
+                if ui.small_button("Read again").clicked() {
+                    actions.push(Action::RefreshPacks);
+                }
+            });
+            ui.add_space(4.0);
+            if packs.installed.is_empty() {
+                ui.label(
+                    RichText::new(
+                        "No pack files were found. Ranger looked for *.json with a *.minisig beside it in the folder below.",
+                    )
+                    .size(11.0)
+                    .color(theme::muted(ui)),
+                );
+            } else {
+                for pack in &packs.installed {
+                    widgets::border(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.vertical(|ui| {
+                                ui.label(
+                                    RichText::new(format!("{} · {}", pack.id, pack.version))
+                                        .size(11.5)
+                                        .family(theme::semibold()),
+                                );
+                                ui.label(RichText::new(&pack.status).size(10.5).color(if pack.signed {
+                                    theme::OK
+                                } else {
+                                    theme::muted(ui)
+                                }));
+                                if !pack.path.is_empty() {
+                                    widgets::path(ui, &pack.path);
+                                }
+                            });
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                if pack.active {
+                                    widgets::badge(ui, "ACTIVE", theme::OK);
+                                } else if ui.button("Use this pack").clicked() {
+                                    actions.push(Action::ActivatePack(pack.path.clone()));
+                                }
+                            });
+                        });
+                    });
+                }
+            }
+            ui.add_space(2.0);
+            ui.label(
+                RichText::new("Packs are read from")
+                    .size(10.5)
+                    .color(theme::muted(ui)),
+            );
+            widgets::path(ui, &packs.directory);
+            ui.horizontal(|ui| {
+                if ui.button("Open the packs folder").clicked() {
+                    actions.push(Action::OpenPath(packs.directory.clone()));
+                }
+                ui.label(
+                    RichText::new("A pack is one .json file and its .minisig; never an archive.")
+                        .size(10.5)
+                        .color(theme::muted(ui)),
+                );
+            });
+        });
+        ui.add_space(10.0);
+
+        widgets::card(ui, |ui| {
+            ui.label(RichText::new("Keys ranger trusts").family(theme::semibold()));
+            ui.add_space(4.0);
+            if packs.keys.is_empty() {
+                ui.label(
+                    RichText::new(
+                        "No key is trusted, so an imported pack cannot be loaded yet. Ranger checked packs/keys.json and found no keys in it.",
+                    )
+                    .size(11.0)
+                    .color(theme::muted(ui)),
+                );
+            } else {
+                for key in &packs.keys {
+                    widgets::border(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.vertical(|ui| {
+                                ui.label(
+                                    RichText::new(&key.fingerprint)
+                                        .size(11.5)
+                                        .monospace()
+                                        .family(theme::semibold()),
+                                );
+                                ui.label(
+                                    RichText::new(format!(
+                                        "Added {} · {} pack(s) installed with this key",
+                                        key.added, key.packs
+                                    ))
+                                    .size(10.5)
+                                    .color(theme::muted(ui)),
+                                );
+                            });
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                if ui.button("Stop trusting").clicked() {
+                                    actions.push(Action::RemovePackKey(key.fingerprint.clone()));
+                                }
+                            });
+                        });
+                    });
+                }
+            }
+            ui.add_space(6.0);
+            ui.label(RichText::new("Trust a key").size(11.0).family(theme::semibold()));
+            ui.label(
+                RichText::new(
+                    "Paste the author's minisign public key, type the fingerprint they gave you, and compare the two. A key trusted here signs every pack ranger will load with it.",
+                )
+                .size(10.5)
+                .color(theme::muted(ui)),
+            );
+            ui.add(
+                egui::TextEdit::multiline(&mut self.pack_public)
+                    .hint_text("The minisign public key")
+                    .desired_width(f32::INFINITY)
+                    .desired_rows(2)
+                    .font(egui::TextStyle::Monospace)
+                    .margin(egui::Margin::symmetric(8, 5)),
+            );
+            ui.horizontal(|ui| {
+                ui.add_sized(
+                    egui::vec2(200.0, 24.0),
+                    egui::TextEdit::singleline(&mut self.pack_print)
+                        .hint_text("Fingerprint, as typed")
+                        .font(egui::TextStyle::Monospace)
+                        .margin(egui::Margin::symmetric(8, 5)),
+                );
+                let ready = !self.pack_public.trim().is_empty() && !self.pack_print.trim().is_empty();
+                if ui
+                    .add_enabled(ready, egui::Button::new("Trust this key"))
+                    .clicked()
+                {
+                    actions.push(Action::AddPackKey {
+                        public: self.pack_public.trim().to_owned(),
+                        fingerprint: self.pack_print.trim().to_owned(),
+                    });
+                    self.pack_public.clear();
+                    self.pack_print.clear();
+                }
+                ui.label(
+                    RichText::new("The key is refused when the fingerprint does not match.")
+                        .size(10.5)
+                        .color(theme::muted(ui)),
+                );
+            });
+        });
+    }
+
     pub(crate) fn settings(&mut self, ui: &mut egui::Ui, world: &crate::World, actions: &mut Vec<Action>) {
+        widgets::card(ui, |ui| {
+            ui.label(RichText::new("Privacy").family(theme::semibold()));
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new("No network. No telemetry. Everything ranger saw stays on this machine.")
+                    .size(11.5),
+            );
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new(
+                    "Every count is a fact read from this machine, and none of it is sent anywhere. There is no update check, no account and no request of any kind: the only files ranger writes are the ones listed below, and the only folder it reads by name is its own.",
+                )
+                .size(11.0)
+                .color(theme::muted(ui)),
+            );
+            ui.add_space(6.0);
+            ui.label(RichText::new("Data folder").size(10.5).color(theme::muted(ui)));
+            widgets::path(ui, &world.data_dir.display().to_string());
+            if ui.button("Open the data folder").clicked() {
+                actions.push(Action::OpenPath(world.data_dir.display().to_string()));
+            }
+        });
+        ui.add_space(10.0);
         widgets::card(ui, |ui| {
             ui.label(RichText::new("Appearance").family(theme::semibold()));
             if ui.checkbox(&mut self.dark, "Dark theme").changed() {
@@ -1710,7 +1936,7 @@ fn finding_card(ui: &mut egui::Ui, finding: &vnr_core::Finding) -> bool {
     widgets::card(ui, |ui| {
         ui.horizontal(|ui| {
             widgets::badge(ui, finding.severity.label(), colour);
-            ui.label(RichText::new(finding.title).size(12.5).family(theme::semibold()));
+            ui.label(RichText::new(&finding.title).size(12.5).family(theme::semibold()));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.button("Suppress…").clicked() {
                     suppress = true;
@@ -1730,13 +1956,13 @@ fn finding_card(ui: &mut egui::Ui, finding: &vnr_core::Finding) -> bool {
         }
         ui.add_space(6.0);
         ui.label(RichText::new("Why").size(10.0).color(theme::muted(ui)));
-        ui.add(egui::Label::new(RichText::new(finding.why).size(11.5)).wrap());
+        ui.add(egui::Label::new(RichText::new(&finding.why).size(11.5)).wrap());
         ui.add_space(4.0);
         ui.label(RichText::new("Likely benign").size(10.0).color(theme::OK));
-        ui.add(egui::Label::new(RichText::new(finding.benign).size(11.0).color(theme::muted(ui))).wrap());
+        ui.add(egui::Label::new(RichText::new(&finding.benign).size(11.0).color(theme::muted(ui))).wrap());
         ui.add_space(4.0);
         ui.label(RichText::new("What to do").size(10.0).color(theme::muted(ui)));
-        ui.add(egui::Label::new(RichText::new(finding.remediation).size(11.0)).wrap());
+        ui.add(egui::Label::new(RichText::new(&finding.remediation).size(11.0)).wrap());
         ui.add_space(4.0);
         ui.label(
             RichText::new(format!("{} · {}", finding.rule_id, finding.subject))
@@ -1795,6 +2021,20 @@ fn event_row(ui: &mut egui::Ui, event: &vnr_core::TimelineEvent) {
             .wrap(),
         );
     });
+}
+
+/// How long a scan took, at the precision a person reads: tenths of a second.
+///
+/// A scan is either under a second, where milliseconds are the interesting fact, or over
+/// it, where a tenth is. Printing `1.438 s` invites a precision nobody acts on.
+fn describe_duration(milliseconds: u64) -> String {
+    if milliseconds < 1000 {
+        format!("{milliseconds} ms")
+    } else {
+        #[allow(clippy::cast_precision_loss)]
+        let seconds = milliseconds as f64 / 1000.0;
+        format!("{seconds:.1} s")
+    }
 }
 
 fn table_header(ui: &mut egui::Ui, text: &str) {

@@ -17,6 +17,8 @@ pub enum View {
     Overview,
     /// What the rules observed, with the evidence.
     Findings,
+    /// Which pack of rules is loaded, and which keys it trusts.
+    Packs,
     /// Everything that is running.
     Processes,
     /// Everything that starts on its own.
@@ -35,9 +37,10 @@ pub enum View {
 
 impl View {
     /// Every view, in navigation order.
-    pub const ALL: [View; 9] = [
+    pub const ALL: [View; 10] = [
         View::Overview,
         View::Findings,
+        View::Packs,
         View::Processes,
         View::Startup,
         View::Listeners,
@@ -53,6 +56,7 @@ impl View {
         match self {
             Self::Overview => "Overview",
             Self::Findings => "Findings",
+            Self::Packs => "Rule packs",
             Self::Processes => "Processes",
             Self::Startup => "Startup",
             Self::Listeners => "Listeners",
@@ -78,6 +82,7 @@ impl View {
         match self {
             Self::Overview => "What is on this machine, right now.",
             Self::Findings => "What the rules observed, and what they do not mean.",
+            Self::Packs => "The rules ranger loaded, and the keys it trusts to sign them.",
             Self::Processes => "Every process this account can see.",
             Self::Startup => "What runs without a person clicking it.",
             Self::Listeners => "Sockets waiting for a connection.",
@@ -346,6 +351,57 @@ pub struct WatchReport {
     pub error: Option<String>,
 }
 
+/// One pack, as the interface lists it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PackRow {
+    /// The pack's own id, or the file name when it could not be read.
+    pub id: String,
+    /// The version the author gave it.
+    pub version: String,
+    /// What it is called.
+    pub title: String,
+    /// How many rules it holds.
+    pub rules: usize,
+    /// Where it is, as a person reads a path. Empty for the pack in the build.
+    pub path: String,
+    /// Whether this is the pack that is loaded.
+    pub active: bool,
+    /// Whether a signature sits beside it.
+    pub signed: bool,
+    /// What verification said, when it has been tried.
+    pub status: String,
+}
+
+/// A key ranger trusts.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct KeyRow {
+    /// The fingerprint a person compares before typing it.
+    pub fingerprint: String,
+    /// When it was added, already formatted.
+    pub added: String,
+    /// How many installed packs it signed, as far as the interface can tell.
+    pub packs: usize,
+}
+
+/// What ranger knows about rule packs: the record, the files and the keys.
+#[derive(Clone, Debug, Default)]
+pub struct Packs {
+    /// The pack that is loaded, when one is.
+    pub active: Option<PackRow>,
+    /// Every pack file in the packs folder.
+    pub installed: Vec<PackRow>,
+    /// The keys this machine trusts.
+    pub keys: Vec<KeyRow>,
+    /// The folder packs and keys live in, shown so a person can put a file there.
+    pub directory: String,
+    /// The fingerprint of the key that signed the active pack, when one did.
+    pub signed_by: Option<String>,
+    /// What the last pack operation said, when it could not do what was asked.
+    pub error: Option<String>,
+    /// Whether a previous record exists to roll back to.
+    pub can_roll_back: bool,
+}
+
 /// Everything the interface draws from.
 #[derive(Clone, Debug)]
 pub struct World {
@@ -412,6 +468,8 @@ pub struct World {
     pub journal: Vec<JournalRow>,
     /// Whether the journal reports a damaged line or a torn tail.
     pub journal_damaged: bool,
+    /// The rule packs: which one is loaded, what is installed, and the keys trusted.
+    pub packs: Packs,
 }
 
 impl World {
@@ -548,6 +606,27 @@ pub enum Action {
     },
     /// Read the quarantine and the journal from disk again.
     RefreshActions,
+    /// Trust a key, but only when the fingerprint the person typed is the key's own.
+    ///
+    /// The typed fingerprint travels with the action: the interface is not the only thing
+    /// that may dispatch one, and "add this key" without the comparison is exactly the act
+    /// the form exists to make deliberate.
+    AddPackKey {
+        /// The public key, as minisign writes it.
+        public: String,
+        /// The fingerprint the person read out and typed.
+        fingerprint: String,
+    },
+    /// Stop trusting a key. The packs it signed stop loading.
+    RemovePackKey(String),
+    /// Load a pack file from the packs folder, after checking its signature.
+    ActivatePack(String),
+    /// Go back to the pack that was active before this one.
+    RollbackPack,
+    /// Record the pack built into this build as the active one again.
+    ActivateEmbeddedPack,
+    /// Read the packs folder and the trust store again.
+    RefreshPacks,
     /// Open a file or directory in the platform's file manager.
     OpenPath(String),
     /// Close the application.

@@ -26,6 +26,11 @@ pub struct App {
     /// The one writer of `journal.ndjson`. Observations are written as they arrive;
     /// an intent or a result is synced (§6.10).
     journal: vnr_native::journal::Journal,
+    /// The rules of the active pack, when one is loaded. The built-in rules live in the
+    /// core and are not a file; this is the half of the rule set that can change.
+    pack: Option<vnr_core::pack::Pack>,
+    /// The keys this machine trusts to sign imported packs.
+    pack_keys: vnr_native::pack::Keys,
     /// Set once the journal has failed, so one broken disk is one message rather than a
     /// notice per event.
     journal_reported: bool,
@@ -91,7 +96,15 @@ impl App {
             _ => Vec::new(),
         };
         let suppressions = vnr_native::store::load_suppressions(now_unix());
-        let findings = findings_for(snapshot.as_ref(), baseline.as_ref(), &suppressions, now_unix());
+        let places = vnr_native::pack::places();
+        let findings = findings_for(
+            snapshot.as_ref(),
+            baseline.as_ref(),
+            &suppressions,
+            now_unix(),
+            None,
+            &places,
+        );
         let watch_extra = vnr_native::store::load_watch_roots();
         let mut world = World {
             snapshot,
@@ -127,6 +140,7 @@ impl App {
             clean: None,
             journal: Vec::new(),
             journal_damaged: false,
+            packs: vnr_ui::Packs::default(),
         };
         let mut ui = Ui::new(&cc.egui_ctx);
         if let Some(dark) = settings.dark {
@@ -143,8 +157,12 @@ impl App {
             Err(error) => {
                 journal_reported = true;
                 world.error = Some(format!(
-                    "The journal at {} could not be opened: {error}. Nothing this session does will be recorded.",
-                    journal_path.display()
+                    "The journal at {} could not be opened: {error}. Nothing this session does will be recorded. \
+                     Ranger writes its journal beside its settings, so a security program or a folder policy \
+                     that blocks writes to {}/ will block this as well; VN_RANGER_DATA_DIR moves the whole \
+                     folder somewhere they allow.",
+                    journal_path.display(),
+                    vnr_native::paths::data_dir().display()
                 ));
                 vnr_native::journal::Journal::unavailable(journal_path, &error.to_string())
             }
@@ -162,6 +180,15 @@ impl App {
         let plan = vnr_core::schedule::Plan::DEFAULT;
         let schedule_seed = u64::from(std::process::id()) ^ now_unix();
         let next_scan_unix = vnr_core::schedule::next_at(now_unix(), plan, schedule_seed);
+        // The rules that are not compiled in. A pack that cannot load leaves the built-ins
+        // running and says so; it never stops the program and it never stops a scan.
+        let loaded = crate::packs::load(&mut journal);
+        if let Some(problem) = loaded.problem
+            && world.error.is_none()
+        {
+            world.error = Some(problem);
+        }
+        let (pack, pack_keys) = (loaded.pack, loaded.keys);
         let mut app = Self {
             ui,
             world,
@@ -171,6 +198,8 @@ impl App {
             instance,
             cancel: None,
             journal,
+            pack,
+            pack_keys,
             journal_reported,
             plan,
             schedule_seed,
@@ -191,6 +220,7 @@ impl App {
             app.start_scan(&cc.egui_ctx, false);
         }
         app.refresh_actions();
+        app.refresh_packs();
         app
     }
 
@@ -290,6 +320,181 @@ impl App {
             self.world.error = Some(format!(
                 "{unreadable} folder in the quarantine could not be read, so the list above is incomplete."
             ));
+        }
+    }
+
+    /// Rebuild the pack view from disk.
+    ///
+    /// The view is a reading of the packs folder and the trust store, with the same checks
+    /// activation runs, so what a person sees listed is what ranger would do with it.
+    fn refresh_packs(&mut self) {
+        self.world.packs = crate::packs::view(&self.pack_keys, self.pack.as_ref());
+    }
+
+    /// Load the active pack again after something that could change it loaded.
+    fn reload_pack(&mut self) {
+        let directory = vnr_native::pack::directory();
+        match vnr_native::pack::store::load_active(
+            &directory,
+            vnr_core::rules::builtin_ids(),
+            &self.pack_keys,
+        ) {
+            Ok(Some(loaded)) => {
+                self.pack = Some(loaded.pack);
+                self.world.packs.error = None;
+            }
+            Ok(None) => {
+                self.pack = None;
+            }
+            Err(problem) => {
+                self.pack = None;
+                self.world.packs.error = Some(problem);
+            }
+        }
+        self.refresh_packs();
+        self.refresh_findings(false);
+    }
+
+    /// Trust a key, but only the key whose fingerprint the person typed.
+    ///
+    /// The comparison is the point of the form: pasting a key and pressing a button trusts
+    /// whatever was pasted, which is exactly the thing a fingerprint read out loud prevents.
+    /// A mismatch adds nothing and says what the fingerprint actually is, so a person with
+    /// a truncated paste can see the difference rather than wonder.
+    fn add_pack_key(&mut self, public: &str, typed: &str) {
+        let Some(key) = vnr_native::pack::Key::parse(public) else {
+            self.world.packs.error = Some(
+                "That is not a minisign public key. Paste the line that begins with `untrusted comment:` \
+                 followed by the key itself, or the key line alone."
+                    .to_owned(),
+            );
+            return;
+        };
+        let typed = typed.split_whitespace().collect::<Vec<_>>().join(" ");
+        if !key.fingerprint.eq_ignore_ascii_case(&typed) {
+            self.world.packs.error = Some(format!(
+                "The fingerprint you typed is not the key's own. This key's fingerprint is {}.",
+                key.fingerprint
+            ));
+            return;
+        }
+        match self.pack_keys.add(&key.public, now_unix()) {
+            Ok(stored) => {
+                if let Err(problem) = self.pack_keys.save(&vnr_native::pack::directory()) {
+                    self.world.packs.error = Some(problem);
+                    return;
+                }
+                let _ = self.journal.record(
+                    Draft::event("pack key trusted")
+                        .with_action(vnr_core::Action::Config)
+                        .with_subject(&stored.fingerprint)
+                        .with_reason("the fingerprint was typed and matched the key"),
+                );
+                self.world.packs.error = None;
+                self.world.notice = Some(format!("{} is trusted now.", stored.fingerprint));
+                // A key changes which packs load, including the one that is already active.
+                self.reload_pack();
+            }
+            Err(problem) => self.world.packs.error = Some(problem),
+        }
+    }
+
+    /// Stop trusting a key, and unload whatever it signed.
+    fn remove_pack_key(&mut self, fingerprint: &str) {
+        if !self.pack_keys.remove(fingerprint) {
+            self.world.packs.error = Some(format!(
+                "{fingerprint} is not in the trust store, so there was nothing to remove."
+            ));
+            self.refresh_packs();
+            return;
+        }
+        if let Err(problem) = self.pack_keys.save(&vnr_native::pack::directory()) {
+            self.world.packs.error = Some(problem);
+            return;
+        }
+        let _ = self.journal.record(
+            Draft::event("pack key removed")
+                .with_action(vnr_core::Action::Config)
+                .with_subject(fingerprint)
+                .with_reason("the key was removed, so packs it signed no longer load"),
+        );
+        self.world.notice = Some(format!(
+            "{fingerprint} is no longer trusted. Any pack it signed has been unloaded."
+        ));
+        self.reload_pack();
+    }
+
+    /// Record a verified pack as the active one, journalling the intent and the result.
+    fn activate_pack(&mut self, path: &str) {
+        let directory = vnr_native::pack::directory();
+        match vnr_native::pack::store::activate(
+            &directory,
+            std::path::Path::new(path),
+            vnr_core::rules::builtin_ids(),
+            &self.pack_keys,
+            &mut self.journal,
+            now_unix(),
+        ) {
+            Ok(loaded) => {
+                self.world.packs.error = None;
+                self.world.notice = Some(format!(
+                    "{} {} is active: {} rules.",
+                    loaded.pack.header.id,
+                    loaded.pack.header.version,
+                    loaded.pack.rules.len()
+                ));
+                self.pack = Some(loaded.pack);
+                self.refresh_packs();
+                self.refresh_findings(false);
+            }
+            Err(problem) => {
+                self.world.packs.error = Some(problem);
+                self.refresh_packs();
+            }
+        }
+    }
+
+    /// Go back to the pack that was active before this one.
+    fn rollback_pack(&mut self) {
+        let directory = vnr_native::pack::directory();
+        match vnr_native::pack::store::rollback(
+            &directory,
+            vnr_core::rules::builtin_ids(),
+            &self.pack_keys,
+            &mut self.journal,
+            now_unix(),
+        ) {
+            Ok(loaded) => {
+                self.world.packs.error = None;
+                self.world.notice = Some(format!(
+                    "Rolled back to {} {}.",
+                    loaded.pack.header.id, loaded.pack.header.version
+                ));
+                self.pack = Some(loaded.pack);
+                self.refresh_packs();
+                self.refresh_findings(false);
+            }
+            Err(problem) => self.world.packs.error = Some(problem),
+        }
+    }
+
+    /// Record the pack compiled into this build as active again.
+    fn activate_embedded_pack(&mut self) {
+        let directory = vnr_native::pack::directory();
+        match vnr_native::pack::store::activate_embedded(
+            &directory,
+            vnr_core::rules::builtin_ids(),
+            &mut self.journal,
+            now_unix(),
+        ) {
+            Ok(loaded) => {
+                self.world.packs.error = None;
+                self.world.notice = Some("The rules built into ranger are active again.".to_owned());
+                self.pack = Some(loaded.pack);
+                self.refresh_packs();
+                self.refresh_findings(false);
+            }
+            Err(problem) => self.world.packs.error = Some(problem),
         }
     }
 
@@ -652,11 +857,14 @@ impl App {
             .iter()
             .map(|finding| format!("{}|{}", finding.rule_id, finding.subject))
             .collect();
+        let places = vnr_native::pack::places();
         let findings = findings_for(
             self.world.snapshot.as_ref(),
             self.world.baseline.as_ref(),
             &self.world.suppressions,
             now,
+            self.pack.as_ref(),
+            &places,
         );
         if announce {
             let mut raised: Vec<(String, String, String)> = Vec::new();
@@ -668,7 +876,7 @@ impl App {
                 self.world.timeline.push(TimelineEvent::new(
                     now,
                     EventKind::FindingRaised,
-                    finding.title,
+                    finding.title.clone(),
                     finding.subject_label.clone(),
                     "rules",
                 ));
@@ -933,6 +1141,19 @@ impl App {
             Action::RefreshActions => {
                 self.refresh_actions();
                 self.world.notice = Some("The quarantine and the journal were read again.".to_owned());
+            }
+            Action::AddPackKey { public, fingerprint } => {
+                self.add_pack_key(&public, &fingerprint);
+            }
+            Action::RemovePackKey(fingerprint) => self.remove_pack_key(&fingerprint),
+            Action::ActivatePack(path) => self.activate_pack(&path),
+            Action::RollbackPack => self.rollback_pack(),
+            Action::ActivateEmbeddedPack => self.activate_embedded_pack(),
+            Action::RefreshPacks => {
+                self.pack_keys =
+                    vnr_native::pack::Keys::load(&vnr_native::pack::directory()).unwrap_or_default();
+                self.reload_pack();
+                self.world.notice = Some("The packs folder and the trust store were read again.".to_owned());
             }
             Action::Restore(id) => {
                 match vnr_native::act::restore(&mut self.journal, &id, &vnr_native::action::RealIo) {
@@ -1281,10 +1502,19 @@ fn findings_for(
     baseline: Option<&vnr_core::Snapshot>,
     suppressions: &[Suppression],
     now: u64,
+    pack: Option<&vnr_core::pack::Pack>,
+    places: &vnr_core::pack::evaluate::Places,
 ) -> Vec<Finding> {
     let Some(snapshot) = snapshot else {
         return Vec::new();
     };
-    let findings = vnr_core::evaluate(snapshot, baseline);
+    // Two engines, one list. The built-in rules need computation; a pack is data. Both
+    // produce the same `Finding`, so the interface, a suppression and the report cannot
+    // tell them apart except by the pack that a finding names.
+    let mut findings = vnr_core::evaluate(snapshot, baseline);
+    if let Some(pack) = pack {
+        findings.extend(vnr_core::pack::evaluate::evaluate(pack, snapshot, places));
+        vnr_core::sort_findings(&mut findings);
+    }
     vnr_core::apply_suppressions(findings, suppressions, now)
 }
