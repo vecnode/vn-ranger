@@ -30,6 +30,8 @@ struct Open {
     seq: u64,
     lines: u64,
     first_seq: u64,
+    /// The chain link of the last line written or read, which the next line covers.
+    chain: Option<String>,
     /// How many lines this process has written, across rotations. The soak reads it, so it
     /// is a fact about the writer rather than an estimate from the file's size.
     written: u64,
@@ -99,6 +101,7 @@ impl Journal {
                 seq,
                 lines,
                 first_seq,
+                chain: existing.entries.last().and_then(|entry| entry.chain.clone()),
                 written: 0,
             }),
             blocked: None,
@@ -158,7 +161,15 @@ impl Journal {
                 ));
             }
         };
-        let entry = draft.seal(seq, now_unix());
+        let mut entry = draft.seal(seq, now_unix());
+        // The chain covers the previous link and every fact in this line, and is computed
+        // before the line is serialised for the file.
+        entry.chain = {
+            let previous = self.inner.as_ref().and_then(|open| open.chain.clone());
+            journal::chain_input(previous.as_deref(), &entry)
+                .ok()
+                .map(|input| crate::hash::digest_bytes(input.as_bytes(), false, false).sha256)
+        };
         let mut line = entry
             .to_line()
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
@@ -173,6 +184,7 @@ impl Journal {
                     open.seq = entry.seq;
                     open.lines = open.lines.saturating_add(1);
                     open.written = open.written.saturating_add(1);
+                    open.chain = entry.chain.clone();
                     if open.first_seq == 0 {
                         open.first_seq = entry.seq;
                     }
@@ -199,8 +211,14 @@ impl Journal {
     /// The new file starts at the next sequence number, so the journal's order survives
     /// the split and a reader sorts the files by the number in their name.
     pub fn rotate_if_needed(&mut self) -> io::Result<bool> {
-        let (lines, first_seq, seq, written) = match self.inner.as_ref() {
-            Some(open) => (open.lines, open.first_seq, open.seq, open.written),
+        let (lines, first_seq, seq, written, chain) = match self.inner.as_ref() {
+            Some(open) => (
+                open.lines,
+                open.first_seq,
+                open.seq,
+                open.written,
+                open.chain.clone(),
+            ),
             None => return Ok(false),
         };
         if lines < ENTRIES_PER_FILE || first_seq == 0 {
@@ -215,6 +233,7 @@ impl Journal {
             seq,
             lines: 0,
             first_seq: 0,
+            chain,
             written,
         });
         Ok(true)
@@ -279,6 +298,67 @@ impl Journal {
         }
         merge(&mut combined, &self.path);
         combined
+    }
+}
+
+/// What verifying the journal's hash chain found.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChainState {
+    /// Every line verifies, and every line carries a link.
+    Intact,
+    /// The line at this sequence does not match its link: a fact in it changed, or a line
+    /// was inserted, removed or reordered.
+    Broken {
+        /// The sequence number of the first line that does not verify.
+        seq: u64,
+    },
+    /// Verification starts here, because the lines before it were written without a chain.
+    Unchained {
+        /// The first sequence number that carries a link, or zero when none does.
+        from: u64,
+    },
+}
+
+/// Verify the hash chain over a record read from disk.
+///
+/// A line without a link is not a failure by itself: journals written before 0.1.7 have
+/// none, and a chain cannot retroactively cover them. What is a failure is a line whose
+/// link does not recompute, or a line inside a chain that has lost its link — both mean the
+/// record on disk is not the record that was written.
+#[must_use]
+pub fn verify_chain(entries: &[JournalEntry]) -> ChainState {
+    let mut previous: Option<String> = None;
+    let mut first_chained: Option<u64> = None;
+    let mut legacy = false;
+    let mut chained = false;
+    for entry in entries {
+        let Some(chain) = entry.chain.clone() else {
+            if chained {
+                // A link exists on both sides of this line, so its absence is damage rather
+                // than age.
+                return ChainState::Broken { seq: entry.seq };
+            }
+            legacy = true;
+            previous = None;
+            continue;
+        };
+        chained = true;
+        first_chained.get_or_insert(entry.seq);
+        let Ok(input) = journal::chain_input(previous.as_deref(), entry) else {
+            return ChainState::Broken { seq: entry.seq };
+        };
+        let expected = crate::hash::digest_bytes(input.as_bytes(), false, false).sha256;
+        if expected != chain {
+            return ChainState::Broken { seq: entry.seq };
+        }
+        previous = Some(chain);
+    }
+    if legacy {
+        ChainState::Unchained {
+            from: first_chained.unwrap_or(0),
+        }
+    } else {
+        ChainState::Intact
     }
 }
 
@@ -457,6 +537,84 @@ mod tests {
 
     fn journal_in(dir: &tempfile::TempDir) -> Journal {
         Journal::open_at(dir.path().join("journal.ndjson")).unwrap()
+    }
+
+    #[test]
+    fn every_line_written_now_carries_a_link_and_the_chain_verifies() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut journal = journal_in(&dir);
+        journal.record(Draft::event("one")).unwrap();
+        journal.record(Draft::event("two")).unwrap();
+        let read = journal.read();
+        assert_eq!(read.entries.len(), 2);
+        assert!(
+            read.entries.iter().all(|entry| entry.chain.is_some()),
+            "a line written by this build carries its link"
+        );
+        assert_ne!(
+            read.entries[0].chain, read.entries[1].chain,
+            "two lines with different content cannot share a link"
+        );
+        assert_eq!(verify_chain(&read.entries), ChainState::Intact);
+    }
+
+    #[test]
+    fn a_changed_fact_breaks_the_chain_at_the_line_it_changed() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut journal = journal_in(&dir);
+        journal.record(Draft::event("one")).unwrap();
+        journal.record(Draft::event("two")).unwrap();
+        let path = journal.path().to_path_buf();
+        let text = std::fs::read_to_string(&path).unwrap();
+        let changed = text.replacen("\"subject\":\"one\"", "\"subject\":\"0ne\"", 1);
+        assert_ne!(text, changed, "the fixture changed a fact");
+        std::fs::write(&path, changed).unwrap();
+        let read = Journal::open_at(path).unwrap().read();
+        assert_eq!(verify_chain(&read.entries), ChainState::Broken { seq: 1 });
+    }
+
+    #[test]
+    fn a_line_that_lost_its_link_inside_a_chain_is_broken_rather_than_old() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut journal = journal_in(&dir);
+        journal.record(Draft::event("one")).unwrap();
+        journal.record(Draft::event("two")).unwrap();
+        let path = journal.path().to_path_buf();
+        let text = std::fs::read_to_string(&path).unwrap();
+        let stripped: Vec<String> = text
+            .lines()
+            .enumerate()
+            .map(|(index, line)| {
+                if index == 0 {
+                    return line.to_owned();
+                }
+                let Some(start) = line.find(",\"chain\":\"") else {
+                    return line.to_owned();
+                };
+                let end = line[start + 10..]
+                    .find('"')
+                    .map_or(line.len(), |end| start + 10 + end + 1);
+                format!("{}{}", &line[..start], &line[end..])
+            })
+            .collect();
+        std::fs::write(&path, format!("{}\n", stripped.join("\n"))).unwrap();
+        let read = Journal::open_at(path).unwrap().read();
+        assert_eq!(verify_chain(&read.entries), ChainState::Broken { seq: 2 });
+    }
+
+    #[test]
+    fn a_record_written_before_the_chain_is_unchained_rather_than_broken() {
+        let dir = tempfile::tempdir().unwrap();
+        let old = Draft::event("old").seal(1, 1);
+        let path = dir.path().join("journal.ndjson");
+        std::fs::write(&path, format!("{}\n", old.to_line().unwrap())).unwrap();
+        let mut journal = Journal::open_at(path).unwrap();
+        journal.record(Draft::event("new")).unwrap();
+        let read = journal.read();
+        assert_eq!(read.entries.len(), 2);
+        assert_eq!(read.entries[0].chain, None);
+        assert_eq!(read.entries[1].chain.as_ref().map(String::len), Some(64));
+        assert_eq!(verify_chain(&read.entries), ChainState::Unchained { from: 2 });
     }
 
     #[test]

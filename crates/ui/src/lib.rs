@@ -1091,6 +1091,8 @@ mod tests {
             clean_running: false,
             journal: Vec::new(),
             journal_damaged: false,
+            journal_chain_broken: None,
+            journal_unchained_from: None,
             packs: Packs::default(),
             content: crate::ContentScan::default(),
             deep: crate::DeepCheck::default(),

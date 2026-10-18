@@ -30,6 +30,13 @@ vocabulary, one evidence ledger, and a size budget that pays for them.
   deep, 64 MB per file read, 2 GB per run — and a file over the cap is still hashed, because
   a digest is a fact and "not read" is not "clean". It never runs on its own, it is stoppable
   between files, and it stores no content.
+- **A hash chain over the journal.** Every line now carries a digest over the previous
+  line's digest and its own facts, computed before the line is written. Reading the record
+  back verifies it, and the Actions view says one of three true things: the chain verifies,
+  it does not verify at entry *N* (a fact changed, or a line was inserted, removed or
+  reordered), or the chain starts at *N* because earlier lines were written before it
+  existed. The record is still append-only, still synced before an act, and still readable
+  by a build that has never heard of the field.
 - **Two rules that make a deep check say something without a pack**: `file.hash-match` (the
   whole file is the file a signature names) and `file.content-match` (a pattern is at an
   offset inside it), each naming the file, the signature and the offset.

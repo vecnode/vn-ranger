@@ -279,6 +279,7 @@ impl Draft {
             outcome: self.outcome,
             reason: self.reason,
             confirmation: self.confirmation,
+            chain: None,
         }
     }
 }
@@ -325,6 +326,26 @@ pub struct JournalEntry {
     /// Which confirmation was given.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub confirmation: Option<Confirmation>,
+    /// The hash chain: a digest over the previous entry's chain and this line's content.
+    ///
+    /// Absent on a line written before the chain existed, and on a line a person wrote by
+    /// hand. Its absence is a state the verifier reports — "before this point there is no
+    /// chain" — rather than a failure: the record is older, not wrong.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chain: Option<String>,
+}
+
+/// The bytes an entry's chain is computed over.
+///
+/// The previous chain, a newline, and the entry as it is written *without* its chain field —
+/// so the digest covers every fact in the line and nothing that depends on itself. Two
+/// builds that serialise the same entry produce the same input, which is what makes the
+/// chain checkable by a different version of this program.
+pub fn chain_input(previous: Option<&str>, entry: &JournalEntry) -> Result<String, serde_json::Error> {
+    let mut copy = entry.clone();
+    copy.chain = None;
+    let body = copy.to_line()?;
+    Ok(format!("{}\n{body}", previous.unwrap_or("")))
 }
 
 impl JournalEntry {
@@ -611,5 +632,34 @@ mod tests {
         let found = interrupted(&entries);
         assert_eq!(found.len(), 2);
         assert_eq!(found[0].id.as_deref(), Some("b"));
+    }
+
+    #[test]
+    fn the_chain_input_is_the_line_without_its_own_chain() {
+        let mut entry = Draft::intent(Action::Quarantine).with_id("a").seal(1, 1);
+        entry.chain = Some("deadbeef".to_owned());
+        let input = chain_input(Some("previous"), &entry).expect("an entry serialises");
+        assert!(
+            !input.contains("deadbeef"),
+            "a chain that covered itself could never be computed"
+        );
+        assert!(input.starts_with("previous\n"), "{input}");
+        assert!(input.contains("\"seq\":1"), "{input}");
+    }
+
+    #[test]
+    fn a_different_previous_link_or_a_different_fact_changes_the_input() {
+        let entry = Draft::event("scan").seal(1, 1);
+        let base = chain_input(None, &entry).expect("an entry serialises");
+        let with_previous = chain_input(Some("abc"), &entry).expect("an entry serialises");
+        assert_ne!(base, with_previous);
+        let mut changed = entry.clone();
+        changed.reason = Some("something else".to_owned());
+        assert_ne!(base, chain_input(None, &changed).expect("an entry serialises"));
+        assert_eq!(
+            base,
+            chain_input(None, &entry).expect("an entry serialises"),
+            "the same entry twice is the same input"
+        );
     }
 }

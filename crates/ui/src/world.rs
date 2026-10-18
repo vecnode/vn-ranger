@@ -547,6 +547,10 @@ pub struct World {
     pub journal: Vec<JournalRow>,
     /// Whether the journal reports a damaged line or a torn tail.
     pub journal_damaged: bool,
+    /// The sequence number of the first journal line whose hash chain does not verify.
+    pub journal_chain_broken: Option<u64>,
+    /// The first sequence number the chain covers, when the record begins before it.
+    pub journal_unchained_from: Option<u64>,
     /// The rule packs: which one is loaded, what is installed, and the keys trusted.
     pub packs: Packs,
     /// The optional content scan: what it would read, and what it found.

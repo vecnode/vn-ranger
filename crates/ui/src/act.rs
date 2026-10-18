@@ -180,6 +180,33 @@ fn journal(ui: &mut egui::Ui, world: &World) {
                 "A line of the journal could not be read and was skipped. Nothing before it was lost.",
             );
         }
+        ui.add_space(4.0);
+        if let Some(seq) = world.journal_chain_broken {
+            widgets::dot_line(
+                ui,
+                theme::ATTENTION,
+                &format!(
+                    "The hash chain does not verify at entry {seq}: a fact in that line, or a line \
+                     around it, is not what was written. The record up to the entry before it still \
+                     verifies."
+                ),
+            );
+        } else if let Some(from) = world.journal_unchained_from {
+            widgets::dot_line(
+                ui,
+                theme::muted(ui),
+                &format!(
+                    "The chain covers entries from {from} onwards. Earlier lines were written before \
+                     the chain existed, so they cannot be covered retroactively."
+                ),
+            );
+        } else if !world.journal.is_empty() {
+            widgets::dot_line(
+                ui,
+                theme::OK,
+                "The hash chain verifies: every line covers the one before it.",
+            );
+        }
         ui.add_space(8.0);
         if world.journal.is_empty() {
             widgets::empty(

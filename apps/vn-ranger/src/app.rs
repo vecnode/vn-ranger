@@ -157,6 +157,8 @@ impl App {
             clean_running: false,
             journal: Vec::new(),
             journal_damaged: false,
+            journal_chain_broken: None,
+            journal_unchained_from: None,
             packs: vnr_ui::Packs::default(),
             content: vnr_ui::ContentScan {
                 available: vnr_native::contentscan::Report::available(),
@@ -321,6 +323,20 @@ impl App {
             .filter_map(|entry| entry.id.clone())
             .collect();
         self.world.journal_damaged = read.is_damaged();
+        match vnr_native::journal::verify_chain(&read.entries) {
+            vnr_native::journal::ChainState::Intact => {
+                self.world.journal_chain_broken = None;
+                self.world.journal_unchained_from = None;
+            }
+            vnr_native::journal::ChainState::Broken { seq } => {
+                self.world.journal_chain_broken = Some(seq);
+                self.world.journal_unchained_from = None;
+            }
+            vnr_native::journal::ChainState::Unchained { from } => {
+                self.world.journal_chain_broken = None;
+                self.world.journal_unchained_from = Some(from);
+            }
+        }
         self.world.journal = read
             .entries
             .iter()
