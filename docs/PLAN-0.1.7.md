@@ -536,6 +536,21 @@ ranger":
 
 ## 8. The waves
 
+**Progress, 2026-10-19.** Built on `dev`, in order, each with its tests and a green
+`cargo xtask ci`:
+
+| Wave | Built | Commit |
+|---|---|---|
+| 0 | One rule table (`Rule` public, technique or written reason, coverage counts both engines); version and size truth | `910c5bd` |
+| 1 | `.ndb` reader and matcher with a budget; the bounded, cancellable deep check; `file` and `file-match` subjects; two content rules; the Settings card | `00d7bbe` |
+| 3 | The connection table with process ownership (Windows, Linux); the `flow` subject and its join; one rule; the Zeek export; the beaconing analytic and its bounded sampler | `54265cb`, `8066811`, `c5a2e7c` |
+| 5 | The journal hash chain with its three-state verdict and the Actions-view line; the timeline CSV export | `9d76250`, `4457935` |
+
+**Not started:** containers and structural facts (Wave 1 — needs the §14 dependency answers);
+events (Wave 2 — needs `evtx`); agents (Wave 4); the triage package and the sweep (Wave 5).
+The sampler has no caller yet: `FlowFact::beacon`, the poll that feeds it and the
+`flow.beaconing` rule are one unit and land together.
+
 Six waves, one gate, in order. A wave is done when its exit holds, and the release may
 take longer than a plan, but it may not take the shortcut.
 
