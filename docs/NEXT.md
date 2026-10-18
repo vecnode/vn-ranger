@@ -120,6 +120,14 @@ administrator, and emits `Action::RemoveStartup { id }`. The shell looks that id
 snapshot it is showing, re-checks the change, and takes the row out of the table afterwards
 rather than waiting for a scan to agree.
 
+**The add half is done.** The Startup view has **Add a startup entry…**, which opens a form
+with a name and a command and a check that is the core's own `StartupChange::Add::check`, so
+the card cannot disagree with the action path about what may be written. The button is
+disabled with the refusal sentence while the command is not a program path, and a test proves
+an invalid command never reaches the shell. A successful add says in the notice that the entry
+appears after the next scan: the table is not given a made-up row, because this scan predates
+what was written.
+
 **Still owed:** (a) step 2b, the Startup folder's `.lnk` into the quarantine, which is what
 makes the third writable row real; (b) the `Add…` half of the card, which needs a typed
 command form; (c) **the second reviewer** — `AGENTS.md` §2 requires two on a change to the

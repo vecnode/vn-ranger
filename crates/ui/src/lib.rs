@@ -244,6 +244,10 @@ pub struct Ui {
     suppress_reason: String,
     /// The startup entry a person asked to remove, waiting for the card to be confirmed.
     startup_ask: Option<String>,
+    /// Whether the add form is open, and what has been typed into it.
+    pub(crate) startup_add: bool,
+    pub(crate) startup_name: String,
+    pub(crate) startup_command: String,
     /// Which quarantine entry is waiting for its word, and what has been typed.
     purge_ask: crate::act::PurgeAsk,
     /// What the clean card has ticked, and against which dry run.
@@ -338,6 +342,9 @@ impl Ui {
             suppress_target: None,
             suppress_reason: String::new(),
             startup_ask: None,
+            startup_add: false,
+            startup_name: String::new(),
+            startup_command: String::new(),
             purge_ask: crate::act::PurgeAsk::default(),
             clean: crate::clean::CleanState::default(),
             finding_severity: None,
@@ -460,6 +467,7 @@ impl Ui {
         self.project_modal(&ctx);
         self.suppress_modal(&ctx, &mut actions);
         self.startup_modal(&ctx, world, &mut actions);
+        self.startup_add_modal(&ctx, &mut actions);
         self.palette(&ctx, world, &mut actions);
         self.toast(&ctx, world);
         self.notice(&ctx, world);
@@ -1054,6 +1062,90 @@ impl Ui {
         }
     }
 
+    /// The form that registers a program to start with this account.
+    ///
+    /// The check is the core's, not this card's: `StartupChange::Add::check` is what decides
+    /// whether a name and a command may be written, so the interface cannot disagree with the
+    /// action path about what is acceptable.
+    fn startup_add_modal(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
+        if !self.startup_add {
+            return;
+        }
+        let surface = vnr_core::action::StartupSurface::WinUserRun;
+        let change = vnr_core::action::StartupChange::Add {
+            surface,
+            name: self.startup_name.clone(),
+            command: self.startup_command.clone(),
+        };
+        let problem = change.check().err();
+        let mut add = false;
+        let mut close = false;
+        let (_, open) = widgets::dialog(ctx, "Add a startup entry", 480.0, |ui| {
+            ui.label(
+                RichText::new(format!("It goes into {}.", surface.label()))
+                    .size(11.0)
+                    .color(theme::muted(ui)),
+            );
+            ui.add_space(4.0);
+            ui.label(RichText::new("Name").size(11.0));
+            ui.add(
+                egui::TextEdit::singleline(&mut self.startup_name)
+                    .hint_text("Acme Agent")
+                    .desired_width(f32::INFINITY),
+            );
+            ui.add_space(4.0);
+            ui.label(RichText::new("Command").size(11.0));
+            ui.add(
+                egui::TextEdit::singleline(&mut self.startup_command)
+                    .hint_text(r#""C:\Program Files\Acme\acme.exe" --quiet"#)
+                    .desired_width(f32::INFINITY),
+            );
+            ui.add_space(6.0);
+            match problem {
+                Some(refusal) => {
+                    ui.label(
+                        RichText::new(refusal.sentence())
+                            .size(11.0)
+                            .color(theme::ATTENTION),
+                    );
+                }
+                None => {
+                    ui.label(
+                        RichText::new(
+                            "Ranger writes this one value and records it in the journal first. \
+                             Windows runs it at the next sign-in.",
+                        )
+                        .size(11.0)
+                        .color(theme::muted(ui)),
+                    );
+                }
+            }
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                if ui.button("Cancel").clicked() {
+                    close = true;
+                }
+                let enabled = problem.is_none();
+                if ui.add_enabled(enabled, egui::Button::new("Add it")).clicked() {
+                    add = true;
+                }
+            });
+        });
+        if !open || close {
+            self.startup_add = false;
+            return;
+        }
+        if add && problem.is_none() {
+            actions.push(Action::AddStartup {
+                name: self.startup_name.trim().to_owned(),
+                command: self.startup_command.trim().to_owned(),
+            });
+            self.startup_add = false;
+            self.startup_name.clear();
+            self.startup_command.clear();
+        }
+    }
+
     fn suppress_modal(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
         let Some(finding) = self.suppress_target.clone() else {
             return;
@@ -1582,6 +1674,27 @@ mod tests {
         // Nothing was pressed, so the card stays open and no action was invented for an
         // entry the window cannot see.
         assert!(ui.startup_ask.is_some());
+    }
+
+    #[test]
+    fn the_add_form_stays_open_and_emits_nothing_while_the_command_is_not_a_program() {
+        let ctx = egui::Context::default();
+        let mut ui = Ui::new(&ctx);
+        let world = base_world(None, None);
+        ui.startup_add = true;
+        ui.startup_name = "Acme".to_owned();
+        ui.startup_command = "acme.exe".to_owned();
+        let actions = frame(&ctx, &mut ui, &world, screen_input(Vec::new()));
+        assert!(
+            ui.startup_add,
+            "the card is still open so the command can be corrected"
+        );
+        assert!(
+            !actions
+                .iter()
+                .any(|action| matches!(action, Action::AddStartup { .. })),
+            "an invalid command is never written"
+        );
     }
 
     #[test]

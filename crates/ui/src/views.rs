@@ -661,6 +661,21 @@ impl Ui {
             }
             ui.add_space(10.0);
             ui.checkbox(&mut self.show_disabled, "Show disabled");
+            ui.add_space(10.0);
+            // The one place this view writes instead of reading. The card it opens names the
+            // key the value goes into, and the value is checked before it is written.
+            if ui
+                .button("Add a startup entry…")
+                .on_hover_text(
+                    "Register a program to start with this account. Ranger writes one value in \
+                     your own Run key and records it in the journal first.",
+                )
+                .clicked()
+            {
+                self.startup_add = true;
+                self.startup_name.clear();
+                self.startup_command.clear();
+            }
         });
 
         rows.retain(|autorun| {

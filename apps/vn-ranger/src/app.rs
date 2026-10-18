@@ -323,6 +323,35 @@ impl App {
         self.refresh_actions();
     }
 
+    /// Register a program to start with this account, with both journal lines.
+    ///
+    /// The table is not updated with a made-up row: this scan predates the entry, and a
+    /// finding or a row that a scan did not produce is exactly the kind of fact this program
+    /// does not invent. The notice says when the entry will appear.
+    fn add_startup(&mut self, name: &str, command: &str) {
+        let change = vnr_core::action::StartupChange::Add {
+            surface: vnr_core::action::StartupSurface::WinUserRun,
+            name: name.to_owned(),
+            command: command.to_owned(),
+        };
+        if let Err(refusal) = change.check() {
+            self.world.error = Some(refusal.sentence().to_owned());
+            return;
+        }
+        match vnr_native::act::startup(&mut self.journal, &change) {
+            Ok(applied) => {
+                self.world.error = None;
+                self.world.notice = Some(format!(
+                    "{} It appears in the list after the next scan.",
+                    applied.sentence()
+                ));
+            }
+            Err(error) => self.world.error = Some(error.to_string()),
+        }
+        self.maintain_journal();
+        self.refresh_actions();
+    }
+
     fn start_scan(&mut self, ctx: &egui::Context, elevated: bool) {
         if self.world.busy() {
             return;
@@ -1522,6 +1551,7 @@ impl App {
                 self.refresh_actions();
             }
             Action::RemoveStartup { id } => self.remove_startup(&id),
+            Action::AddStartup { name, command } => self.add_startup(&name, &command),
             Action::PreviewClean => {
                 let started = std::time::Instant::now();
                 self.refresh_clean(true);

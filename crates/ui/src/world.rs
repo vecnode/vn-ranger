@@ -680,6 +680,13 @@ pub enum Action {
         /// The `AutorunFact` id.
         id: String,
     },
+    /// Register a program in this account's `Run` key, after the form has been checked.
+    AddStartup {
+        /// The name the entry is registered under.
+        name: String,
+        /// The command line, as the person typed it.
+        command: String,
+    },
     /// Walk the allowlisted surfaces and report what a clean would remove.
     ///
     /// This is a dry run: it reads names, sizes and times, and writes nothing — no journal
