@@ -1,0 +1,12 @@
+{
+  "captured": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run, 64-bit view, on the maintainer's machine",
+  "sanitised": "the user's profile path is replaced with C:\\Users\\user; unrelated entries removed",
+  "values": [
+    { "name": "Synapse3", "data": "\"C:\\Program Files (x86)\\Razer\\Synapse3\\WPFUI\\Framework\\Razer Synapse 3 Host\\Razer Synapse 3.exe\" /StartMinimized" },
+    { "name": "Mozilla-Firefox-308046B0AF4A39CB", "data": "\"C:\\Program Files\\Mozilla Firefox\\firefox.exe\" -os-autostart" },
+    { "name": "Docker Desktop", "data": "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe -Autostart" },
+    { "name": "BingSvc", "data": "C:\\Users\\user\\AppData\\Local\\Microsoft\\BingSvc\\BingSvc.exe" },
+    { "name": "Discord", "data": "\"C:\\Users\\user\\AppData\\Local\\Discord\\Update.exe\" --processStart Discord.exe" },
+    { "name": "OneDrive", "data": "\"C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe\" /background" }
+  ]
+}

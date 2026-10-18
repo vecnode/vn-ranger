@@ -69,6 +69,29 @@
       "remediation": "Close the program, or bind it to loopback in its settings. The owning process is in the row."
     },
     {
+      "id": "startup.service-dll-user-writable",
+      "title": "A service's DLL is in a folder a user can write",
+      "severity": "attention",
+      "confidence": "likely",
+      "technique": "T1543.003",
+      "match": {
+        "subject": "startup",
+        "all": [
+          { "field": "kind", "op": "eq", "value": "service" },
+          { "field": "path", "op": "suffix", "value": ".dll" }
+        ],
+        "any": [
+          { "field": "path", "op": "under", "value": "{PROGRAMDATA}" },
+          { "field": "path", "op": "under", "value": "{LOCALAPPDATA}" },
+          { "field": "path", "op": "under", "value": "{APPDATA}" },
+          { "field": "path", "op": "under", "value": "{TEMP}" }
+        ]
+      },
+      "why": "A service runs as SYSTEM, and the code it loads is normally installed where only an administrator can write. A DLL under a folder the signed-in user can write starts SYSTEM-level code that a non-administrator can replace.",
+      "benign": "A per-user certificate store, a printer driver or a vendor's own service that installs into ProgramData and upgrades itself there.",
+      "remediation": "Open the folder and look at the DLL's publisher and its date. If nobody installed it deliberately, disable the service before touching the file."
+    },
+    {
       "id": "agent.hook-in-config",
       "title": "An editor or agent configuration that names a command to run",
       "severity": "notice",

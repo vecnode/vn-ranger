@@ -1,0 +1,8 @@
+{
+  "captured": "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon on the maintainer's machine",
+  "sanitised": "only the values the table reads are kept",
+  "values": [
+    { "name": "Shell", "data": "explorer.exe" },
+    { "name": "Userinit", "data": "C:\\Windows\\system32\\userinit.exe," }
+  ]
+}

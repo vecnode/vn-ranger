@@ -1,0 +1,8 @@
+{
+  "captured": "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Windows on the maintainer's machine",
+  "sanitised": "only the values the table reads are kept",
+  "values": [
+    { "name": "AppInit_DLLs", "data": "" },
+    { "name": "LoadAppInit_DLLs", "data": "0" }
+  ]
+}

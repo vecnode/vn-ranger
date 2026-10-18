@@ -1,0 +1,6 @@
+{
+  "captured": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce, HKLM\\...\\RunServices, HKLM\\...\\RunServicesOnce and HKLM\\...\\Winlogon\\Notify on the maintainer's machine",
+  "sanitised": "these keys do not exist on an ordinary machine, and the capture is that absence",
+  "values": [],
+  "subkeys": []
+}

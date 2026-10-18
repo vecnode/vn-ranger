@@ -1,5 +1,11 @@
 //! Automatic starts.
+//!
+//! The Windows registry is a table (`registry.rs`) read through one trait, so every surface
+//! has a captured fixture and the parser runs on any host. The other platforms read files,
+//! and parse each one with its own fixture-tested reader.
 
+#[cfg(windows)]
+mod registry;
 #[cfg(windows)]
 mod windows;
 

@@ -116,13 +116,26 @@ All notable changes to vn-ranger are recorded here. The format follows
   before the tag, and `AGENTS.md` carries the deletion and pack contracts those waves
   have to obey.
 
+### Added — coverage, the first half of wave 5
+
+- **The Windows registry is a table now.** Thirteen persistence surfaces — `Run`, `RunOnce`
+  and the legacy `RunServices` in both registry views, Winlogon `Shell`, `Userinit` and
+  `Notify`, `AppInit_DLLs`, the IFEO `Debugger`, Active Setup's `StubPath` and a service's
+  `ServiceDll` — are rows read through one `KeyReader` trait and parsed by one function, so a
+  fixture for each runs on a machine that has never seen Windows. A key that is not there is
+  an absence rather than an error, and the fixtures that capture an absence say so.
+- **A service in a user-writable folder is a finding**: `startup.service-dll-user-writable`
+  fires on a `ServiceDll` under `ProgramData`, `LocalAppData`, `AppData` or a temporary
+  folder, with a positive and a negative case against the shipped pack itself.
+- A scan now reads 368 startup entries on the maintainer's machine where it read 132, and the
+  collector's status line names the techniques the table covers rather than only the count.
+
 ### Not in this release
 
-- **Wave 5, coverage, has not started.** The Windows registry surface table, scheduled tasks
-  and WMI, `ServiceDll`, the macOS and Linux surfaces and the agent-stack files are not in
-  this build, and neither are the first-party rules that would cover them. The matcher, the
-  field vocabulary and the validator they need are in this release, which is what makes that
-  the next piece of work rather than a rewrite.
+- **The rest of wave 5.** Scheduled tasks and WMI, the macOS and Linux surfaces, the
+  agent-stack files, COM `InprocServer32`, shell extensions, the accessibility swap, Print
+  Monitors, LSA packages, netsh helpers, the screensaver, the time providers, and a positive
+  and a negative fixture for every shipped rule are not in this build.
 - The fixtures for those surfaces have to be **captured on macOS and Linux**. Inventing one is
   the thing this repository forbids, so they are listed as owed in `docs/PLAN.md` rather than
   written from memory.

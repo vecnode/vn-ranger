@@ -777,4 +777,6 @@ fn line_of(text: &str, needle: &str) -> Option<usize> {
 }
 
 #[cfg(test)]
+mod shipped;
+#[cfg(test)]
 mod tests;

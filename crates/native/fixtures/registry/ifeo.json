@@ -1,0 +1,10 @@
+{
+  "captured": "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Image File Execution Options on the maintainer's machine",
+  "sanitised": "the first four subkeys, renamed to the plain program names they debug; none of them had a Debugger value on this machine, which is the ordinary case",
+  "subkeys": [
+    { "name": "appverif.exe", "values": [ { "name": "GlobalFlag", "data": "0" } ] },
+    { "name": "GoogleUpdate.exe", "values": [] },
+    { "name": "ie4uinit.exe", "values": [] },
+    { "name": "ExtExport.exe", "values": [] }
+  ]
+}

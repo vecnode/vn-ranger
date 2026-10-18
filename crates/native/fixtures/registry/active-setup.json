@@ -1,0 +1,8 @@
+{
+  "captured": "HKLM\\SOFTWARE\\Microsoft\\Active Setup\\Installed Components on the maintainer's machine",
+  "sanitised": "two components kept, the first two the enumeration returned",
+  "subkeys": [
+    { "name": ">{22d6f312-b0f6-11d0-94ab-0080c74c7e95}", "values": [ { "name": "StubPath", "data": "%SystemRoot%\\system32\\unregmp2.exe /ShowWMP" } ] },
+    { "name": ">{6BFD3E7B-B0B4-4b1b-9E0F-8F1E8C6A7B2F}", "values": [ { "name": "Version", "data": "1,0,0,0" } ] }
+  ]
+}

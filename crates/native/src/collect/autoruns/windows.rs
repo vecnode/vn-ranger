@@ -1,29 +1,43 @@
 //! Startup items on Windows.
 //!
-//! Three sources are read: the `Run`/`RunOnce` registry keys in both registry views,
-//! the per-user and machine Startup folders, and automatic Windows services. The
-//! collector is partial on purpose: scheduled tasks, shortcut targets and kernel
-//! drivers are named as gaps rather than silently omitted.
+//! Two sources are read: the registry, through the surface table next door, and the per-user
+//! and machine Startup folders. The collector is partial on purpose: scheduled tasks, WMI
+//! subscriptions, shortcut targets and kernel drivers are named as gaps rather than silently
+//! omitted (`docs/PLAN.md` §9, wave 5).
 
 use std::path::Path;
 
 use vnr_core::{AutorunFact, AutorunKind, AutorunScope, SignatureStatus};
-use winreg::RegKey;
-use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, KEY_WOW64_32KEY, KEY_WOW64_64KEY};
 
 use super::super::winutil;
+use super::registry::{self, KeyReader, WindowsRegistry};
 use crate::collect::Outcome;
 use crate::hash::Hasher;
+use winreg::RegKey;
+use winreg::enums::{HKEY_LOCAL_MACHINE, KEY_READ, KEY_WOW64_64KEY};
 
 /// Read the startup entries this build can see.
 #[must_use]
 pub fn collect(hasher: &mut Hasher) -> Outcome<AutorunFact> {
     let mut items = Vec::new();
     let mut reasons = Vec::new();
-    collect_run_keys(&mut items);
+    collect_registry(&mut items, &mut reasons);
     collect_startup_folders(&mut items, &mut reasons);
     collect_services(&mut items, &mut reasons);
-    reasons.push("Scheduled tasks and kernel drivers are not listed in this build.".to_owned());
+    // What the table covers, said in the techniques it covers, so the status line is a
+    // statement about the registry rather than a count of keys.
+    let mut techniques: Vec<&str> = registry::SURFACES
+        .iter()
+        .filter_map(|surface| surface.technique)
+        .collect();
+    techniques.sort_unstable();
+    techniques.dedup();
+    reasons.push(format!(
+        "{} registry surfaces were read, covering {}. Scheduled tasks, WMI subscriptions and \
+         kernel drivers are not listed in this build.",
+        registry::SURFACES.len(),
+        techniques.join(", ")
+    ));
     hash_items(&mut items, hasher);
     if reasons.is_empty() {
         Outcome::Items(items)
@@ -35,42 +49,37 @@ pub fn collect(hasher: &mut Hasher) -> Outcome<AutorunFact> {
     }
 }
 
-fn collect_run_keys(items: &mut Vec<AutorunFact>) {
-    let roots = [
-        (HKEY_CURRENT_USER, "HKCU", AutorunScope::User),
-        (HKEY_LOCAL_MACHINE, "HKLM", AutorunScope::System),
-    ];
-    let views = [(64u32, KEY_WOW64_64KEY), (32u32, KEY_WOW64_32KEY)];
-    for (hive, hive_label, scope) in roots {
-        for (view, flag) in views {
-            for key_name in ["Run", "RunOnce"] {
-                let path = format!(r"Software\Microsoft\Windows\CurrentVersion\{key_name}");
-                let Ok(key) = RegKey::predef(hive).open_subkey_with_flags(&path, KEY_READ | flag) else {
-                    continue;
-                };
-                for (name, _value) in key.enum_values().flatten() {
-                    let Some(raw) = winutil::get_string(&key, &name) else {
-                        continue;
-                    };
-                    if raw.trim().is_empty() {
-                        continue;
+/// Every surface in the table, in both registry views where the table asks for them.
+///
+/// One loop, one reader, one parser: a surface is a row, and a row that cannot be read is a
+/// reason on the status rather than a silent gap. The order is the table's, so two scans of
+/// an unchanged machine list the same entries in the same order.
+fn collect_registry(items: &mut Vec<AutorunFact>, reasons: &mut Vec<String>) {
+    let reader = WindowsRegistry;
+    for surface in registry::SURFACES {
+        for view in surface.wideness.views() {
+            let depth = surface.read.depth();
+            match reader.read(surface.hive, *view, surface.key, depth) {
+                Ok(data) => {
+                    for entry in registry::entries(surface, *view, &data) {
+                        let command = winutil::expand_env(&entry.command);
+                        let exe = winutil::executable_from_command(&command)
+                            .map(|path| path.to_string_lossy().into_owned());
+                        items.push(AutorunFact {
+                            id: entry.id,
+                            name: entry.name,
+                            command,
+                            location: entry.location,
+                            kind: surface.kind,
+                            scope: surface.scope,
+                            enabled: true,
+                            exe,
+                            sha256: None,
+                            signature: SignatureStatus::NotChecked,
+                        });
                     }
-                    let command = winutil::expand_env(&raw);
-                    let exe = winutil::executable_from_command(&command)
-                        .map(|path| path.to_string_lossy().into_owned());
-                    items.push(AutorunFact {
-                        id: format!("run:{hive_label}:{view}:{name}"),
-                        name,
-                        command,
-                        location: format!(r"{hive_label}\{path} ({view}-bit)"),
-                        kind: AutorunKind::RunKey,
-                        scope,
-                        enabled: true,
-                        exe,
-                        sha256: None,
-                        signature: SignatureStatus::NotChecked,
-                    });
                 }
+                Err(reason) => reasons.push(format!("{}: {reason}", surface.label)),
             }
         }
     }

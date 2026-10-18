@@ -187,6 +187,30 @@ not a pack file — so returning to a pack that worked is one click and one jour
 The pack compiled into the binary (`packs/ranger.core.json`) needs no signature at run time,
 because the bytes travel with the build rather than with a file a person could swap.
 
+## What the Windows collector reads
+
+The startup subject is filled by one table of registry surfaces, read in both views where a
+32-bit program would see a different key. A rule about `startup` can match `location` to say
+which one it came from:
+
+| Surface id | Key | What is one entry |
+|---|---|---|
+| `run` | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` | every value |
+| `run-machine` | the same, in `HKLM` | every value |
+| `run-once`, `run-once-machine` | `...\RunOnce` | every value |
+| `run-services`, `run-services-once` | `...\RunServices[Once]` | every value |
+| `winlogon-shell` | `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon` | the `Shell` value |
+| `winlogon-userinit` | the same key | the `Userinit` value |
+| `winlogon-notify` | `...\Winlogon\Notify` | every value |
+| `appinit` | `...\CurrentVersion\Windows` | the `AppInit_DLLs` value |
+| `ifeo-debugger` | `...\Image File Execution Options\<program>` | the `Debugger` value |
+| `active-setup` | `HKLM\SOFTWARE\Microsoft\Active Setup\Installed Components\<id>` | the `StubPath` value |
+| `service-dll` | `HKLM\SYSTEM\CurrentControlSet\Services\<name>\Parameters` | the `ServiceDll` value |
+
+A key that is not there produces no entries, and that is the ordinary case: `RunOnce`,
+`RunServices` and `Notify` do not exist on a clean machine. The fixture that proves it is a
+capture of exactly that absence.
+
 ## The four promises no pack can break
 
 1. **No code.** Rules are data. Nothing in a pack is executed, parsed as a program, or
