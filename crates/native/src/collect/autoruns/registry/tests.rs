@@ -34,6 +34,11 @@ fn fixture_for(id: &str) -> &'static str {
         "ifeo-debugger" => "ifeo",
         "active-setup" => "active-setup",
         "service-dll" => "services",
+        "print-monitor" => "print-monitors",
+        "lsa-notification" | "lsa-authentication" => "lsa",
+        "netsh-helper" => "netsh",
+        "screensaver" => "screensaver",
+        "time-provider" => "time-providers",
         other => panic!("{other} has no captured fixture"),
     }
 }
@@ -202,4 +207,76 @@ fn the_same_surface_in_two_views_is_two_entries_with_two_ids() {
     assert_eq!(sixty_four.len(), thirty_two.len());
     assert_ne!(sixty_four[0].id, thirty_two[0].id, "the view is part of the id");
     assert!(thirty_two[0].location.contains("32-bit"));
+}
+
+#[test]
+fn the_six_surfaces_that_came_with_the_second_table_pass_read_their_own_shape() {
+    // A print monitor's driver, one level in.
+    let monitors = entries(
+        surface("print-monitor").unwrap(),
+        View::SixtyFour,
+        &fixture("print-monitors"),
+    );
+    assert_eq!(monitors.len(), 3);
+    assert_eq!(monitors[0].name, "Appmon");
+    assert_eq!(monitors[0].command, "AppMon.dll");
+
+    // A multi-string value is a list: one package is one entry, not one string with a
+    // separator in it.
+    let authentication = entries(
+        surface("lsa-authentication").unwrap(),
+        View::SixtyFour,
+        &fixture("lsa"),
+    );
+    assert_eq!(authentication.len(), 1);
+    assert_eq!(authentication[0].name, "Authentication Packages");
+    assert_eq!(authentication[0].command, "msv1_0");
+    let notification = entries(
+        surface("lsa-notification").unwrap(),
+        View::SixtyFour,
+        &fixture("lsa"),
+    );
+    assert_eq!(notification[0].command, "scecli");
+
+    // netsh helpers are ordinary values, and their names are what a person sees.
+    let helpers = entries(
+        surface("netsh-helper").unwrap(),
+        View::SixtyFour,
+        &fixture("netsh"),
+    );
+    assert_eq!(helpers.len(), 4);
+    assert!(helpers.iter().any(|entry| entry.name == "dhcpclient"));
+
+    // A time provider is a DLL under a subkey, in both providers that have one.
+    let providers = entries(
+        surface("time-provider").unwrap(),
+        View::SixtyFour,
+        &fixture("time-providers"),
+    );
+    assert_eq!(providers.len(), 3);
+    assert!(providers.iter().all(|entry| entry.command.ends_with(".dll")));
+
+    // This machine has no screensaver set, and the capture says so.
+    let saver = entries(
+        surface("screensaver").unwrap(),
+        View::SixtyFour,
+        &fixture("screensaver"),
+    );
+    assert!(saver.is_empty(), "{saver:?}");
+}
+
+#[test]
+fn a_multi_string_with_two_packages_is_two_entries_with_distinct_names() {
+    let data = KeyData {
+        values: vec![Value {
+            name: "Notification Packages".to_owned(),
+            data: "scecli\u{0}acme\u{0}".to_owned(),
+        }],
+        subkeys: Vec::new(),
+    };
+    let entries = entries(surface("lsa-notification").unwrap(), View::SixtyFour, &data);
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries[0].command, "scecli");
+    assert_eq!(entries[1].command, "acme");
+    assert_ne!(entries[0].id, entries[1].id, "each package has its own id");
 }

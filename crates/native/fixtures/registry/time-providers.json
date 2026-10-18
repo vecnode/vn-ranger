@@ -1,0 +1,9 @@
+{
+  "captured": "HKLM\\SYSTEM\\CurrentControlSet\\Services\\W32Time\\TimeProviders on the maintainer's machine",
+  "sanitised": "all three providers, with the values the table reads",
+  "subkeys": [
+    { "name": "NtpClient", "values": [ { "name": "DllName", "data": "%systemroot%\\system32\\w32time.dll" } ], "subkeys": [] },
+    { "name": "NtpServer", "values": [ { "name": "DllName", "data": "%systemroot%\\system32\\w32time.dll" } ], "subkeys": [] },
+    { "name": "VMICTimeProvider", "values": [ { "name": "DllName", "data": "%systemroot%\\system32\\vmictimeprovider.dll" } ], "subkeys": [] }
+  ]
+}

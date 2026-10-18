@@ -141,10 +141,9 @@ pub(crate) fn text_of(value_type: u32, bytes: &[u8]) -> Option<String> {
         .collect();
     let text = String::from_utf16_lossy(&units);
     let text = text.trim_end_matches('\u{0}');
-    if value_type == REG_MULTI_SZ {
-        let parts: Vec<&str> = text.split('\u{0}').filter(|part| !part.is_empty()).collect();
-        return Some(parts.join("; "));
-    }
+    // A multi-string is a list, and the list is kept as a list: `Notification Packages` is
+    // two DLLs, not one command with a separator in it. The parser turns each part into its
+    // own entry.
     Some(text.to_owned())
 }
 
@@ -329,6 +328,78 @@ pub(crate) const SURFACES: &[Surface] = &[
         scope: AutorunScope::System,
         technique: Some("T1543.003"),
     },
+    Surface {
+        id: "print-monitor",
+        label: "Print monitor",
+        hive: Hive::LocalMachine,
+        key: r"SYSTEM\CurrentControlSet\Control\Print\Monitors",
+        wideness: Widening::SixtyFour,
+        read: Read::SubkeyValue {
+            path: "",
+            value: "Driver",
+        },
+        kind: AutorunKind::Service,
+        scope: AutorunScope::System,
+        technique: Some("T1547.012"),
+    },
+    Surface {
+        id: "lsa-notification",
+        label: "LSA notification package",
+        hive: Hive::LocalMachine,
+        key: r"SYSTEM\CurrentControlSet\Control\Lsa",
+        wideness: Widening::SixtyFour,
+        read: Read::Value("Notification Packages"),
+        kind: AutorunKind::Other,
+        scope: AutorunScope::System,
+        technique: Some("T1547.005"),
+    },
+    Surface {
+        id: "lsa-authentication",
+        label: "LSA authentication package",
+        hive: Hive::LocalMachine,
+        key: r"SYSTEM\CurrentControlSet\Control\Lsa",
+        wideness: Widening::SixtyFour,
+        read: Read::Value("Authentication Packages"),
+        kind: AutorunKind::Other,
+        scope: AutorunScope::System,
+        technique: Some("T1547.005"),
+    },
+    Surface {
+        id: "netsh-helper",
+        label: "netsh helper DLL",
+        hive: Hive::LocalMachine,
+        key: r"SOFTWARE\Microsoft\NetSh",
+        wideness: Widening::Both,
+        read: Read::Values,
+        kind: AutorunKind::Other,
+        scope: AutorunScope::System,
+        technique: Some("T1546.007"),
+    },
+    Surface {
+        id: "screensaver",
+        label: "Screensaver",
+        hive: Hive::CurrentUser,
+        key: r"Control Panel\Desktop",
+        wideness: Widening::SixtyFour,
+        read: Read::Value("SCRNSAVE.EXE"),
+        kind: AutorunKind::Other,
+        scope: AutorunScope::User,
+        technique: Some("T1546.002"),
+    },
+    Surface {
+        id: "time-provider",
+        label: "Time provider DLL",
+        hive: Hive::LocalMachine,
+        key: r"SYSTEM\CurrentControlSet\Services\W32Time\TimeProviders",
+        wideness: Widening::SixtyFour,
+        read: Read::SubkeyValue {
+            path: "",
+            value: "DllName",
+        },
+        kind: AutorunKind::Service,
+        scope: AutorunScope::System,
+        technique: Some("T1547.003"),
+    },
 ];
 
 /// The surface with this id. Used by the fixture tests, which name a row rather than an
@@ -420,14 +491,8 @@ pub(crate) fn entries(surface: &Surface, view: View, data: &KeyData) -> Vec<Entr
     match surface.read {
         Read::Values => {
             for value in &data.values {
-                push(
-                    &mut entries,
-                    surface,
-                    view,
-                    &value.name,
-                    &value.data,
-                    &format!("{} ({}-bit)", value.name, view.label()),
-                );
+                let location = format!("{} ({}-bit)", value.name, view.label());
+                push_value(&mut entries, surface, view, &value.name, &value.data, &location);
             }
         }
         Read::Value(name) => {
@@ -436,14 +501,8 @@ pub(crate) fn entries(surface: &Surface, view: View, data: &KeyData) -> Vec<Entr
                 .iter()
                 .find(|value| value.name.eq_ignore_ascii_case(name))
             {
-                push(
-                    &mut entries,
-                    surface,
-                    view,
-                    name,
-                    &value.data,
-                    &format!("{} ({}-bit)", value.name, view.label()),
-                );
+                let location = format!("{} ({}-bit)", name, view.label());
+                push_value(&mut entries, surface, view, name, &value.data, &location);
             }
         }
         Read::SubkeyValue { path, value } => {
@@ -454,18 +513,39 @@ pub(crate) fn entries(surface: &Surface, view: View, data: &KeyData) -> Vec<Entr
                 let Some(found) = node.value(value) else {
                     continue;
                 };
-                push(
-                    &mut entries,
-                    surface,
-                    view,
-                    &subkey.name,
-                    &found.data,
-                    &format!("{}\\{} ({}-bit)", subkey.name, value, view.label()),
-                );
+                let location = format!("{}\\{} ({}-bit)", subkey.name, value, view.label());
+                push_value(&mut entries, surface, view, &subkey.name, &found.data, &location);
             }
         }
     }
     entries
+}
+
+/// One value's worth of entries, splitting a multi-string into its parts.
+///
+/// A `REG_MULTI_SZ` is a list — `Notification Packages` is one DLL per string — so a value
+/// that holds two packages is two entries with two names, not one entry whose command has a
+/// separator in it. Every other value is one entry.
+fn push_value(
+    entries: &mut Vec<Entry>,
+    surface: &Surface,
+    view: View,
+    name: &str,
+    data: &str,
+    location: &str,
+) {
+    let parts: Vec<&str> = data
+        .split('\u{0}')
+        .filter(|part| !part.trim().is_empty())
+        .collect();
+    for (index, part) in parts.iter().enumerate() {
+        let entry_name = if parts.len() == 1 {
+            name.to_owned()
+        } else {
+            format!("{} ({})", name, index.saturating_add(1))
+        };
+        push(entries, surface, view, &entry_name, part, location);
+    }
 }
 
 fn push(entries: &mut Vec<Entry>, surface: &Surface, view: View, name: &str, data: &str, location: &str) {

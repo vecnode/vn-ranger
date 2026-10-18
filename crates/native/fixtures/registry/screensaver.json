@@ -1,0 +1,7 @@
+{
+  "captured": "HKCU\\Control Panel\\Desktop on the maintainer's machine",
+  "sanitised": "this machine has no SCRNSAVE.EXE value, and the capture is that absence",
+  "values": [
+    { "name": "ScreenSaveActive", "data": "0" }
+  ]
+}

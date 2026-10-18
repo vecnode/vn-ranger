@@ -206,6 +206,17 @@ which one it came from:
 | `ifeo-debugger` | `...\Image File Execution Options\<program>` | the `Debugger` value |
 | `active-setup` | `HKLM\SOFTWARE\Microsoft\Active Setup\Installed Components\<id>` | the `StubPath` value |
 | `service-dll` | `HKLM\SYSTEM\CurrentControlSet\Services\<name>\Parameters` | the `ServiceDll` value |
+| `print-monitor` | `HKLM\SYSTEM\CurrentControlSet\Control\Print\Monitors\<name>` | the `Driver` value |
+| `lsa-notification` | `HKLM\SYSTEM\CurrentControlSet\Control\Lsa` | each `Notification Packages` string |
+| `lsa-authentication` | the same key | each `Authentication Packages` string |
+| `netsh-helper` | `HKLM\SOFTWARE\Microsoft\NetSh` | every value |
+| `screensaver` | `HKCU\Control Panel\Desktop` | the `SCRNSAVE.EXE` value |
+| `time-provider` | `HKLM\SYSTEM\CurrentControlSet\Services\W32Time\TimeProviders\<name>` | the `DllName` value |
+
+A value written as `REG_MULTI_SZ` is a list, and each string in it is its own entry: `LSA
+Notification Packages` is one DLL per entry, named `Notification Packages (1)`, `(2)`, and so
+on. A `REG_DWORD` in a `Run` key is not a command and is not an entry, because guessing at its
+bytes would invent a fact.
 
 A key that is not there produces no entries, and that is the ordinary case: `RunOnce`,
 `RunServices` and `Notify` do not exist on a clean machine. The fixture that proves it is a

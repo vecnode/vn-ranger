@@ -118,16 +118,18 @@ All notable changes to vn-ranger are recorded here. The format follows
 
 ### Added — coverage, the first half of wave 5
 
-- **The Windows registry is a table now.** Thirteen persistence surfaces — `Run`, `RunOnce`
+- **The Windows registry is a table now.** Nineteen persistence surfaces — `Run`, `RunOnce`
   and the legacy `RunServices` in both registry views, Winlogon `Shell`, `Userinit` and
-  `Notify`, `AppInit_DLLs`, the IFEO `Debugger`, Active Setup's `StubPath` and a service's
-  `ServiceDll` — are rows read through one `KeyReader` trait and parsed by one function, so a
-  fixture for each runs on a machine that has never seen Windows. A key that is not there is
-  an absence rather than an error, and the fixtures that capture an absence say so.
+  `Notify`, `AppInit_DLLs`, the IFEO `Debugger`, Active Setup's `StubPath`, a service's
+  `ServiceDll`, print monitors, both LSA package lists, netsh helpers, the screensaver and
+  time-provider DLLs — are rows read through one `KeyReader` trait and parsed by one
+  function, so a fixture for each runs on a machine that has never seen Windows. A key that
+  is not there is an absence rather than an error, and the fixtures that capture an absence
+  say so. A `REG_MULTI_SZ` is a list, so each string in it is its own entry.
 - **A service in a user-writable folder is a finding**: `startup.service-dll-user-writable`
   fires on a `ServiceDll` under `ProgramData`, `LocalAppData`, `AppData` or a temporary
   folder, with a positive and a negative case against the shipped pack itself.
-- A scan now reads 368 startup entries on the maintainer's machine where it read 132, and the
+- A scan now reads 418 startup entries on the maintainer's machine where it read 132, and the
   collector's status line names the techniques the table covers rather than only the count.
 
 ### Not in this release
