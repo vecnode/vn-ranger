@@ -584,11 +584,15 @@ mod tests {
             "{refused}"
         );
         assert!(refused.contains("VN_RANGER_DATA_DIR"), "{refused}");
-        // Anything that is not a refusal is passed through untouched.
-        let other = diagnose(&missing, io::Error::from_raw_os_error(32)).to_string();
-        assert_eq!(
-            other,
-            "The process cannot access the file because it is being used by another process. (os error 32)"
+        // Anything that is not a permission refusal is passed through untouched. The
+        // assertion is about the error's identity, not its wording: `32` is a sharing
+        // violation on Windows and a broken pipe on Unix, so a test that spells one
+        // platform's sentence fails on the other two.
+        let other = diagnose(&missing, io::Error::from_raw_os_error(32));
+        assert_eq!(other.raw_os_error(), Some(32));
+        assert!(
+            !other.to_string().contains("not allowed to write in that folder"),
+            "a sharing failure is not a folder refusal"
         );
     }
 

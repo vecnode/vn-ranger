@@ -185,21 +185,25 @@ fn fact(id: String, name: String, command: String, location: &str, kind: Autorun
         command,
         location: location.to_owned(),
         kind,
-        // `periodic` and the system crontab are the machine's; the per-user copies the
-        // collector passes are the user's, and the scope is decided where the path is known.
-        scope: if location.contains("/Library/")
-            || location.starts_with("/etc/")
-            || location.starts_with("/System/")
-        {
-            AutorunScope::System
-        } else {
-            AutorunScope::User
-        },
+        // A file under a home directory belongs to that person; everything else here is the
+        // machine's. Testing for `/Library/` in the path looked right and was wrong —
+        // `~/Library/...` contains it too, so a Folder Action in someone's own Library was
+        // reported as machine-wide until the macOS build said so.
+        scope: scope_of(location),
         enabled: true,
         exe,
         sha256: None,
         hidden: false,
         signature: SignatureStatus::NotChecked,
+    }
+}
+
+/// Whether a path belongs to a person or to the machine.
+fn scope_of(path: &str) -> AutorunScope {
+    if path.starts_with("/Users/") || path.starts_with("/home/") || path.contains("/Volumes/") {
+        AutorunScope::User
+    } else {
+        AutorunScope::System
     }
 }
 
