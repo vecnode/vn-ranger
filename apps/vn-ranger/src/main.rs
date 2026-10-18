@@ -10,6 +10,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+mod packs;
 mod worker;
 
 use std::path::{Path, PathBuf};
@@ -20,7 +21,11 @@ const STARTING_SIZE: [f32; 2] = [1180.0, 780.0];
 /// The smallest the window may be made before the layout stops reflowing.
 const MINIMUM_SIZE: [f32; 2] = [920.0, 600.0];
 
-/// The application's mark, as unmultiplied RGBA.
+/// The application's mark for the window: the crystal on the suite's ink tile.
+///
+/// The tile, not the bare mark. It is what the interface draws beside the name and what
+/// Windows and macOS show in a title bar, and its ink fill is what keeps a white crystal
+/// readable on a light title bar as well as a dark one (`assets/logo/BRAND.md`).
 const ICON: &[u8] = include_bytes!("../../../assets/logo/vn-ranger-app.rgba");
 
 /// The icon is square and this many pixels on a side.
@@ -40,6 +45,49 @@ fn main() -> eframe::Result<()> {
         write_headless_report(&path, true);
         return Ok(());
     }
+    // A Sigma rule becomes a pack file that still has to be signed before ranger will load
+    // it. The importer writes; the author signs; ranger verifies. No step here is skipped.
+    if let Some(path) = arg_value("--sigma") {
+        import_sigma(&path);
+        return Ok(());
+    }
+    // Where ranger keeps its files, and whether it may write them. It exists because the
+    // window's own sentence about a refused journal is only as good as the facts behind it,
+    // and a person can paste this into a message.
+    if std::env::args_os().any(|argument| argument.to_string_lossy() == "--diagnose") {
+        diagnose();
+        return Ok(());
+    }
+
+    // One window per data directory. A second launch does not open a second window: it asks
+    // the running one to come forward and exits.
+    let instance = match vnr_native::instance::acquire() {
+        Ok(guard) => Some(guard),
+        Err(vnr_native::instance::LockError::Running(message)) => {
+            eprintln!("vn-ranger: {message}");
+            record_startup(&message);
+            if vnr_native::instance::wake().is_ok() {
+                eprintln!("vn-ranger: the running window has been asked to come forward");
+            }
+            return Ok(());
+        }
+        Err(vnr_native::instance::LockError::Unwritable(reason)) => {
+            // A lock is an optimisation, not a precondition. Opening without one is better
+            // than not opening, and the window says what happened.
+            eprintln!("vn-ranger: {reason}");
+            record_startup(&reason);
+            None
+        }
+    };
+    // A wake file from a crash must not raise a window nobody asked for.
+    vnr_native::instance::clear_stale_wake();
+
+    // A login launch carries `--background`: the window belongs in the status area rather
+    // than on top of whatever the person just opened.
+    let background = std::env::args_os().any(|argument| argument.to_string_lossy() == "--background");
+    // One line a minute for a resident run: this is what the budgets in the plan are
+    // measured on, so it is a flag rather than something the product does unasked.
+    let soak = arg_value("--soak");
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -58,8 +106,163 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "vn-ranger",
         options,
-        Box::new(|cc| Ok(Box::new(app::App::new(cc)))),
+        Box::new(move |cc| Ok(Box::new(app::App::new(cc, background, instance, soak)))),
     )
+}
+
+/// Convert one Sigma rule into a pack file beside it, and say what did and did not map.
+///
+/// The output is a pack, not an active rule set: it has no signature, so the Packs view will
+/// list it as refused until its author signs it. That is the whole point of the footnote —
+/// an import is a translation a person checks, not an adoption.
+fn import_sigma(path: &Path) {
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) => {
+            eprintln!("vn-ranger: could not read {}: {error}", path.display());
+            std::process::exit(1);
+        }
+    };
+    let import = match vnr_core::sigma::import(&text) {
+        Ok(import) => import,
+        Err(problem) => {
+            eprintln!("vn-ranger: {} was refused: {problem}", path.display());
+            std::process::exit(1);
+        }
+    };
+    let stem = path.file_stem().map_or_else(
+        || "imported".to_owned(),
+        |stem| stem.to_string_lossy().into_owned(),
+    );
+    let id = format!("imported.{stem}");
+    let pack = import.pack(&id, "1");
+    let out = path.with_file_name(format!("{stem}.pack.json"));
+    let bytes = match serde_json::to_vec_pretty(&pack_to_wire(&pack)) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            eprintln!("vn-ranger: could not serialise the pack: {error}");
+            std::process::exit(1);
+        }
+    };
+    if let Err(error) = std::fs::write(&out, &bytes) {
+        eprintln!("vn-ranger: could not write {}: {error}", out.display());
+        std::process::exit(1);
+    }
+    println!(
+        "vn-ranger: {} rule(s) mapped, {} skipped",
+        import.rules.len(),
+        import.skipped.len()
+    );
+    for skipped in &import.skipped {
+        println!("  skipped {}: {}", skipped.title, skipped.reason);
+    }
+    println!("vn-ranger: wrote {}", out.display());
+    println!("vn-ranger: it is not active until it is signed; ranger never signs anything");
+}
+
+/// The wire shape a pack file has, written from a validated pack.
+fn pack_to_wire(pack: &vnr_core::pack::Pack) -> serde_json::Value {
+    let rules: Vec<serde_json::Value> = pack
+        .rules
+        .iter()
+        .map(|rule| {
+            let predicates: Vec<serde_json::Value> = rule
+                .matches
+                .all
+                .iter()
+                .map(|predicate| {
+                    serde_json::json!({
+                        "field": predicate.field,
+                        "op": predicate.operator.id(),
+                        "value": predicate.value,
+                    })
+                })
+                .collect();
+            serde_json::json!({
+                "id": rule.id,
+                "title": rule.title,
+                "severity": match rule.severity {
+                    vnr_core::Severity::Attention => "attention",
+                    vnr_core::Severity::Notice => "notice",
+                    vnr_core::Severity::Info => "info",
+                },
+                "confidence": match rule.confidence {
+                    vnr_core::Confidence::Observed => "observed",
+                    vnr_core::Confidence::Likely => "likely",
+                    vnr_core::Confidence::Possible => "possible",
+                },
+                "technique": rule.technique,
+                "match": {
+                    "subject": rule.matches.subject.map(vnr_core::fields::Subject::id),
+                    "all": predicates,
+                },
+                "why": rule.why,
+                "benign": rule.benign,
+                "remediation": rule.remediation,
+            })
+        })
+        .collect();
+    serde_json::json!({
+        "schema": vnr_core::pack::SCHEMA,
+        "pack": {
+            "id": pack.header.id,
+            "version": pack.header.version,
+            "title": pack.header.title,
+        },
+        "rules": rules,
+    })
+}
+
+/// Print where ranger keeps its files and whether it may write them.
+///
+/// Every line is a fact that was checked just now, including the ones that would make the
+/// window's warning appear: a folder this program cannot write, a journal it cannot open, a
+/// pack that will not load. Nothing here changes a file.
+fn diagnose() {
+    let data = vnr_native::paths::data_dir();
+    println!("vn-ranger {}", env!("CARGO_PKG_VERSION"));
+    println!(
+        "host:    {} {} ({})",
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+        if vnr_native::elevation::is_elevated() {
+            "administrator"
+        } else {
+            "as the signed-in user"
+        }
+    );
+    println!("data:    {}", data.display());
+    let folder_writable = data.is_dir() && vnr_native::journal::folder_is_writable(&data);
+    println!(
+        "writable: {}",
+        if !data.is_dir() {
+            "the folder does not exist yet".to_owned()
+        } else if folder_writable {
+            "yes, this program can create files there".to_owned()
+        } else {
+            "NO — this program cannot create a file in that folder".to_owned()
+        }
+    );
+    for line in vnr_native::journal::diagnose_folder(&vnr_native::paths::journal_path()).lines() {
+        println!("{line}");
+    }
+    let packs = vnr_native::pack::directory();
+    let record = vnr_native::pack::record(&packs);
+    match record {
+        Ok(Some(active)) => println!(
+            "pack:    {} {} ({})",
+            active.id,
+            active.version,
+            active.fingerprint.as_deref().unwrap_or("built into ranger")
+        ),
+        Ok(None) => println!("pack:    no record, so the built-in rules only"),
+        Err(problem) => println!("pack:    {problem}"),
+    }
+    match vnr_native::pack::keys::Keys::load(&packs) {
+        Ok(keys) => println!("keys:    {} trusted", keys.keys.len()),
+        Err(problem) => println!("keys:    {problem}"),
+    }
+    println!("signals: {}", vnr_native::paths::signatures_dir().display());
 }
 
 fn write_headless_report(path: &Path, record: bool) {
@@ -91,6 +294,27 @@ fn write_headless_report(path: &Path, record: bool) {
     ));
     if let Err(error) = journal.record_synced(draft) {
         eprintln!("vn-ranger: the scan finished, but the journal could not be written: {error}");
+    }
+}
+
+/// Leave a line where a person can find it when there is no window to say it in.
+///
+/// A release build on Windows is a window-subsystem binary: it has no console, so an
+/// `eprintln!` at startup goes nowhere. A failure that leaves no trace is the one thing this
+/// program must never do, so it writes beside its own data.
+fn record_startup(problem: &str) {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs());
+    let line = format!(
+        "{} vn-ranger {}: {problem}\n",
+        vnr_core::time::format_utc(now),
+        env!("CARGO_PKG_VERSION")
+    );
+    let path = vnr_native::paths::data_dir().join("startup.log");
+    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+        use std::io::Write;
+        let _ = file.write_all(line.as_bytes());
     }
 }
 

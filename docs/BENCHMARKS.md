@@ -125,6 +125,15 @@ The 24-hour soak is run on the **release candidate**, not on a developer build, 
 numbers are published with the candidate they came from. A soak that does not name its
 build is a reading, not evidence.
 
+The recorder is `--soak <file>`, and it is the product measuring itself rather than a
+script measuring the product from outside: one NDJSON line a minute with the version, the
+CPU of the interval, the working set and private bytes, the descriptor count where the
+platform lets a process count its own, and the polls, watcher events and journal lines
+written since the previous line. A field a platform cannot fill is `null`, never zero — a
+zero is a measurement and would be read as one. Linux reports descriptors; Windows and
+macOS do not, because counting handles needs a call this workspace will not make without a
+safe wrapper, and that gap is stated here rather than filled with a placeholder.
+
 ## What is not measured yet
 
 - Cold start. The window appears quickly, but "quickly" is not a number. A timestamped
@@ -132,8 +141,9 @@ build is a reading, not evidence.
 - Streaming hash throughput on a large file. The v0.1.0 scan hashes startup binaries,
   which are small; a dedicated throughput measurement arrives with the real-time
   watcher.
-- A 24-hour resident soak. v0.1.0 has no resident mode, so there was nothing to soak;
-  from v0.1.6 there is, and the table above says what it must hold.
+- The 24-hour run itself. The recorder exists (--soak), but no 24-hour sample has been
+  taken on a release candidate yet, so the table above states what it must hold rather
+  than what it held.
 - macOS and Linux. The CI builds and tests them; the numbers above are Windows unless
   stated otherwise.
 

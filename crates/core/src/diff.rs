@@ -415,6 +415,7 @@ mod tests {
             kind: AutorunKind::RunKey,
             scope: AutorunScope::User,
             enabled: true,
+            hidden: false,
             exe: Some(format!("C:\\{name}.exe")),
             sha256: None,
             signature: crate::model::SignatureStatus::NotChecked,

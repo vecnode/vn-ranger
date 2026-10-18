@@ -1,0 +1,251 @@
+{
+  "schema": 1,
+  "pack": {
+    "id": "ranger.core",
+    "version": "2026.11.1",
+    "title": "Ranger core detections"
+  },
+  "rules": [
+    {
+      "id": "startup.under-temp",
+      "title": "A startup entry that runs something out of a temporary folder",
+      "severity": "attention",
+      "confidence": "likely",
+      "technique": "T1547.001",
+      "match": {
+        "subject": "startup",
+        "all": [
+          { "field": "path", "op": "under", "value": "{TEMP}" },
+          { "field": "scope", "op": "eq", "value": "user" }
+        ]
+      },
+      "why": "A temporary folder is emptied by the system and by cleaners, so an entry there is one that expects to be re-created rather than installed.",
+      "benign": "An installer that registers a temporary shim and removes it when it finishes.",
+      "remediation": "Quarantine the binary, then remove the startup entry."
+    },
+    {
+      "id": "startup.unsigned-user-scope",
+      "title": "An unsigned startup entry in the user's own scope",
+      "severity": "notice",
+      "confidence": "possible",
+      "technique": "T1547.001",
+      "match": {
+        "subject": "startup",
+        "all": [
+          { "field": "signed", "op": "eq", "value": "unsigned" },
+          { "field": "scope", "op": "eq", "value": "user" }
+        ]
+      },
+      "why": "A signature is a fact about the file, not a verdict: unsigned means the author did not buy a certificate, and nothing more.",
+      "benign": "A small open-source launcher, or a self-built binary, that has never been signed.",
+      "remediation": "Open the folder and look at the file before removing anything. The hash is in the finding."
+    },
+    {
+      "id": "startup.accessibility-swap",
+      "title": "An accessibility program is replaced by another program",
+      "severity": "attention",
+      "confidence": "likely",
+      "technique": "T1546.008",
+      "match": {
+        "subject": "startup",
+        "all": [
+          { "field": "kind", "op": "eq", "value": "debugger" },
+          {
+            "field": "name",
+            "op": "in",
+            "value": [
+              "sethc.exe",
+              "utilman.exe",
+              "osk.exe",
+              "magnify.exe",
+              "narrator.exe",
+              "DisplaySwitch.exe",
+              "AtBroker.exe"
+            ]
+          }
+        ]
+      },
+      "why": "Windows starts these programs from the lock screen and from the sign-in screen, before anyone has signed in. A debugger registered for one of them runs in that program's place, which is a way to a command prompt without a password.",
+      "benign": "An accessibility tool whose vendor registers a debugger for its own program, or a debugger a developer attached to a test build.",
+      "remediation": "If you did not install this, remove the Debugger value and check who has signed in on the machine. This one is worth acting on rather than suppressing."
+    },    {
+      "id": "agent.config-names-a-command",
+      "title": "A configuration file names a program to run",
+      "severity": "notice",
+      "confidence": "possible",
+      "technique": "T1059",
+      "match": {
+        "subject": "agent",
+        "all": [{ "field": "command", "op": "exists" }]
+      },
+      "why": "An MCP server, an SSH key with a forced command and an editor hook are the same shape: a file the person trusts names a program, and the program runs without a click. None of them appears in a startup list, so this is where they are visible.",
+      "benign": "A server the person added to their own agent client, or a backup key that is allowed one command on purpose.",
+      "remediation": "Read the file the finding names. If you did not write the line, remove it and change the key or the client's configuration."
+    },    {
+      "id": "process.from-temp",
+      "title": "A process running from a temporary folder",
+      "severity": "notice",
+      "confidence": "possible",
+      "technique": "T1204.002",
+      "match": {
+        "subject": "process",
+        "all": [{ "field": "path", "op": "under", "value": "{TEMP}" }]
+      },
+      "why": "Programs are installed, not left in the folder the system empties; a process there is either passing through or hiding in it.",
+      "benign": "A portable application that unpacks itself and runs from its own extraction folder.",
+      "remediation": "Look at the process's parent and command line before acting; the details are in the panel."
+    },
+    {
+      "id": "listener.every-interface",
+      "title": "A socket waiting for a connection on every interface",
+      "severity": "notice",
+      "confidence": "possible",
+      "technique": "T1611",
+      "match": {
+        "subject": "listener",
+        "all": [{ "field": "public", "op": "eq", "value": true }]
+      },
+      "why": "A socket bound to every interface is reachable from the network, which is a decision someone made rather than a default most programs choose.",
+      "benign": "A development server or a file-sharing program the person started deliberately.",
+      "remediation": "Close the program, or bind it to loopback in its settings. The owning process is in the row."
+    },
+    {
+      "id": "startup.service-dll-user-writable",
+      "title": "A service's DLL is in a folder a user can write",
+      "severity": "attention",
+      "confidence": "likely",
+      "technique": "T1543.003",
+      "match": {
+        "subject": "startup",
+        "all": [
+          { "field": "kind", "op": "eq", "value": "service" },
+          { "field": "path", "op": "suffix", "value": ".dll" }
+        ],
+        "any": [
+          { "field": "path", "op": "under", "value": "{PROGRAMDATA}" },
+          { "field": "path", "op": "under", "value": "{LOCALAPPDATA}" },
+          { "field": "path", "op": "under", "value": "{APPDATA}" },
+          { "field": "path", "op": "under", "value": "{TEMP}" }
+        ]
+      },
+      "why": "A service runs as SYSTEM, and the code it loads is normally installed where only an administrator can write. A DLL under a folder the signed-in user can write starts SYSTEM-level code that a non-administrator can replace.",
+      "benign": "A per-user certificate store, a printer driver or a vendor's own service that installs into ProgramData and upgrades itself there.",
+      "remediation": "Open the folder and look at the DLL's publisher and its date. If nobody installed it deliberately, disable the service before touching the file."
+    },
+    {
+      "id": "startup.netsh-helper-user-writable",
+      "title": "A netsh helper DLL is named by a full path in a user-writable folder",
+      "severity": "attention",
+      "confidence": "likely",
+      "technique": "T1546.007",
+      "match": {
+        "subject": "startup",
+        "all": [
+          { "field": "kind", "op": "eq", "value": "netsh_helper" },
+          { "field": "path", "op": "exists" }
+        ],
+        "any": [
+          { "field": "path", "op": "under", "value": "{PROGRAMDATA}" },
+          { "field": "path", "op": "under", "value": "{LOCALAPPDATA}" },
+          { "field": "path", "op": "under", "value": "{APPDATA}" },
+          { "field": "path", "op": "under", "value": "{TEMP}" }
+        ]
+      },
+      "why": "Every netsh command loads its helpers into the netsh process, so a helper DLL is code that runs whenever anyone runs netsh. A helper named by a bare file name is resolved from the system folder; one named by a full path outside it can be replaced by whoever can write that path.",
+      "benign": "A vendor's own network tooling that installs a helper beside its application and registers it by full path.",
+      "remediation": "Look at the DLL's publisher and its date. If no network tool was installed deliberately, remove the value and the file."
+    },
+    {
+      "id": "startup.print-monitor-user-writable",
+      "title": "A print monitor DLL is named by a full path in a user-writable folder",
+      "severity": "attention",
+      "confidence": "likely",
+      "technique": "T1547.012",
+      "match": {
+        "subject": "startup",
+        "all": [
+          { "field": "kind", "op": "eq", "value": "print_monitor" },
+          { "field": "path", "op": "exists" }
+        ],
+        "any": [
+          { "field": "path", "op": "under", "value": "{PROGRAMDATA}" },
+          { "field": "path", "op": "under", "value": "{LOCALAPPDATA}" },
+          { "field": "path", "op": "under", "value": "{APPDATA}" },
+          { "field": "path", "op": "under", "value": "{TEMP}" }
+        ]
+      },
+      "why": "The print spooler runs as SYSTEM and loads monitor DLLs by name, so a monitor whose driver is a full path in a writable folder is code that runs with the spooler's rights.",
+      "benign": "A print vendor's port monitor installed with its driver package into ProgramData.",
+      "remediation": "Check the DLL's publisher. Remove the monitor's key only after stopping the spooler, or uninstall the print software that installed it."
+    },
+    {
+      "id": "startup.time-provider-user-writable",
+      "title": "A time provider DLL is in a user-writable folder",
+      "severity": "attention",
+      "confidence": "likely",
+      "technique": "T1547.003",
+      "match": {
+        "subject": "startup",
+        "all": [
+          { "field": "kind", "op": "eq", "value": "time_provider" },
+          { "field": "path", "op": "exists" }
+        ],
+        "any": [
+          { "field": "path", "op": "under", "value": "{PROGRAMDATA}" },
+          { "field": "path", "op": "under", "value": "{LOCALAPPDATA}" },
+          { "field": "path", "op": "under", "value": "{APPDATA}" },
+          { "field": "path", "op": "under", "value": "{TEMP}" }
+        ]
+      },
+      "why": "The Windows time service loads provider DLLs, and it runs as SYSTEM. A provider outside the system folder is a DLL loaded by a privileged service on every time sync.",
+      "benign": "A virtualisation guest agent that ships its own time provider and installs it beside itself.",
+      "remediation": "Check whether a hypervisor guest agent installed it. If not, remove the provider key and the DLL."
+    },
+    {
+      "id": "startup.screensaver-user-writable",
+      "title": "The screensaver runs a program from a user-writable folder",
+      "severity": "notice",
+      "confidence": "possible",
+      "technique": "T1546.002",
+      "match": {
+        "subject": "startup",
+        "all": [
+          { "field": "kind", "op": "eq", "value": "screensaver" },
+          { "field": "path", "op": "exists" }
+        ],
+        "any": [
+          { "field": "path", "op": "under", "value": "{PROGRAMDATA}" },
+          { "field": "path", "op": "under", "value": "{LOCALAPPDATA}" },
+          { "field": "path", "op": "under", "value": "{APPDATA}" },
+          { "field": "path", "op": "under", "value": "{TEMP}" }
+        ]
+      },
+      "why": "A screensaver is a program Windows starts by itself when the session is idle, which makes the setting a way to run something without a person clicking anything.",
+      "benign": "A screensaver a person downloaded and installed themselves, which is how most screensavers arrive.",
+      "remediation": "If you did not choose this screensaver, clear the setting in Windows' lock-screen options and remove the file."
+    },    {
+      "id": "task.hidden-user-writable",
+      "title": "A hidden scheduled task runs a program from a user-writable folder",
+      "severity": "attention",
+      "confidence": "likely",
+      "technique": "T1053.005",
+      "match": {
+        "subject": "startup",
+        "all": [
+          { "field": "kind", "op": "eq", "value": "scheduled_task" },
+          { "field": "hidden", "op": "eq", "value": true },
+          { "field": "path", "op": "exists" }
+        ],
+        "any": [
+          { "field": "path", "op": "under", "value": "{PROGRAMDATA}" },
+          { "field": "path", "op": "under", "value": "{LOCALAPPDATA}" },
+          { "field": "path", "op": "under", "value": "{APPDATA}" },
+          { "field": "path", "op": "under", "value": "{TEMP}" }
+        ]
+      },
+      "why": "Task Scheduler's Hidden setting takes a task out of its own list while leaving it scheduled, so a hidden task in a writable folder is both a thing that runs on a trigger and a thing its owner does not see.",
+      "benign": "Some updaters register a hidden maintenance task in ProgramData, and say so in their documentation.",
+      "remediation": "Open Task Scheduler as an administrator, find the task by the name in the finding, and read its action before disabling it."
+    }
+  ]
+}

@@ -12,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
-use crate::model::{AutorunFact, AutorunScope, ProcessFact, Snapshot};
+use crate::model::{AutorunFact, AutorunKind, AutorunScope, ProcessFact, Snapshot};
 
 /// How much a finding deserves attention. It is about consequence, not confidence.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -73,16 +73,22 @@ impl Confidence {
 }
 
 /// What a rule says about the facts.
+///
+/// The text is owned rather than borrowed because a finding can come from a pack, and a
+/// pack's words exist at runtime. A built-in rule's words are copied into the finding, which
+/// costs one allocation per finding and buys one type for both engines.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct Finding {
     /// The stable rule id, never reused for a different meaning.
-    pub rule_id: &'static str,
+    pub rule_id: String,
     /// The rule's short title.
-    pub title: &'static str,
+    pub title: String,
     /// Consequence, not confidence.
     pub severity: Severity,
     /// How sure the interpretation is.
     pub confidence: Confidence,
+    /// The ATT&CK technique, where one applies.
+    pub technique: Option<String>,
     /// A stable identity for this finding, used by suppressions.
     pub subject: String,
     /// The thing a person recognises, in words.
@@ -90,11 +96,21 @@ pub struct Finding {
     /// What was observed, one fact per line.
     pub evidence: Vec<String>,
     /// Why those facts matter.
-    pub why: &'static str,
+    pub why: String,
     /// The most likely innocent explanation.
-    pub benign: &'static str,
+    pub benign: String,
     /// What a person can do about it.
-    pub remediation: &'static str,
+    pub remediation: String,
+    /// The pack a finding came from, as `id version`; `None` for a built-in rule.
+    pub pack: Option<String>,
+}
+
+impl Finding {
+    /// Whether this finding came from a pack rather than from a built-in rule.
+    #[must_use]
+    pub fn from_pack(&self) -> bool {
+        self.pack.is_some()
+    }
 }
 
 /// A person's decision to stop seeing one rule fire on one subject, until it expires.
@@ -153,6 +169,37 @@ struct Rule {
     why: &'static str,
     benign: &'static str,
     remediation: &'static str,
+}
+
+/// Every built-in rule id, in the order the table below declares them.
+///
+/// A pack may not shadow one of these: a suppression is scoped to `(rule, subject)`, and two
+/// rules with one id make it impossible to say which one a person meant. This is the list the
+/// pack validator is given, so it is the list a new built-in rule has to be added to — and a
+/// test below fails when a `Rule` constant's id is not in it.
+pub const RULE_IDS: [&str; 16] = [
+    "startup.temp-path",
+    "startup.downloads-path",
+    "startup.script-extension",
+    "startup.bare-command",
+    "startup.shell-interpreter",
+    "startup.user-writable-system",
+    "startup.hash-changed",
+    "startup.new-since-baseline",
+    "process.temp-path",
+    "process.downloads-path",
+    "process.parent-exited",
+    "listener.public-new-process",
+    "listener.public-unknown-owner",
+    "agent.persistent-listening",
+    "startup.duplicate-command",
+    "service.unquoted-path",
+];
+
+/// The built-in rule ids, in the form a pack validator wants them.
+#[must_use]
+pub fn builtin_ids() -> &'static [&'static str] {
+    &RULE_IDS
 }
 
 const TEMP_PATH: Rule = Rule {
@@ -334,6 +381,21 @@ const DUPLICATE_COMMAND: Rule = Rule {
     remediation: "Remove the redundant entries if you want the list to say what actually runs.",
 };
 
+const UNQUOTED_SERVICE_PATH: Rule = Rule {
+    id: "service.unquoted-path",
+    title: "A service path has a space in it and no quotes",
+    severity: Severity::Notice,
+    confidence: Confidence::Observed,
+    why: "Windows resolves an unquoted service path one folder at a time, so a service whose \
+          image path is `C:\\Program Files\\Acme\\agent.exe` will try `C:\\Program.exe` first. \
+          Whoever can write to one of those earlier folders decides what the service runs, as \
+          SYSTEM.",
+    benign: "Many installers register a service this way and it works, because nobody has ever \
+             written a file to the shorter path.",
+    remediation: "Quote the whole path in the service's ImagePath, or reinstall the application \
+                  from a path with no spaces.",
+};
+
 /// Evaluate every built-in rule against a scan and its baseline.
 ///
 /// The result is sorted by severity and then by rule and subject, so two evaluations of the
@@ -351,29 +413,41 @@ pub fn evaluate(snapshot: &Snapshot, baseline: Option<&Snapshot>) -> Vec<Finding
     public_listeners(snapshot, &mut findings);
     persistent_listeners(snapshot, &mut findings);
     duplicate_commands(snapshot, &mut findings);
+    unquoted_service_paths(snapshot, &mut findings);
 
+    sort_findings(&mut findings);
+    findings
+}
+
+/// Put findings in the one order the interface and the report both read them in.
+///
+/// Severity first, then the rule, then the subject. Two engines produce findings — the
+/// built-in rules and the active pack — and they are merged before they are shown, so the
+/// order has to be a function of the findings rather than of which engine ran first.
+pub fn sort_findings(findings: &mut [Finding]) {
     findings.sort_by(|a, b| {
         b.severity
             .rank()
             .cmp(&a.severity.rank())
-            .then_with(|| a.rule_id.cmp(b.rule_id))
+            .then_with(|| a.rule_id.cmp(&b.rule_id))
             .then_with(|| a.subject.cmp(&b.subject))
     });
-    findings
 }
 
 fn make(rule: &Rule, subject: String, subject_label: String, evidence: Vec<String>) -> Finding {
     Finding {
-        rule_id: rule.id,
-        title: rule.title,
+        rule_id: rule.id.to_owned(),
+        title: rule.title.to_owned(),
         severity: rule.severity,
         confidence: rule.confidence,
+        technique: None,
         subject,
         subject_label,
         evidence,
-        why: rule.why,
-        benign: rule.benign,
-        remediation: rule.remediation,
+        why: rule.why.to_owned(),
+        benign: rule.benign.to_owned(),
+        remediation: rule.remediation.to_owned(),
+        pack: None,
     }
 }
 
@@ -702,6 +776,52 @@ fn persistent_listeners(snapshot: &Snapshot, findings: &mut Vec<Finding>) {
     }
 }
 
+/// A service whose image path has a space and no quotes.
+///
+/// Windows resolves an unquoted image path one folder at a time, so the service tries an
+/// earlier, shorter path first. This is a fact about the command as registered; whether
+/// anything is at the shorter path is another question, and this rule does not answer it.
+fn unquoted_service_paths(snapshot: &Snapshot, findings: &mut Vec<Finding>) {
+    for entry in &snapshot.autoruns {
+        if entry.kind != AutorunKind::Service {
+            continue;
+        }
+        let command = entry.command.trim();
+        if command.starts_with('"') {
+            continue;
+        }
+        // The image path is everything up to the first `.exe`, and the bug is a space
+        // inside it: Windows then tries each shorter prefix before the real one.
+        let lower = command.to_ascii_lowercase();
+        let Some(at) = lower.find(".exe") else {
+            continue;
+        };
+        let image = &command[..at.saturating_add(4)];
+        let arguments = &command[at.saturating_add(4)..];
+        let image_has_space = image.contains(' ');
+        let arguments_begin = arguments.is_empty() || arguments.starts_with(' ');
+        if !image_has_space || !arguments_begin {
+            continue;
+        }
+        if !image.contains('\\') && !image.contains('/') {
+            continue;
+        }
+        findings.push(make(
+            &UNQUOTED_SERVICE_PATH,
+            format!("autorun:{}", entry.id),
+            format!("{} ({})", entry.name, entry.kind.label()),
+            vec![
+                format!("Image path: {command}"),
+                format!(
+                    "Windows tries first: {}",
+                    image.split(' ').next().unwrap_or(image)
+                ),
+                format!("Registered at: {}", entry.location),
+            ],
+        ));
+    }
+}
+
 fn duplicate_commands(snapshot: &Snapshot, findings: &mut Vec<Finding>) {
     let mut groups: HashMap<String, Vec<&AutorunFact>> = HashMap::new();
     for entry in &snapshot.autoruns {
@@ -795,6 +915,7 @@ mod tests {
             kind: AutorunKind::RunKey,
             scope: AutorunScope::User,
             enabled: true,
+            hidden: false,
             exe: exe.map(str::to_owned),
             sha256: None,
             signature: crate::model::SignatureStatus::NotChecked,
@@ -1165,6 +1286,57 @@ mod tests {
     }
 
     #[test]
+    fn an_unquoted_service_path_with_a_space_fires_and_a_quoted_one_does_not() {
+        let mut scan = snapshot();
+        scan.autoruns.push(AutorunFact {
+            id: "service:Acme".to_owned(),
+            name: "Acme Agent".to_owned(),
+            command: r"C:\Program Files\Acme\agent.exe -k netsvcs".to_owned(),
+            location: r"HKLM\SYSTEM\CurrentControlSet\Services\Acme".to_owned(),
+            kind: AutorunKind::Service,
+            scope: AutorunScope::System,
+            enabled: true,
+            hidden: false,
+            exe: Some(r"C:\Program Files\Acme\agent.exe".to_owned()),
+            sha256: None,
+            signature: crate::model::SignatureStatus::NotChecked,
+        });
+        let findings = evaluate(&scan, None);
+        let fired = findings
+            .iter()
+            .find(|finding| finding.rule_id == "service.unquoted-path")
+            .expect("an unquoted image path with a space fires");
+        assert_eq!(fired.severity, Severity::Notice);
+        assert!(
+            fired
+                .evidence
+                .iter()
+                .any(|line| line.contains("Windows tries first")),
+            "{:?}",
+            fired.evidence
+        );
+
+        // Quoted is the fix, and a path with no space does not have the problem at all.
+        let one = scan.autoruns.first().cloned().expect("one entry was pushed");
+        for command in [
+            r#""C:\Program Files\Acme\agent.exe" -k netsvcs"#,
+            r"C:\Acme\agent.exe -k netsvcs",
+        ] {
+            let mut quiet = Snapshot::empty(Host::default(), false);
+            let mut entry = one.clone();
+            entry.command = command.to_owned();
+            quiet.autoruns.push(entry);
+            let findings = evaluate(&quiet, None);
+            assert!(
+                findings
+                    .iter()
+                    .all(|finding| finding.rule_id != "service.unquoted-path"),
+                "{command} should not fire"
+            );
+        }
+    }
+
+    #[test]
     fn suppressions_cover_one_rule_and_expire() {
         let mut snapshot = snapshot();
         snapshot.autoruns.push(autorun(
@@ -1241,13 +1413,27 @@ mod tests {
             .push(process(12, Some(4242), "x", Some("C:\\Temp\\x.exe"), 999_000));
         let findings = evaluate(&snapshot, None);
         let mut sorted = findings.clone();
-        sorted.sort_by(|a, b| {
-            b.severity
-                .rank()
-                .cmp(&a.severity.rank())
-                .then_with(|| a.rule_id.cmp(b.rule_id))
-                .then_with(|| a.subject.cmp(&b.subject))
-        });
+        sort_findings(&mut sorted);
         assert_eq!(findings, sorted);
+    }
+
+    #[test]
+    fn the_published_rule_ids_are_the_ones_the_rules_carry() {
+        // The ids are declared twice — on each `Rule` constant and in the list the pack
+        // validator is given — so a rule that is not added to the list would let a pack
+        // shadow it. Reading this file's own source is the cheapest way to notice.
+        let source = include_str!("rules.rs");
+        let declared: Vec<&str> = source
+            .lines()
+            .filter_map(|line| line.trim().strip_prefix("id: \""))
+            .filter_map(|rest| rest.find('"').map(|end| &rest[..end]))
+            // Only the rule ids, not a fixture's id: a test's own struct literal is not a
+            // rule, and a rule id is the lowercase dotted shape the pack validator accepts.
+            .filter(|id| crate::pack::valid_id(id))
+            .collect();
+        assert_eq!(
+            declared, RULE_IDS,
+            "the rule table and the published ids are one list"
+        );
     }
 }

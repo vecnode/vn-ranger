@@ -253,6 +253,16 @@ bytes = 1008
 sha256 = "34e59bd212876b81f5e1e486312e52c0aaa023e06b2e7198a0dd4a42e3deda07"
 
 [[file]]
+path = "vn-ranger-white.rgba"
+variant = "dark"
+format = "rgba"
+size = "64"
+background = "transparent"
+purpose = "Unmultiplied RGBA for the tray icon: the bare crystal with no tile, because a status area asks for a glyph rather than an application tile (16,384 bytes)."
+bytes = 16384
+sha256 = "51ed65f4ffa22d732c143b009661ce1f572dab891b368558d751d17ea092e82f"
+
+[[file]]
 path = "vn-ranger-white-1024.png"
 variant = "dark"
 format = "png"

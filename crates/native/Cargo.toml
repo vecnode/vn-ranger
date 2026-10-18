@@ -11,6 +11,13 @@ publish = false
 [lints]
 workspace = true
 
+[features]
+# The content scan is the one feature that is not in the default build: it reads the bytes of
+# files rather than their names, so it needs a person's consent each time and it is never
+# something a scan does unasked. `cargo xtask ci` proves the default build does not contain
+# it (`docs/PLAN.md` §6.11).
+content-scan = ["dep:yara-x"]
+
 [dependencies]
 vnr-core = { workspace = true }
 serde = { workspace = true }
@@ -26,6 +33,14 @@ plist = { workspace = true }
 tempfile = { workspace = true }
 notify = { workspace = true }
 cap-std = { workspace = true }
+tray-icon = { workspace = true }
+minisign-verify = { workspace = true }
+# Task XML. Already in the tree: the plist reader pulls the same crate, so this adds no
+# supply chain, and a task file is machine-written XML that deserves a real reader.
+quick-xml = '0.41.0'
+# Optional, and never in the default build. YARA-X is pure Rust (BSD-3-Clause), so it brings
+# no C dependency either, but it is a pattern engine over file content: consent, then bytes.
+yara-x = { version = "1.21.0", optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 notify = { workspace = true, features = ["macos_kqueue"] }
@@ -38,3 +53,8 @@ runas = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true }
+
+[dev-dependencies]
+# A test needs a signature that is genuinely valid before it can prove that one flipped
+# byte is refused. Signing never happens in the product.
+minisign = "0.10.0"

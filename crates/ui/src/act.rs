@@ -8,6 +8,7 @@
 
 use egui::RichText;
 
+use crate::clean::CleanState;
 use crate::world::{Action, JournalRow, QuarantineRow, World};
 use crate::{theme, widgets};
 
@@ -37,7 +38,18 @@ impl PurgeAsk {
 }
 
 /// The whole view.
-pub(crate) fn view(ui: &mut egui::Ui, world: &World, ask: &mut PurgeAsk, actions: &mut Vec<Action>) {
+///
+/// Three cards in the order a person needs them: what ranger could remove (dry run only),
+/// what it has already moved aside, and what it has recorded.
+pub(crate) fn view(
+    ui: &mut egui::Ui,
+    world: &World,
+    ask: &mut PurgeAsk,
+    clean: &mut CleanState,
+    actions: &mut Vec<Action>,
+) {
+    crate::clean::card(ui, world, clean, actions);
+    ui.add_space(14.0);
     quarantine(ui, world, ask, actions);
     ui.add_space(14.0);
     journal(ui, world);
@@ -78,7 +90,7 @@ fn quarantine(ui: &mut egui::Ui, world: &World, ask: &mut PurgeAsk, actions: &mu
 }
 
 fn row_line(ui: &mut egui::Ui, row: &QuarantineRow, ask: &mut PurgeAsk, actions: &mut Vec<Action>) {
-    widget_border(ui, |ui| {
+    widgets::border(ui, |ui| {
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 ui.label(
@@ -89,7 +101,7 @@ fn row_line(ui: &mut egui::Ui, row: &QuarantineRow, ask: &mut PurgeAsk, actions:
                 ui.add_space(2.0);
                 let detail = format!(
                     "{} · {} · taken {} · {}",
-                    bytes_label(row.bytes),
+                    widgets::bytes(row.bytes),
                     row.hash_short,
                     row.at_label,
                     row.reason
@@ -235,49 +247,9 @@ fn journal_line(ui: &mut egui::Ui, row: &JournalRow) {
     });
 }
 
-fn widget_border<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
-    egui::Frame::new()
-        .fill(ui.visuals().faint_bg_color)
-        .corner_radius(egui::CornerRadius::same(6))
-        .inner_margin(egui::Margin::symmetric(10, 8))
-        .outer_margin(egui::Margin {
-            bottom: 6,
-            ..egui::Margin::ZERO
-        })
-        .show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            add(ui)
-        })
-        .inner
-}
-
-fn bytes_label(bytes: u64) -> String {
-    const UNITS: [&str; 4] = ["B", "KB", "MB", "GB"];
-    let mut value = bytes as f64;
-    let mut unit = 0;
-    while value >= 1024.0 && unit + 1 < UNITS.len() {
-        value /= 1024.0;
-        unit += 1;
-    }
-    if unit == 0 {
-        format!("{bytes} B")
-    } else {
-        format!("{value:.1} {}", UNITS[unit])
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn sizes_read_in_the_units_a_person_uses() {
-        assert_eq!(bytes_label(0), "0 B");
-        assert_eq!(bytes_label(999), "999 B");
-        assert_eq!(bytes_label(1024), "1.0 KB");
-        assert_eq!(bytes_label(1024 * 1024 * 3 / 2), "1.5 MB");
-        assert_eq!(bytes_label(1024 * 1024 * 1024 * 2), "2.0 GB");
-    }
 
     #[test]
     fn the_word_has_to_hold_the_target_and_be_typed_exactly() {

@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*", "apps/*", "xtask"]
 
 [workspace.package]
-version = "0.1.5"
+version = "0.1.6"
 edition = "2024"
 license = "MIT"
 rust-version = "1.95"
@@ -74,6 +74,18 @@ runas = "1.2.0"
 
 # Unix-only: effective uid for the elevation status.
 nix = { version = "0.31.3", features = ["user"] }
+
+# The tray, on all three platforms, from one crate with one menu API. The default
+# backend on Linux is `libappindicator`, a GTK3 C dependency this workspace refuses
+# (AGENTS.md §8), so the feature that replaces it is the one taken: `ksni` speaks
+# StatusNotifierItem over the session bus and needs no toolkit. On Windows and macOS
+# that feature resolves to nothing, because the crate gates the dependency by target.
+tray-icon = { version = "0.26.1", default-features = false, features = ["ksni"] }
+
+# Pack signatures: Ed25519 over BLAKE2b-512, one detached file, one key. MIT, no external
+# dependencies, and the verification half only — ranger never signs anything on a user
+# machine, so the signing code is a dev-dependency in the tests that need a valid signature.
+minisign-verify = "0.3.0"
 
 [profile.dev]
 opt-level = 1

@@ -22,6 +22,31 @@ pub const BAD: Color32 = Color32::from_rgb(248, 81, 73);
 
 const INK: Color32 = Color32::from_rgb(11, 13, 16);
 
+/// The size of a page's own heading.
+pub const PAGE_TITLE: f32 = 21.0;
+
+/// The size a dialog is titled with.
+///
+/// A dialog titled at a page's size reads as a page in a box. It sits a step above the
+/// body text and no further, which is what makes the header a header rather than a shout.
+pub const DIALOG_TITLE: f32 = 14.0;
+
+/// The type scale, with the heading size chosen by the caller.
+///
+/// One table with one parameter, so a dialog lowering the heading and restoring it cannot
+/// leave the product with two scales that disagree by a point.
+#[must_use]
+pub fn text_styles(heading: f32) -> std::collections::BTreeMap<TextStyle, FontId> {
+    [
+        (TextStyle::Heading, FontId::new(heading, semibold())),
+        (TextStyle::Body, FontId::new(13.0, FontFamily::Proportional)),
+        (TextStyle::Button, FontId::new(12.5, semibold())),
+        (TextStyle::Small, FontId::new(11.0, FontFamily::Proportional)),
+        (TextStyle::Monospace, FontId::new(11.5, FontFamily::Monospace)),
+    ]
+    .into()
+}
+
 /// Apply the palette for the chosen mode.
 pub fn apply(ctx: &Context, dark: bool) {
     let mut visuals = if dark { Visuals::dark() } else { Visuals::light() };
@@ -67,6 +92,10 @@ pub fn apply(ctx: &Context, dark: bool) {
         style.spacing.item_spacing = egui::vec2(6.0, 6.0);
         style.spacing.button_padding = egui::vec2(10.0, 6.0);
         style.spacing.interact_size.y = 24.0;
+        // Every `egui::Window` in this product is a dialog, and egui draws its frame from
+        // this margin. Setting it here is what gives a dialog its inside room without each
+        // one building a frame of its own.
+        style.spacing.window_margin = egui::Margin::symmetric(18, 16);
         style.spacing.scroll = egui::style::ScrollStyle {
             floating: false,
             foreground_color: false,
@@ -75,14 +104,7 @@ pub fn apply(ctx: &Context, dark: bool) {
             bar_outer_margin: 0.0,
             ..Default::default()
         };
-        style.text_styles = [
-            (TextStyle::Heading, FontId::new(21.0, semibold())),
-            (TextStyle::Body, FontId::new(13.0, FontFamily::Proportional)),
-            (TextStyle::Button, FontId::new(12.5, semibold())),
-            (TextStyle::Small, FontId::new(11.0, FontFamily::Proportional)),
-            (TextStyle::Monospace, FontId::new(11.5, FontFamily::Monospace)),
-        ]
-        .into();
+        style.text_styles = text_styles(PAGE_TITLE);
     });
 }
 

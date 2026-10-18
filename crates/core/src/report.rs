@@ -49,7 +49,7 @@ pub fn to_markdown(snapshot: &Snapshot, findings: &[Finding]) -> String {
                 out,
                 "### {} — {}\n",
                 finding.severity.label(),
-                clean(finding.title)
+                clean(&finding.title)
             );
             let _ = writeln!(
                 out,
@@ -64,9 +64,9 @@ pub fn to_markdown(snapshot: &Snapshot, findings: &[Finding]) -> String {
             let _ = writeln!(
                 out,
                 "\nWhy: {}\n\nLikely benign: {}\n\nWhat to do: {}\n",
-                clean(finding.why),
-                clean(finding.benign),
-                clean(finding.remediation)
+                clean(&finding.why),
+                clean(&finding.benign),
+                clean(&finding.remediation)
             );
         }
         if findings.len() > FINDING_LIMIT {
@@ -267,16 +267,18 @@ mod tests {
     fn a_finding_appears_in_the_report_with_its_evidence() {
         let snapshot = Snapshot::empty(Host::default(), false);
         let finding = Finding {
-            rule_id: "startup.temp-path",
-            title: "A startup item runs from a temporary folder",
+            rule_id: "startup.temp-path".to_owned(),
+            title: "A startup item runs from a temporary folder".to_owned(),
             severity: Severity::Attention,
             confidence: Confidence::Observed,
+            technique: None,
             subject: "autorun:x".to_owned(),
             subject_label: "X".to_owned(),
             evidence: vec!["Executable: C:\\Temp\\x.exe".to_owned()],
-            why: "Temporary folders are cleaned up.",
-            benign: "An installer registered a helper.",
-            remediation: "Check the file's publisher.",
+            why: "Temporary folders are cleaned up.".to_owned(),
+            benign: "An installer registered a helper.".to_owned(),
+            remediation: "Check the file's publisher.".to_owned(),
+            pack: None,
         };
         let report = to_markdown(&snapshot, &[finding]);
         assert!(report.contains("## Findings"));

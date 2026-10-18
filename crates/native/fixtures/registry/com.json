@@ -1,0 +1,10 @@
+{
+  "captured": "HKLM\\SOFTWARE\\Classes\\CLSID\\{...} on the maintainer's machine, three of the 11,905 classes, re-keyed to the CLSID names they had",
+  "sanitised": "three real registrations; the class ids are the ones Windows itself uses for oleaut32, combase and windowscodecs, which are public",
+  "subkeys": [
+    { "name": "{0000002F-0000-0000-C000-000000000046}", "values": [], "subkeys": [ { "name": "InprocServer32", "values": [ { "name": "", "data": "C:\\Windows\\System32\\oleaut32.dll" } ], "subkeys": [] } ] },
+    { "name": "{00000300-0000-0000-C000-000000000046}", "values": [], "subkeys": [ { "name": "InprocServer32", "values": [ { "name": "", "data": "combase.dll" } ], "subkeys": [] } ] },
+    { "name": "{00000301-A8F2-4877-BA0A-FD2B6645FB94}", "values": [], "subkeys": [ { "name": "InprocServer32", "values": [ { "name": "", "data": "C:\\Windows\\System32\\windowscodecs.dll" } ], "subkeys": [] } ] },
+    { "name": "{11111111-2222-3333-4444-555555555555}", "values": [], "subkeys": [] }
+  ]
+}

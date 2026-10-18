@@ -98,6 +98,17 @@ pub struct UiSettings {
     pub watch: Option<bool>,
     /// The live indicator.
     pub led: Option<bool>,
+    /// Whether closing the window hides it to the tray.
+    ///
+    /// Off unless a person turns it on, and it means nothing on a desktop with no tray: the
+    /// default is that closing the window ends the application, which is the one behaviour
+    /// nobody has to learn.
+    pub close_to_tray: Option<bool>,
+    /// Whether a scheduled scan waits while the machine is on battery.
+    ///
+    /// Off by default: a ranger that stops noticing things on a laptop, without the person
+    /// asking, is a ranger that reports silence as good news.
+    pub skip_on_battery: Option<bool>,
 }
 
 /// Read the interface preferences, falling back to the defaults.

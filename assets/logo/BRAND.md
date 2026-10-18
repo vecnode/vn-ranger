@@ -88,7 +88,11 @@ gives the eye a solid silhouette and the ember gives it a colour to find.
 | `vn-ranger.svg`, `vn-ranger-<size>.png` | Light backgrounds. Ink linework, ember inlay, transparent elsewhere. |
 | `vn-ranger-white.svg`, `vn-ranger-white-<size>.png` | Dark backgrounds. White linework, ember inlay, transparent elsewhere. |
 | `vn-ranger-app.svg`, `vn-ranger-app-<size>.png` | An application icon: the mark on the suite's black tile, with white ridges. |
-| `vn-ranger-app.rgba` | 64×64 unmultiplied RGBA for `egui::IconData`; embedded with `include_bytes!`. |
+| `vn-ranger-app.rgba` | 64×64 unmultiplied RGBA of the tile, for packaging, a store listing or a shortcut. |
+| `vn-ranger-white.rgba` | 64×64 unmultiplied RGBA of the bare white mark, for the tray icon. |
+
+If a target takes raw bytes rather than a file, it gets one of the two `.rgba` files and
+not a PNG decoder: both are 16,384 bytes, exactly the three fields `egui::IconData` takes.
 
 Sizes are 16, 24, 32, 48, 64, 128, 256, 512 and 1024 pixels square. Every PNG was
 rendered at its exact size from the SVG, not downscaled from a master. Prefer the SVG
@@ -106,6 +110,12 @@ wherever the target accepts it.
 The tile is black, not ember. An icon has to hold its own against whatever is behind
 it: a bare black glyph disappears on a dark taskbar and a bare white one on a light
 taskbar, whereas a black tile with a white crystal and an ember inlay reads on both.
+
+**Where ranger itself uses which.** The application tile is the window icon and the mark
+in the top bar, exactly as it always was: it reads on paper and on ink, so the interface
+does not swap artwork when the theme changes. The **tray** is the one place the bare white
+mark is used, because a status area asks for a glyph at 16–24 px rather than a tile, and a
+tile there is a black square among the system's own icons.
 
 ## Using it
 
@@ -154,7 +164,8 @@ The SVGs are the source of truth. To regenerate:
 2. For the application tile, keep the black rounded square; only the corners are
    transparent.
 3. Decode `vn-ranger-app-64.png` to unmultiplied RGBA and write the 16,384 raw bytes to
-   `vn-ranger-app.rgba`.
+   `vn-ranger-app.rgba`; decode `vn-ranger-white-64.png` the same way to
+   `vn-ranger-white.rgba`.
 4. Regenerate `contact-sheet.png` from the rendered set.
 5. Regenerate `MANIFEST.toml` so every digest matches the files that shipped.
 

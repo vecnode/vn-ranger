@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 
 use vnr_core::{AutorunFact, AutorunKind, AutorunScope, SignatureStatus};
 
+mod loader;
+
 use super::super::unixutil;
 use crate::collect::Outcome;
 use crate::hash::Hasher;
@@ -18,8 +20,11 @@ pub fn collect(hasher: &mut Hasher) -> Outcome<AutorunFact> {
     collect_systemd(&mut items, &enabled);
     collect_xdg(&mut items, &mut reasons);
     collect_cron(&mut items, &mut reasons);
+    collect_loaders(&mut items, &mut reasons);
     reasons.push(
-        "Kernel modules, and per-user crontabs that need elevation, are not listed in this build.".to_owned(),
+        "Per-user crontabs, `at` jobs and kernel modules already loaded are not listed in this \
+         build; the files that replace a module's load are."
+            .to_owned(),
     );
     hash_items(&mut items, hasher);
     Outcome::Partial {
@@ -106,6 +111,7 @@ fn collect_systemd(items: &mut Vec<AutorunFact>, enabled: &HashSet<String>) {
                 enabled: enabled.contains(&file_name),
                 exe,
                 sha256: None,
+                hidden: false,
                 signature: SignatureStatus::NotChecked,
             });
         }
@@ -181,6 +187,7 @@ fn collect_xdg(items: &mut Vec<AutorunFact>, reasons: &mut Vec<String>) {
                 enabled,
                 exe,
                 sha256: None,
+                hidden: false,
                 signature: SignatureStatus::NotChecked,
             });
         }
@@ -226,6 +233,7 @@ fn collect_cron(items: &mut Vec<AutorunFact>, reasons: &mut Vec<String>) {
                 enabled: true,
                 exe,
                 sha256: None,
+                hidden: false,
                 signature: SignatureStatus::NotChecked,
             });
             saw = true;
@@ -234,6 +242,72 @@ fn collect_cron(items: &mut Vec<AutorunFact>, reasons: &mut Vec<String>) {
     if !saw {
         reasons.push("No system cron entries were readable.".to_owned());
     }
+}
+
+/// The files that decide what loads before anything a person clicks: the dynamic loader's
+/// preload list, module install hooks, udev rules and shell startup files.
+fn collect_loaders(items: &mut Vec<AutorunFact>, reasons: &mut Vec<String>) {
+    // The dynamic loader: one library per line, mapped into every process.
+    match std::fs::read_to_string("/etc/ld.so.preload") {
+        Ok(text) => items.extend(loader::preload("/etc/ld.so.preload", &text)),
+        Err(_) => reasons.push("/etc/ld.so.preload is not there, which is the ordinary case.".to_owned()),
+    }
+
+    // Module install hooks.
+    let mut saw_module_file = false;
+    for path in files_in("/etc/modprobe.d", "conf") {
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        saw_module_file = true;
+        items.extend(loader::modprobe(&path.display().to_string(), &text));
+    }
+    if !saw_module_file {
+        reasons.push("No modprobe.d file was readable.".to_owned());
+    }
+
+    // udev rules run programs on device events.
+    let mut udev_rules = 0_usize;
+    for directory in ["/etc/udev/rules.d", "/usr/lib/udev/rules.d", "/lib/udev/rules.d"] {
+        for path in files_in(directory, "rules") {
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            udev_rules = udev_rules.saturating_add(1);
+            items.extend(loader::udev(&path.display().to_string(), &text));
+        }
+    }
+    if udev_rules == 0 {
+        reasons.push("No udev rule was readable.".to_owned());
+    }
+
+    // Login scripts: the system's and the person's own.
+    let mut scripts: Vec<PathBuf> = files_in("/etc/profile.d", "sh");
+    if let Ok(home) = std::env::var("HOME") {
+        for name in [".profile", ".bash_profile", ".bashrc", ".zshrc"] {
+            scripts.push(PathBuf::from(&home).join(name));
+        }
+    }
+    for path in scripts {
+        // A file that is not there contributes nothing; the ones that are there run on login.
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        items.extend(loader::shell_startup(&path.display().to_string(), &text));
+    }
+}
+
+fn files_in(directory: &str, extension: &str) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(directory) else {
+        return Vec::new();
+    };
+    let mut paths: Vec<PathBuf> = entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().and_then(|value| value.to_str()) == Some(extension))
+        .collect();
+    paths.sort();
+    paths
 }
 
 fn hash_items(items: &mut [AutorunFact], hasher: &mut Hasher) {

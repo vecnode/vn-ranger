@@ -17,12 +17,16 @@ fn main() {
         "check" => run(&["check", "--workspace", "--all-targets", "--profile", CI_PROFILE]),
         "no-network" => no_network(),
         "language" => language(),
+        "packs" => packs(),
+        "coverage" => coverage(),
+        "signature" => signature(),
+        "features" => features(),
         "version" => {
             println!("{}", env!("CARGO_PKG_VERSION"));
             Ok(())
         }
         other => Err(format!(
-            "unknown xtask `{other}`; try ci, fmt-fix, lint, test, check, no-network, language or version"
+            "unknown xtask `{other}`; try ci, fmt-fix, lint, test, check, no-network, language, packs, coverage, signature, features or version"
         )),
     };
     if let Err(error) = result {
@@ -31,12 +35,301 @@ fn main() {
     }
 }
 
+/// The ids of the rules that live in Rust, read from their own source.
+///
+/// A pack may not shadow a built-in, because a suppression is scoped to `(rule, subject)`
+/// and two rules with one id make it impossible to say which one a person meant. The list
+/// comes from the source rather than from a second table that could drift away from it.
+fn builtin_ids(root: &Path) -> Result<Vec<String>, String> {
+    let path = root.join("crates").join("core").join("src").join("rules.rs");
+    let rules = std::fs::read_to_string(&path)
+        .map_err(|error| format!("could not read {}: {error}", path.display()))?;
+    Ok(string_literals(&rules)
+        .into_iter()
+        .filter(|literal| vnr_core::pack::valid_id(literal))
+        .collect())
+}
+
+/// The first-party pack, read by the validator the product runs.
+///
+/// A pack that ships inside the binary is still a pack: one JSON file, checked by the same
+/// code a third-party pack is checked by, and an id it shares with a built-in is a build
+/// failure rather than a puzzle in a release.
+fn packs() -> Result<(), String> {
+    let root = workspace_root()?;
+    let text = std::fs::read_to_string(root.join("packs").join("ranger.core.json"))
+        .map_err(|error| format!("could not read the first-party pack: {error}"))?;
+    let builtins = builtin_ids(&root)?;
+    let ids: Vec<&str> = builtins.iter().map(String::as_str).collect();
+    match vnr_core::pack::parse(&text, &ids) {
+        Ok(pack) => {
+            println!(
+                "packs: {} rules in {} {}",
+                pack.rules.len(),
+                pack.header.id,
+                pack.header.version
+            );
+            Ok(())
+        }
+        Err(rejects) => {
+            let mut problems: Vec<String> = rejects.into_iter().map(|reject| reject.to_string()).collect();
+            problems.sort();
+            Err(format!(
+                "the first-party pack was refused:\n{}",
+                problems.join("\n")
+            ))
+        }
+    }
+}
+
 fn ci() -> Result<(), String> {
     run(&["fmt", "--all", "--check"])?;
     no_network()?;
     language()?;
+    packs()?;
+    coverage_is_current()?;
+    signature()?;
+    no_content_engine()?;
     lint()?;
     test()
+}
+
+/// Write the coverage table into `docs/RULES.md`, between its two markers.
+///
+/// The plan asks for this table generated from the packs rather than typed, because a typed
+/// coverage table is a claim that drifts: a rule added in a hurry leaves the table saying
+/// something that is no longer true, and the table is the one place a reader looks to find
+/// out what the release actually covers. `cargo xtask coverage` rewrites it, and `ci` checks
+/// it is already written, so a new rule without a regenerated table fails the build.
+fn coverage() -> Result<(), String> {
+    let (rows, table, techniques) = coverage_table()?;
+    let root = workspace_root()?;
+    let written = write_between_markers(&root.join("docs").join("RULES.md"), &table)?;
+    println!(
+        "coverage: {} rules over {} technique(s) ({})",
+        rows,
+        techniques,
+        if written { "written" } else { "unchanged" }
+    );
+    Ok(())
+}
+
+/// The table the pack produces, as (rows, markdown, technique count).
+fn coverage_table() -> Result<(usize, String, usize), String> {
+    let root = workspace_root()?;
+    let text = std::fs::read_to_string(root.join("packs").join("ranger.core.json"))
+        .map_err(|error| format!("could not read the first-party pack: {error}"))?;
+    let builtins = builtin_ids(&root)?;
+    let ids: Vec<&str> = builtins.iter().map(String::as_str).collect();
+    let pack = vnr_core::pack::parse(&text, &ids).map_err(|rejects| {
+        let problems: Vec<String> = rejects.into_iter().map(|reject| reject.to_string()).collect();
+        format!("the first-party pack was refused:\n{}", problems.join("\n"))
+    })?;
+    let mut rows: Vec<(String, String, &'static str, String)> = pack
+        .rules
+        .iter()
+        .map(|rule| {
+            (
+                rule.technique.clone().unwrap_or_else(|| "—".to_owned()),
+                rule.id.clone(),
+                rule.severity.label(),
+                rule.title.clone(),
+            )
+        })
+        .collect();
+    rows.sort();
+    let mut table = String::from(
+        "<!-- generated by `cargo xtask coverage`: do not edit by hand -->\n\n\
+         | Technique | Rule | Severity | What it says |\n|---|---|---|---|\n",
+    );
+    for (technique, id, severity, title) in &rows {
+        table.push_str(&format!("| `{technique}` | `{id}` | {severity} | {title} |\n"));
+    }
+    let techniques: std::collections::BTreeSet<&String> =
+        rows.iter().map(|(technique, ..)| technique).collect();
+    table.push_str(&format!(
+        "\n{} rules covering {} technique(s), from `packs/ranger.core.json`.\n",
+        rows.len(),
+        techniques.len()
+    ));
+    Ok((rows.len(), table, techniques.len()))
+}
+
+/// Whether the coverage table in the documentation is the one the pack produces.
+fn coverage_is_current() -> Result<(), String> {
+    let root = workspace_root()?;
+    let path = root.join("docs").join("RULES.md");
+    let text = std::fs::read_to_string(&path)
+        .map_err(|error| format!("could not read {}: {error}", path.display()))?;
+    let packed = std::fs::read_to_string(root.join("packs").join("ranger.core.json"))
+        .map_err(|error| format!("could not read the first-party pack: {error}"))?;
+    let builtins = builtin_ids(&root)?;
+    let ids: Vec<&str> = builtins.iter().map(String::as_str).collect();
+    let pack = vnr_core::pack::parse(&packed, &ids)
+        .map_err(|rejects| format!("the pack was refused: {} reason(s)", rejects.len()))?;
+    let missing: Vec<&str> = pack
+        .rules
+        .iter()
+        .filter(|rule| !text.contains(&format!("`{}`", rule.id)))
+        .map(|rule| rule.id.as_str())
+        .collect();
+    if missing.is_empty() {
+        println!("coverage: {} rules are in the table", pack.rules.len());
+        Ok(())
+    } else {
+        Err(format!(
+            "these rules are not in the coverage table: {}. Run `cargo xtask coverage`.",
+            missing.join(", ")
+        ))
+    }
+}
+
+/// Replace the text between the two coverage markers, and report whether it changed.
+fn write_between_markers(path: &Path, table: &str) -> Result<bool, String> {
+    const START: &str = "<!-- coverage:start -->";
+    const END: &str = "<!-- coverage:end -->";
+    let text = std::fs::read_to_string(path)
+        .map_err(|error| format!("could not read {}: {error}", path.display()))?;
+    let Some(start) = text.find(START) else {
+        return Err(format!("{} has no {START} marker", path.display()));
+    };
+    let Some(end) = text.find(END) else {
+        return Err(format!("{} has no {END} marker", path.display()));
+    };
+    if end < start {
+        return Err(format!(
+            "{} has its coverage markers in the wrong order",
+            path.display()
+        ));
+    }
+    let next = format!(
+        "{}\n{}\n{}",
+        &text[..start + START.len()],
+        table.trim_end(),
+        &text[end..]
+    );
+    if next == text {
+        return Ok(false);
+    }
+    std::fs::write(path, next).map_err(|error| format!("could not write {}: {error}", path.display()))?;
+    Ok(true)
+}
+
+/// The shipped binary must not contain the antivirus test file.
+///
+/// The self-test writes a real EICAR file at run time, which is the point of it, but the
+/// *program* must not carry the file: a binary that contains it is quarantined on install,
+/// and one release of this project was. The bytes are decoded at run time and the optimiser
+/// is held off with `black_box`; this check is what makes that a fact rather than a hope.
+///
+/// It reads whichever binaries are built and says so when none is, because `ci` runs before
+/// anything is linked.
+fn signature() -> Result<(), String> {
+    let root = workspace_root()?;
+    let needle = antivirus_test_file();
+    let mut checked: u32 = 0;
+    for profile in ["release", "debug"] {
+        let path = root.join("target").join(profile).join(if cfg!(windows) {
+            "vn-ranger.exe"
+        } else {
+            "vn-ranger"
+        });
+        if !path.is_file() {
+            continue;
+        }
+        let bytes =
+            std::fs::read(&path).map_err(|error| format!("could not read {}: {error}", path.display()))?;
+        checked = checked.saturating_add(1);
+        if contains(&bytes, &needle) {
+            return Err(format!(
+                "{} contains the antivirus test file, which an antivirus will quarantine on \
+                 install. The decode in native/src/signatures.rs must not be folded by the \
+                 optimiser.",
+                path.display()
+            ));
+        }
+        // A prefix is what survives if the optimiser folds one chunk at a time: worth
+        // knowing about, and not on its own a reason to refuse a build.
+        if contains(&bytes, b"X5O!P%@AP[4") {
+            println!(
+                "signature: {} contains a prefix of the test file but not the file",
+                path.display()
+            );
+        }
+    }
+    if checked == 0 {
+        println!("signature: no built binary to check");
+    } else {
+        println!("signature: {checked} built binary/binaries carry no test file");
+    }
+    Ok(())
+}
+
+/// The 68 bytes of the EICAR test file, assembled here rather than stored.
+fn antivirus_test_file() -> Vec<u8> {
+    const PIECES: [&str; 8] = [
+        "X5O!P%@AP[4",
+        "\\PZX54(P^)7C",
+        "C)7}$EIC",
+        "AR-STANDA",
+        "RD-ANTIVI",
+        "RUS-TEST-",
+        "FILE!$H+H",
+        "*",
+    ];
+    PIECES.concat().into_bytes()
+}
+
+fn contains(haystack: &[u8], needle: &[u8]) -> bool {
+    if needle.is_empty() || haystack.len() < needle.len() {
+        return false;
+    }
+    haystack.windows(needle.len()).any(|window| window == needle)
+}
+
+/// The content scan is optional, and the default build must not contain its engine.
+///
+/// `yara-x` is a pattern engine over file bytes. It is a build feature on purpose: a binary
+/// either has it and asks before reading content, or does not have it at all. A dependency
+/// that is in the tree by default is a capability that ships unasked, so this check is what
+/// keeps the promise that a sentence in the release notes would not.
+fn no_content_engine() -> Result<(), String> {
+    let root = workspace_root()?;
+    let output = Command::new("cargo")
+        .args([
+            "tree",
+            "--package",
+            "vnr-native",
+            "--edges",
+            "normal",
+            "--prefix",
+            "none",
+        ])
+        .current_dir(&root)
+        .output()
+        .map_err(|error| format!("could not run cargo tree: {error}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "cargo tree failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    let tree = String::from_utf8_lossy(&output.stdout);
+    let offenders: Vec<&str> = tree
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("yara-x"))
+        .collect();
+    if offenders.is_empty() {
+        println!("content scan: the default build contains no YARA-X");
+        Ok(())
+    } else {
+        Err(format!(
+            "the default build contains the content-scan engine: {}. It is a feature, not a \
+             dependency: a person who did not ask for a content scan must not receive one.",
+            offenders.join(", ")
+        ))
+    }
 }
 
 fn lint() -> Result<(), String> {
@@ -44,7 +337,28 @@ fn lint() -> Result<(), String> {
         "clippy",
         "--workspace",
         "--all-targets",
-        "--all-features",
+        "--profile",
+        CI_PROFILE,
+        "--",
+        "-D",
+        "warnings",
+    ])
+}
+
+/// Compile and lint the optional features, which `ci` deliberately does not build.
+///
+/// The content scan pulls a pattern engine and a compiler backend with it, which is minutes
+/// of build time on every check and is exactly why it is optional. It still has to compile
+/// and be warning-free, so it gets its own command, and CI runs it as its own step: the
+/// default build is the one `ci` is fast enough to run on every push.
+fn features() -> Result<(), String> {
+    run(&[
+        "clippy",
+        "--package",
+        "vnr-native",
+        "--features",
+        "content-scan",
+        "--all-targets",
         "--profile",
         CI_PROFILE,
         "--",

@@ -11,6 +11,16 @@ use vnr_ui::{Action, Live, ScanState, Ui, WatchReport, World};
 
 use crate::worker::{self, ScanMessage};
 
+/// How often the soak recorder appends a sample.
+const SOAK_INTERVAL_SECONDS: u64 = 60;
+
+/// What one dry run sends back from its thread: the report the interface draws, and the walk
+/// itself, which is the only list the action path may remove from.
+type CleanJob = (
+    vnr_ui::CleanReport,
+    Vec<(vnr_core::action::Surface, vnr_native::clean::Preview)>,
+);
+
 /// The eframe application.
 pub struct App {
     ui: Ui,
@@ -23,6 +33,11 @@ pub struct App {
     /// The one writer of `journal.ndjson`. Observations are written as they arrive;
     /// an intent or a result is synced (§6.10).
     journal: vnr_native::journal::Journal,
+    /// The rules of the active pack, when one is loaded. The built-in rules live in the
+    /// core and are not a file; this is the half of the rule set that can change.
+    pack: Option<vnr_core::pack::Pack>,
+    /// The keys this machine trusts to sign imported packs.
+    pack_keys: vnr_native::pack::Keys,
     /// Set once the journal has failed, so one broken disk is one message rather than a
     /// notice per event.
     journal_reported: bool,
@@ -34,16 +49,54 @@ pub struct App {
     next_scan_unix: u64,
     /// The clock as the previous frame saw it, which is how a resume is noticed.
     last_frame_unix: u64,
+    /// What the last dry run walked, per surface. The interface holds the list for display
+    /// and returns a selection by path; this is the list a path has to be in before it can
+    /// become an item, so the interface never hands the action path something it did not
+    /// see itself.
+    clean_previews: Vec<(vnr_core::action::Surface, vnr_native::clean::Preview)>,
+    /// Counts dry runs, so the interface can tell one from another.
+    clean_run: u64,
+    /// The tray, when this desktop has one.
+    tray: Option<vnr_native::tray::Tray>,
+    /// Whether the tray has been attempted, so a machine without one tries once.
+    tray_started: bool,
+    /// Whether the scheduled scan is postponed.
+    paused: bool,
+    /// Whether this close is the end of the program rather than a trip to the tray.
+    quitting: bool,
+    /// Whether this launch came from the login entry, and so starts out of the way.
+    background: bool,
+    /// A content scan in flight: it reads bytes, so it never runs on the frame's thread.
+    content: Option<Receiver<vnr_native::contentscan::Report>>,
+    /// A clean dry run in flight. The walk reads a cache that can hold ten thousand files,
+    /// and a frame cannot wait for it: the window stalled while it walked, which is the one
+    /// thing an inspector must never do.
+    clean_job: Option<Receiver<CleanJob>>,
+    /// The soak recorder, when `--soak` asked for one.
+    soak: Option<vnr_native::soak::Soak>,
+    /// What the shell has done since the last sample.
+    counters: vnr_native::soak::Counters,
+    /// When the last soak sample was taken.
+    last_soak_unix: u64,
 }
 
 impl App {
     /// Build the world from the last snapshot and start the first scan if there is
     /// nothing to show.
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(
+        cc: &eframe::CreationContext<'_>,
+        background: bool,
+        instance: Option<vnr_native::instance::InstanceGuard>,
+        soak_path: Option<std::path::PathBuf>,
+    ) -> Self {
         let settings = vnr_native::store::load_ui_settings();
-        let (instance, instance_error) = match vnr_native::instance::acquire() {
-            Ok(guard) => (Some(guard), None),
-            Err(message) => (None, Some(message)),
+        let soak = match soak_path.as_deref().map(vnr_native::soak::Soak::open) {
+            None => None,
+            Some(Ok(soak)) => Some(soak),
+            Some(Err(reason)) => {
+                eprintln!("vn-ranger: {reason}");
+                None
+            }
         };
         let snapshot = vnr_native::store::load_last();
         let (baseline, baseline_error) = match vnr_native::store::read_baseline() {
@@ -56,12 +109,20 @@ impl App {
             _ => Vec::new(),
         };
         let suppressions = vnr_native::store::load_suppressions(now_unix());
-        let findings = findings_for(snapshot.as_ref(), baseline.as_ref(), &suppressions, now_unix());
+        let places = vnr_native::pack::places();
+        let findings = findings_for(
+            snapshot.as_ref(),
+            baseline.as_ref(),
+            &suppressions,
+            now_unix(),
+            None,
+            &places,
+        );
         let watch_extra = vnr_native::store::load_watch_roots();
         let mut world = World {
             snapshot,
             scan: ScanState::Idle,
-            error: instance_error,
+            error: None,
             notice: None,
             elevated: vnr_native::elevation::is_elevated(),
             can_elevate: vnr_native::elevation::can_elevate(),
@@ -76,6 +137,11 @@ impl App {
                 enabled: settings.watch.unwrap_or(true),
                 ..WatchReport::default()
             },
+            tray: vnr_ui::TrayState::Unknown,
+            paused: false,
+            close_to_tray: settings.close_to_tray.unwrap_or(false),
+            autostart: autostart_view(vnr_native::autostart::state()),
+            skip_on_battery: settings.skip_on_battery.unwrap_or(false),
             baseline,
             baseline_error,
             changes,
@@ -84,8 +150,17 @@ impl App {
             suppressions,
             watch_extra,
             quarantine: Vec::new(),
+            clean: None,
+            clean_running: false,
             journal: Vec::new(),
             journal_damaged: false,
+            packs: vnr_ui::Packs::default(),
+            content: vnr_ui::ContentScan {
+                available: vnr_native::contentscan::Report::available(),
+                sentence: vnr_native::contentscan::consent_sentence(),
+                running: false,
+                report: None,
+            },
         };
         let mut ui = Ui::new(&cc.egui_ctx);
         if let Some(dark) = settings.dark {
@@ -101,6 +176,9 @@ impl App {
             Ok(journal) => journal,
             Err(error) => {
                 journal_reported = true;
+                // The error has already been diagnosed: it says whether the folder or the
+                // file is the problem, and what moves the folder. Repeating "check your
+                // antivirus" here would be a second guess in front of a fact.
                 world.error = Some(format!(
                     "The journal at {} could not be opened: {error}. Nothing this session does will be recorded.",
                     journal_path.display()
@@ -121,6 +199,15 @@ impl App {
         let plan = vnr_core::schedule::Plan::DEFAULT;
         let schedule_seed = u64::from(std::process::id()) ^ now_unix();
         let next_scan_unix = vnr_core::schedule::next_at(now_unix(), plan, schedule_seed);
+        // The rules that are not compiled in. A pack that cannot load leaves the built-ins
+        // running and says so; it never stops the program and it never stops a scan.
+        let loaded = crate::packs::load(&mut journal);
+        if let Some(problem) = loaded.problem
+            && world.error.is_none()
+        {
+            world.error = Some(problem);
+        }
+        let (pack, pack_keys) = (loaded.pack, loaded.keys);
         let mut app = Self {
             ui,
             world,
@@ -130,16 +217,31 @@ impl App {
             instance,
             cancel: None,
             journal,
+            pack,
+            pack_keys,
+            content: None,
+            clean_job: None,
             journal_reported,
             plan,
             schedule_seed,
             next_scan_unix,
             last_frame_unix: now_unix(),
+            clean_previews: Vec::new(),
+            clean_run: 0,
+            tray: None,
+            tray_started: false,
+            paused: false,
+            quitting: false,
+            background,
+            soak,
+            counters: vnr_native::soak::Counters::default(),
+            last_soak_unix: 0,
         };
         if app.world.snapshot.is_none() {
             app.start_scan(&cc.egui_ctx, false);
         }
         app.refresh_actions();
+        app.refresh_packs();
         app
     }
 
@@ -242,7 +344,435 @@ impl App {
         }
     }
 
+    /// Rebuild the pack view from disk.
+    ///
+    /// The view is a reading of the packs folder and the trust store, with the same checks
+    /// activation runs, so what a person sees listed is what ranger would do with it.
+    fn refresh_packs(&mut self) {
+        self.world.packs = crate::packs::view(&self.pack_keys, self.pack.as_ref());
+    }
+
+    /// Load the active pack again after something that could change it loaded.
+    fn reload_pack(&mut self) {
+        let directory = vnr_native::pack::directory();
+        match vnr_native::pack::store::load_active(
+            &directory,
+            vnr_core::rules::builtin_ids(),
+            &self.pack_keys,
+        ) {
+            Ok(Some(loaded)) => {
+                self.pack = Some(loaded.pack);
+                self.world.packs.error = None;
+            }
+            Ok(None) => {
+                self.pack = None;
+            }
+            Err(problem) => {
+                self.pack = None;
+                self.world.packs.error = Some(problem);
+            }
+        }
+        self.refresh_packs();
+        self.refresh_findings(false);
+    }
+
+    /// Trust a key, but only the key whose fingerprint the person typed.
+    ///
+    /// The comparison is the point of the form: pasting a key and pressing a button trusts
+    /// whatever was pasted, which is exactly the thing a fingerprint read out loud prevents.
+    /// A mismatch adds nothing and says what the fingerprint actually is, so a person with
+    /// a truncated paste can see the difference rather than wonder.
+    fn add_pack_key(&mut self, public: &str, typed: &str) {
+        let Some(key) = vnr_native::pack::Key::parse(public) else {
+            self.world.packs.error = Some(
+                "That is not a minisign public key. Paste the line that begins with `untrusted comment:` \
+                 followed by the key itself, or the key line alone."
+                    .to_owned(),
+            );
+            return;
+        };
+        let typed = typed.split_whitespace().collect::<Vec<_>>().join(" ");
+        if !key.fingerprint.eq_ignore_ascii_case(&typed) {
+            self.world.packs.error = Some(format!(
+                "The fingerprint you typed is not the key's own. This key's fingerprint is {}.",
+                key.fingerprint
+            ));
+            return;
+        }
+        match self.pack_keys.add(&key.public, now_unix()) {
+            Ok(stored) => {
+                if let Err(problem) = self.pack_keys.save(&vnr_native::pack::directory()) {
+                    self.world.packs.error = Some(problem);
+                    return;
+                }
+                let _ = self.journal.record(
+                    Draft::event("pack key trusted")
+                        .with_action(vnr_core::Action::Config)
+                        .with_subject(&stored.fingerprint)
+                        .with_reason("the fingerprint was typed and matched the key"),
+                );
+                self.world.packs.error = None;
+                self.world.notice = Some(format!("{} is trusted now.", stored.fingerprint));
+                // A key changes which packs load, including the one that is already active.
+                self.reload_pack();
+            }
+            Err(problem) => self.world.packs.error = Some(problem),
+        }
+    }
+
+    /// Stop trusting a key, and unload whatever it signed.
+    fn remove_pack_key(&mut self, fingerprint: &str) {
+        if !self.pack_keys.remove(fingerprint) {
+            self.world.packs.error = Some(format!(
+                "{fingerprint} is not in the trust store, so there was nothing to remove."
+            ));
+            self.refresh_packs();
+            return;
+        }
+        if let Err(problem) = self.pack_keys.save(&vnr_native::pack::directory()) {
+            self.world.packs.error = Some(problem);
+            return;
+        }
+        let _ = self.journal.record(
+            Draft::event("pack key removed")
+                .with_action(vnr_core::Action::Config)
+                .with_subject(fingerprint)
+                .with_reason("the key was removed, so packs it signed no longer load"),
+        );
+        self.world.notice = Some(format!(
+            "{fingerprint} is no longer trusted. Any pack it signed has been unloaded."
+        ));
+        self.reload_pack();
+    }
+
+    /// Record a verified pack as the active one, journalling the intent and the result.
+    fn activate_pack(&mut self, path: &str) {
+        let directory = vnr_native::pack::directory();
+        match vnr_native::pack::store::activate(
+            &directory,
+            std::path::Path::new(path),
+            vnr_core::rules::builtin_ids(),
+            &self.pack_keys,
+            &mut self.journal,
+            now_unix(),
+        ) {
+            Ok(loaded) => {
+                self.world.packs.error = None;
+                self.world.notice = Some(format!(
+                    "{} {} is active: {} rules.",
+                    loaded.pack.header.id,
+                    loaded.pack.header.version,
+                    loaded.pack.rules.len()
+                ));
+                self.pack = Some(loaded.pack);
+                self.refresh_packs();
+                self.refresh_findings(false);
+            }
+            Err(problem) => {
+                self.world.packs.error = Some(problem);
+                self.refresh_packs();
+            }
+        }
+    }
+
+    /// Go back to the pack that was active before this one.
+    fn rollback_pack(&mut self) {
+        let directory = vnr_native::pack::directory();
+        match vnr_native::pack::store::rollback(
+            &directory,
+            vnr_core::rules::builtin_ids(),
+            &self.pack_keys,
+            &mut self.journal,
+            now_unix(),
+        ) {
+            Ok(loaded) => {
+                self.world.packs.error = None;
+                self.world.notice = Some(format!(
+                    "Rolled back to {} {}.",
+                    loaded.pack.header.id, loaded.pack.header.version
+                ));
+                self.pack = Some(loaded.pack);
+                self.refresh_packs();
+                self.refresh_findings(false);
+            }
+            Err(problem) => self.world.packs.error = Some(problem),
+        }
+    }
+
+    /// Record the pack compiled into this build as active again.
+    fn activate_embedded_pack(&mut self) {
+        let directory = vnr_native::pack::directory();
+        match vnr_native::pack::store::activate_embedded(
+            &directory,
+            vnr_core::rules::builtin_ids(),
+            &mut self.journal,
+            now_unix(),
+        ) {
+            Ok(loaded) => {
+                self.world.packs.error = None;
+                self.world.notice = Some("The rules built into ranger are active again.".to_owned());
+                self.pack = Some(loaded.pack);
+                self.refresh_packs();
+                self.refresh_findings(false);
+            }
+            Err(problem) => self.world.packs.error = Some(problem),
+        }
+    }
+
+    /// Walk every allowlisted surface and put what a clean would remove into the world.
+    ///
+    /// This is the dry run: it reads names, sizes and times and writes nothing — no journal
+    /// line, no removal, no file of its own. The walk's items stay here rather than in the
+    /// world, because the world is what the interface draws and this is the only list the
+    /// action path may remove from.
+    ///
+    /// `fresh` says whether this is a new list or the same one after a clean. A new list
+    /// resets the person's ticks; keeping them after a clean is what lets an entry they had
+    /// unticked stay unticked instead of quietly returning to a default.
+    fn refresh_clean(&mut self, fresh: bool) {
+        if self.clean_job.is_some() {
+            // A walk is already running; a second one would only compete with it.
+            return;
+        }
+        if fresh {
+            self.clean_run = self.clean_run.saturating_add(1);
+        }
+        let run = self.clean_run;
+        let now = now_unix();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let cancel = || false;
+            let mut report = vnr_ui::CleanReport {
+                run,
+                ..vnr_ui::CleanReport::default()
+            };
+            let mut previews = Vec::new();
+            for surface in vnr_core::action::Surface::ALL {
+                let roots = vnr_native::clean::roots(surface);
+                if roots.is_empty() {
+                    // A surface with no folder on this machine is not offered: the list is
+                    // what exists here, not what the table names.
+                    continue;
+                }
+                let preview = vnr_native::clean::preview_roots(surface, &roots, now, &cancel);
+                report.cancelled |= preview.cancelled;
+                report.surfaces.push(vnr_ui::CleanSurface {
+                    id: surface.id().to_owned(),
+                    label: surface.label().to_owned(),
+                    roots: roots.len(),
+                    opt_in: surface.is_opt_in(),
+                    items: preview
+                        .items
+                        .iter()
+                        .map(|item| vnr_ui::CleanItem {
+                            path: item.path.display().to_string(),
+                            bytes: item.bytes,
+                            is_dir: item.is_dir,
+                        })
+                        .collect(),
+                    skipped_young: preview.skipped_young,
+                    skipped_links: preview.skipped_links,
+                    skipped_devices: preview.skipped_devices,
+                    skipped_excluded: preview.skipped_excluded,
+                });
+                previews.push((surface, preview));
+            }
+            let _ = sender.send((report, previews));
+        });
+        self.clean_job = Some(receiver);
+        self.world.clean_running = true;
+    }
+
+    /// Take a finished dry run, if one has finished.
+    fn drain_clean(&mut self) {
+        let Some(receiver) = &self.clean_job else {
+            return;
+        };
+        let Ok((report, previews)) = receiver.try_recv() else {
+            return;
+        };
+        self.clean_job = None;
+        self.world.clean_running = false;
+        self.clean_run = report.run;
+        self.clean_previews = previews;
+        self.world.clean = Some(report);
+    }
+
+    /// Put the icon in the status area, once, on the first frame.
+    ///
+    /// A frame is the safe moment to do it: on Windows and macOS the icon needs an event
+    /// loop running on this thread, and by the time a frame is drawn there is one. A
+    /// desktop with no status area is not an error to recover from, it is a state to say
+    /// out loud, in Settings and in the journal.
+    /// Run the content scan on a thread of its own.
+    ///
+    /// It reads bytes, which is the slowest thing this program can do, so it never runs on
+    /// the frame's thread: the window keeps drawing and the card says "reading". What it
+    /// keeps is a rule name and a path, and the journal records the count, not the content.
+    fn start_content_scan(&mut self, ctx: &egui::Context) {
+        if self.content.is_some() {
+            return;
+        }
+        if !vnr_native::contentscan::Report::available() {
+            self.world.content.available = false;
+            self.world.notice =
+                Some("This build has no content scan, so there are no file contents to read.".to_owned());
+            return;
+        }
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            let report = vnr_native::contentscan::scan(&|| false);
+            let _ = sender.send(report);
+            ctx.request_repaint();
+        });
+        self.content = Some(receiver);
+        self.world.content.running = true;
+        self.world.content.report = None;
+        self.world.notice = Some("Reading the contents of those folders.".to_owned());
+    }
+
+    fn start_tray(&mut self, ctx: &egui::Context) {
+        if self.tray_started {
+            return;
+        }
+        self.tray_started = true;
+        let wake = {
+            let ctx = ctx.clone();
+            move || ctx.request_repaint()
+        };
+        let started =
+            vnr_native::tray::Tray::start(vnr_native::tray::ICON.to_vec(), vnr_native::tray::ICON_SIZE, wake);
+        match started {
+            Ok(tray) => {
+                tray.set_paused(self.paused);
+                self.tray = Some(tray);
+                self.world.tray = vnr_ui::TrayState::Present;
+            }
+            Err(reason) => {
+                log::warn!("no tray: {reason}");
+                self.note(Draft::event("no tray").with_reason(&reason));
+                self.world.tray = vnr_ui::TrayState::Absent(reason);
+            }
+        }
+    }
+
+    /// Append one soak sample a minute, when a soak was asked for.
+    ///
+    /// A minute is the interval the published budget is measured over, and the write is
+    /// small: one line, flushed. A failure is reported once and then stops, because a full
+    /// disk retried every frame is a second fault.
+    fn soak_sample(&mut self) {
+        let Some(soak) = self.soak.as_mut() else {
+            return;
+        };
+        let now = now_unix();
+        if now.saturating_sub(self.last_soak_unix) < SOAK_INTERVAL_SECONDS {
+            return;
+        }
+        self.last_soak_unix = now;
+        let counters = vnr_native::soak::Counters {
+            journal_writes: self.journal.writes(),
+            ..self.counters
+        };
+        if let Err(reason) = soak.sample(counters) {
+            self.world.error = Some(reason);
+            self.soak = None;
+        }
+    }
+
+    /// Raise the window when a second launch asked it to.
+    ///
+    /// The file is taken rather than read: one launch is one raise, and a file that stays
+    /// behind would raise the window on every frame.
+    fn answer_wake(&mut self, ctx: &egui::Context) {
+        if !vnr_native::instance::take_wake(&vnr_native::paths::wake_path()) {
+            return;
+        }
+        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+        self.note(
+            Draft::event("window raised").with_reason("a second launch asked this window to come forward"),
+        );
+    }
+    /// Turn a close request into a hide, when that is what was asked for.
+    /// The window is only ever hidden when there is a tray to bring it back, and the journal
+    /// says so at the moment it happens: a person who closed a window and finds a process
+    /// still running deserves to read why in the one file ranger keeps.
+    fn close_or_hide(&mut self, ctx: &egui::Context) {
+        if !ctx.input(|input| input.viewport().close_requested()) || !self.world.hide_on_close(self.quitting)
+        {
+            return;
+        }
+        ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+        self.note(
+            Draft::event("window hidden")
+                .with_reason("the window was closed while close-to-tray is on; the tray icon opens it again"),
+        );
+        self.world.notice = Some("The window is in the status area; its menu opens it again.".to_owned());
+    }
+
+    /// Carry out whatever the tray menu reported.
+    ///
+    /// The tray never gets a fifth action: everything here is an [`Action`] the window can
+    /// also produce, so the two surfaces cannot diverge.
+    fn poll_tray(&mut self, ctx: &egui::Context) {
+        let commands = match &self.tray {
+            Some(tray) => tray.poll(),
+            None => return,
+        };
+        for command in commands {
+            match command {
+                vnr_native::tray::Command::Open => {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                }
+                vnr_native::tray::Command::ScanNow => self.apply(Action::Scan, ctx),
+                vnr_native::tray::Command::Pause => self.apply(Action::PauseScan, ctx),
+                vnr_native::tray::Command::Quit => self.apply(Action::Quit, ctx),
+            }
+        }
+    }
+
+    /// Collect a finished content scan, if one has finished.
+    fn drain_content(&mut self) {
+        let Some(receiver) = &self.content else {
+            return;
+        };
+        let Ok(report) = receiver.try_recv() else {
+            return;
+        };
+        self.content = None;
+        self.world.content.running = false;
+        self.world.content.report = Some(vnr_ui::ContentReport {
+            files: report.files,
+            hits: report
+                .hits
+                .iter()
+                .map(|hit| format!("{} — {}", hit.rule, hit.path))
+                .collect(),
+            skipped: report.skipped.len(),
+            problem: report.problem.clone(),
+        });
+        let reason = match &report.problem {
+            Some(problem) => format!("content scan did not run: {problem}"),
+            None => format!(
+                "content scan read {} file(s) and matched {} rule(s); nothing was stored",
+                report.files,
+                report.hits.len()
+            ),
+        };
+        let _ = self.journal.record(
+            Draft::event("content scan")
+                .with_action(vnr_core::Action::Scan)
+                .with_reason(&reason),
+        );
+    }
+
     fn drain(&mut self) {
+        self.drain_content();
+        self.drain_clean();
         let mut messages = Vec::new();
         let mut disconnected = false;
         if let Some(receiver) = &self.receiver {
@@ -339,9 +869,14 @@ impl App {
                         at_unix,
                         reason,
                     });
+                    self.counters.polls = self.counters.polls.saturating_add(1);
                     self.ui.note_poll(ctx);
                 }
                 worker::WatchMessage::Events(events) => {
+                    self.counters.events = self
+                        .counters
+                        .events
+                        .saturating_add(u64::try_from(events.len()).unwrap_or(u64::MAX));
                     for event in events {
                         self.note(Draft::event(&event.subject).with_reason(&format!(
                             "{} · {} · {}",
@@ -433,11 +968,14 @@ impl App {
             .iter()
             .map(|finding| format!("{}|{}", finding.rule_id, finding.subject))
             .collect();
+        let places = vnr_native::pack::places();
         let findings = findings_for(
             self.world.snapshot.as_ref(),
             self.world.baseline.as_ref(),
             &self.world.suppressions,
             now,
+            self.pack.as_ref(),
+            &places,
         );
         if announce {
             let mut raised: Vec<(String, String, String)> = Vec::new();
@@ -449,7 +987,7 @@ impl App {
                 self.world.timeline.push(TimelineEvent::new(
                     now,
                     EventKind::FindingRaised,
-                    finding.title,
+                    finding.title.clone(),
                     finding.subject_label.clone(),
                     "rules",
                 ));
@@ -527,6 +1065,25 @@ impl App {
             Action::SetPollLed(enabled) => {
                 self.world.poll_led = enabled;
                 self.persist_settings();
+            }
+            Action::PauseScan => {
+                self.paused = !self.paused;
+                let now = now_unix();
+                if self.paused {
+                    self.next_scan_unix = now.saturating_add(3600);
+                    self.world.notice = Some(
+                        "The next scheduled scan is an hour away. Scan now, or press Resume \
+                         scheduled scans, to end the postponement."
+                            .to_owned(),
+                    );
+                } else {
+                    self.next_scan_unix = vnr_core::schedule::next_at(now, self.plan, self.schedule_seed);
+                    self.world.notice = Some("Scheduled scans are back on.".to_owned());
+                }
+                self.world.paused = self.paused;
+                if let Some(tray) = &self.tray {
+                    tray.set_paused(self.paused);
+                }
             }
             Action::SuppressFinding {
                 rule_id,
@@ -637,10 +1194,78 @@ impl App {
                     }
                 }
             }
-            Action::Quit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
+            Action::Quit => {
+                // A quit is a quit even when close-to-tray is on: the setting is about the
+                // close button, and a program that cannot be ended from its own menu is
+                // worse than one that cannot be hidden.
+                self.quitting = true;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+            Action::SetSkipOnBattery(enabled) => {
+                self.world.skip_on_battery = enabled;
+                self.persist_settings();
+                self.world.notice = Some(if enabled {
+                    "A scheduled scan now waits while the machine is on battery. A scan you ask \
+                     for always runs."
+                        .to_owned()
+                } else {
+                    "Scheduled scans run whether the machine is on battery or not.".to_owned()
+                });
+            }
+            Action::SetAutostart(enabled) => {
+                let outcome = if enabled {
+                    vnr_native::autostart::enable().map(|location| {
+                        format!(
+                            "Ranger starts at login from {}. The same click removes it.",
+                            location.at
+                        )
+                    })
+                } else {
+                    vnr_native::autostart::disable().map(|()| {
+                        "Ranger no longer starts at login. Its entry is gone and nothing else \
+                         was touched."
+                            .to_owned()
+                    })
+                };
+                match outcome {
+                    Ok(message) => {
+                        self.world.error = None;
+                        self.world.notice = Some(message);
+                    }
+                    Err(error) => self.world.error = Some(error),
+                }
+                // Read the entry back rather than trusting the write: what Settings shows
+                // is what the operating system would run.
+                self.world.autostart = autostart_view(vnr_native::autostart::state());
+            }
+            Action::SetCloseToTray(enabled) => {
+                self.world.close_to_tray = enabled;
+                self.settings.close_to_tray = Some(enabled);
+                self.persist_settings();
+                self.world.notice = Some(if enabled {
+                    "Closing the window now hides it; the tray icon brings it back. Quit still quits."
+                        .to_owned()
+                } else {
+                    "Closing the window ends ranger again.".to_owned()
+                });
+            }
             Action::RefreshActions => {
                 self.refresh_actions();
                 self.world.notice = Some("The quarantine and the journal were read again.".to_owned());
+            }
+            Action::AddPackKey { public, fingerprint } => {
+                self.add_pack_key(&public, &fingerprint);
+            }
+            Action::RemovePackKey(fingerprint) => self.remove_pack_key(&fingerprint),
+            Action::ActivatePack(path) => self.activate_pack(&path),
+            Action::RollbackPack => self.rollback_pack(),
+            Action::ActivateEmbeddedPack => self.activate_embedded_pack(),
+            Action::RunContentScan => self.start_content_scan(ctx),
+            Action::RefreshPacks => {
+                self.pack_keys =
+                    vnr_native::pack::Keys::load(&vnr_native::pack::directory()).unwrap_or_default();
+                self.reload_pack();
+                self.world.notice = Some("The packs folder and the trust store were read again.".to_owned());
             }
             Action::Restore(id) => {
                 match vnr_native::act::restore(&mut self.journal, &id, &vnr_native::action::RealIo) {
@@ -699,6 +1324,95 @@ impl App {
                 }
                 self.refresh_actions();
             }
+            Action::PreviewClean => {
+                let started = std::time::Instant::now();
+                self.refresh_clean(true);
+                let (entries, bytes) = self.world.clean.as_ref().map_or((0, 0), |report| {
+                    report
+                        .surfaces
+                        .iter()
+                        .fold((0_usize, 0_u64), |(entries, bytes), surface| {
+                            (
+                                entries.saturating_add(surface.entries()),
+                                bytes.saturating_add(surface.bytes()),
+                            )
+                        })
+                });
+                let elapsed = started.elapsed().as_millis();
+                self.world.error = None;
+                self.world.notice = Some(if entries == 0 {
+                    format!(
+                        "A dry run walked every allowlisted folder in {elapsed} ms and found \
+                         nothing past the age each surface keeps. It wrote nothing."
+                    )
+                } else {
+                    format!(
+                        "A dry run counted {entries} entries, {}, in {elapsed} ms. Nothing was \
+                         removed and nothing was recorded.",
+                        vnr_ui::widgets::bytes(bytes)
+                    )
+                });
+            }
+            Action::CleanSelected(choices) => {
+                let now = now_unix();
+                let cancel = || false;
+                let mut removed = 0_usize;
+                let mut bytes = 0_u64;
+                let mut skipped = 0_usize;
+                let mut refused = 0_usize;
+                let mut surfaces = 0_usize;
+                let mut failure: Option<String> = None;
+                for choice in &choices {
+                    let Some(surface) = vnr_core::action::Surface::from_id(&choice.surface) else {
+                        continue;
+                    };
+                    // The selection is matched against this process's own walk, so a path
+                    // the dry run did not offer is dropped rather than resolved.
+                    let items = match self.clean_previews.iter().find(|(walked, _)| *walked == surface) {
+                        Some((_, preview)) => vnr_native::clean::select(&preview.items, &choice.paths),
+                        None => continue,
+                    };
+                    if items.is_empty() {
+                        continue;
+                    }
+                    surfaces = surfaces.saturating_add(1);
+                    match vnr_native::act::clean(&mut self.journal, surface, &items, now, &cancel) {
+                        Ok(removal) => {
+                            removed = removed.saturating_add(removal.removed);
+                            bytes = bytes.saturating_add(removal.bytes);
+                            skipped = skipped.saturating_add(removal.skipped);
+                            refused = refused.saturating_add(removal.failed.len());
+                            if let Some((path, reason)) = removal.failed.first()
+                                && failure.is_none()
+                            {
+                                failure = Some(format!("{} could not be removed: {reason}", path.display()));
+                            }
+                        }
+                        Err(error) => {
+                            if failure.is_none() {
+                                failure = Some(error.to_string());
+                            }
+                        }
+                    }
+                }
+                // What is left is what is shown, as the same list rather than a new one:
+                // the person's ticks stay where they put them.
+                self.refresh_clean(false);
+                self.world.error = failure;
+                self.world.notice = Some(if removed == 0 && refused == 0 {
+                    format!(
+                        "Nothing was removed: every selected entry had changed, vanished or \
+                         become a link since the dry run. All {skipped} are still in place."
+                    )
+                } else {
+                    format!(
+                        "Removed {removed} entries, {}, from {surfaces} surfaces. {skipped} \
+                         skipped, {refused} refused. The journal has the record, and the list \
+                         below was walked again.",
+                        vnr_ui::widgets::bytes(bytes)
+                    )
+                });
+            }
         }
     }
 
@@ -746,6 +1460,8 @@ impl App {
         self.settings.poll = Some(self.world.poll_enabled);
         self.settings.watch = Some(self.world.watch.enabled);
         self.settings.led = Some(self.world.poll_led);
+        self.settings.close_to_tray = Some(self.world.close_to_tray);
+        self.settings.skip_on_battery = Some(self.world.skip_on_battery);
         if let Err(error) = vnr_native::store::save_ui_settings(&self.settings) {
             self.world.error = Some(format!("The interface preference could not be saved: {error}"));
         }
@@ -779,6 +1495,21 @@ impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.world.now_unix = now_unix();
+        self.start_tray(&ctx);
+        if self.background {
+            // A login launch starts in the status area rather than on top of whatever the
+            // person opened. Without a tray there is nowhere to be, so the window stays.
+            self.background = false;
+            if self.tray.is_some() {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+                self.note(
+                    Draft::event("started at login")
+                        .with_reason("the window opened in the status area; the tray icon opens it"),
+                );
+            }
+        }
+        self.answer_wake(&ctx);
+        self.close_or_hide(&ctx);
         self.drain();
         self.drain_watch(&ctx);
         self.tick(&ctx);
@@ -799,6 +1530,14 @@ impl App {
     /// Both are skipped while a scan is running, and the next due time moves only when a
     /// scan actually starts, so a slow scan cannot queue a second one behind itself.
     fn tick(&mut self, ctx: &egui::Context) {
+        self.poll_tray(ctx);
+        self.soak_sample();
+        if self.paused {
+            // A postponed schedule means the clock has nothing to say; the poll and the
+            // watcher still run, and a person can always scan by hand.
+            self.last_frame_unix = now_unix();
+            return;
+        }
         let now = now_unix();
         let gap = now.saturating_sub(self.last_frame_unix);
         // The poll beats every two seconds; three missed beats is a lid that closed.
@@ -818,6 +1557,18 @@ impl App {
             && !self.world.busy()
             && vnr_core::schedule::is_due(now, self.next_scan_unix)
         {
+            if self.world.skip_on_battery && vnr_native::power::source().is_battery() {
+                // Postponed, not cancelled: the next interval is scheduled as usual, and the
+                // journal says why nothing ran, so a quiet day is not mistaken for a clean
+                // one.
+                self.next_scan_unix = vnr_core::schedule::next_at(now, self.plan, self.schedule_seed);
+                self.note(
+                    Draft::event("scheduled scan waited").with_reason(
+                        "the machine is on battery and the person asked scheduled scans to wait",
+                    ),
+                );
+                return;
+            }
             self.note(Draft::event("scheduled scan").with_reason(&format!(
                 "the {}-hour interval came round",
                 self.plan.every_secs / 3600
@@ -841,6 +1592,17 @@ impl Drop for App {
     }
 }
 
+/// The interface's mirror of the entry the operating system would run at login.
+fn autostart_view(state: vnr_native::autostart::State) -> vnr_ui::AutostartState {
+    match state {
+        vnr_native::autostart::State::On(location) => vnr_ui::AutostartState::On {
+            at: location.at,
+            command: location.command,
+        },
+        vnr_native::autostart::State::Off => vnr_ui::AutostartState::Off,
+        vnr_native::autostart::State::Unavailable(reason) => vnr_ui::AutostartState::Unavailable(reason),
+    }
+}
 fn now_unix() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -852,10 +1614,19 @@ fn findings_for(
     baseline: Option<&vnr_core::Snapshot>,
     suppressions: &[Suppression],
     now: u64,
+    pack: Option<&vnr_core::pack::Pack>,
+    places: &vnr_core::pack::evaluate::Places,
 ) -> Vec<Finding> {
     let Some(snapshot) = snapshot else {
         return Vec::new();
     };
-    let findings = vnr_core::evaluate(snapshot, baseline);
+    // Two engines, one list. The built-in rules need computation; a pack is data. Both
+    // produce the same `Finding`, so the interface, a suppression and the report cannot
+    // tell them apart except by the pack that a finding names.
+    let mut findings = vnr_core::evaluate(snapshot, baseline);
+    if let Some(pack) = pack {
+        findings.extend(vnr_core::pack::evaluate::evaluate(pack, snapshot, places));
+        vnr_core::sort_findings(&mut findings);
+    }
     vnr_core::apply_suppressions(findings, suppressions, now)
 }

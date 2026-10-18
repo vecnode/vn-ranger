@@ -30,6 +30,9 @@ struct Open {
     seq: u64,
     lines: u64,
     first_seq: u64,
+    /// How many lines this process has written, across rotations. The soak reads it, so it
+    /// is a fact about the writer rather than an estimate from the file's size.
+    written: u64,
 }
 
 impl Journal {
@@ -40,22 +43,48 @@ impl Journal {
 
     /// Open the journal at a chosen path. The caller owns creating the parent directory;
     /// this does it too, because a first launch has no data directory yet.
+    ///
+    /// A refusal is diagnosed before it is reported. "Access is denied" is three different
+    /// problems — this program may not write in that folder, the file itself may not be
+    /// opened, or another handle may be holding it — and only one of them is something a
+    /// person can fix, so the sentence says which one it is (`docs/PLAN.md` §6.10).
     pub fn open_at(path: PathBuf) -> io::Result<Self> {
         if let Some(parent) = path.parent() {
-            crate::paths::ensure_dir(parent)?;
+            crate::paths::ensure_dir(parent).map_err(|error| diagnose(parent, error))?;
         }
         // Read bytes rather than text: a torn tail can split a multi-byte character, and
         // a lossy read that counts one corrupt line beats refusing to open the journal.
         let bytes = match std::fs::read(&path) {
             Ok(bytes) => bytes,
             Err(error) if error.kind() == io::ErrorKind::NotFound => Vec::new(),
-            Err(error) => return Err(error),
+            Err(error) => return Err(diagnose(&path, error)),
+        };
+        let mut file = match open_for_append(&path) {
+            Ok(file) => file,
+            // The file exists and cannot be opened. If this program can write in the folder,
+            // the file is the problem — a stale handle, an attribute, an ACL somebody set —
+            // and moving it aside is what turns a lost session back into a recorded one.
+            Err(error) if error.kind() == io::ErrorKind::PermissionDenied && path.exists() => {
+                match set_aside(&path) {
+                    Some(kept) => match open_for_append(&path) {
+                        Ok(file) => {
+                            log::warn!(
+                                "the journal could not be opened, so it was kept as {} and a new one started",
+                                kept.display()
+                            );
+                            file
+                        }
+                        Err(error) => return Err(diagnose(&path, error)),
+                    },
+                    None => return Err(diagnose(&path, error)),
+                }
+            }
+            Err(error) => return Err(diagnose(&path, error)),
         };
         let existing = journal::parse(&String::from_utf8_lossy(&bytes));
         let seq = existing.last_seq();
         let lines = u64::try_from(existing.entries.len()).unwrap_or(u64::MAX);
         let first_seq = existing.entries.first().map_or(0, |entry| entry.seq);
-        let mut file = open_for_append(&path)?;
         // A crash can leave the last line without its newline. Appending straight onto
         // it would swallow the next entry into the damaged line, so the tail is closed
         // first: it becomes one corrupt line in the middle of the file, which the reader
@@ -70,6 +99,7 @@ impl Journal {
                 seq,
                 lines,
                 first_seq,
+                written: 0,
             }),
             blocked: None,
         })
@@ -107,6 +137,16 @@ impl Journal {
         self.append(draft, true)
     }
 
+    /// How many lines this process has written, across rotations.
+    ///
+    /// A fact about the writer rather than an estimate from the file: the soak publishes it
+    /// next to the CPU it cost, and a number guessed from a file's size would be a lie that
+    /// looks like a measurement.
+    #[must_use]
+    pub fn writes(&self) -> u64 {
+        self.inner.as_ref().map_or(0, |open| open.written)
+    }
+
     fn append(&mut self, draft: Draft, synced: bool) -> io::Result<JournalEntry> {
         let seq = match self.inner.as_ref() {
             Some(open) => open.seq.saturating_add(1),
@@ -132,6 +172,7 @@ impl Journal {
                 if result.is_ok() {
                     open.seq = entry.seq;
                     open.lines = open.lines.saturating_add(1);
+                    open.written = open.written.saturating_add(1);
                     if open.first_seq == 0 {
                         open.first_seq = entry.seq;
                     }
@@ -158,8 +199,8 @@ impl Journal {
     /// The new file starts at the next sequence number, so the journal's order survives
     /// the split and a reader sorts the files by the number in their name.
     pub fn rotate_if_needed(&mut self) -> io::Result<bool> {
-        let (lines, first_seq, seq) = match self.inner.as_ref() {
-            Some(open) => (open.lines, open.first_seq, open.seq),
+        let (lines, first_seq, seq, written) = match self.inner.as_ref() {
+            Some(open) => (open.lines, open.first_seq, open.seq, open.written),
             None => return Ok(false),
         };
         if lines < ENTRIES_PER_FILE || first_seq == 0 {
@@ -174,6 +215,7 @@ impl Journal {
             seq,
             lines: 0,
             first_seq: 0,
+            written,
         });
         Ok(true)
     }
@@ -260,6 +302,137 @@ fn open_for_append(path: &Path) -> io::Result<File> {
                 std::thread::sleep(std::time::Duration::from_millis(60 * u64::from(attempt)));
             }
         }
+    }
+}
+
+/// Whether this process can create a file in a folder at all.
+///
+/// The probe is what makes the refusal actionable: "access is denied" on the journal means
+/// one thing when the folder is writable and another when it is not, and a person can only
+/// act on the second one. It writes one empty file with a name of its own and removes it.
+#[must_use]
+pub fn folder_is_writable(folder: &Path) -> bool {
+    let probe = folder.join(format!(".vn-ranger-write-probe-{}", std::process::id()));
+    let writable = std::fs::write(&probe, b"").is_ok();
+    let _ = std::fs::remove_file(&probe);
+    writable
+}
+
+/// Turn a refusal into a sentence that names which of the three problems it is.
+///
+/// The three are: this program may not write in the folder; the file itself may not be
+/// opened; and everything else, which is reported as it came.
+fn diagnose(path: &Path, error: io::Error) -> io::Error {
+    if error.kind() != io::ErrorKind::PermissionDenied && error.raw_os_error() != Some(5) {
+        return error;
+    }
+    let folder = path.parent().unwrap_or_else(|| Path::new("."));
+    let subject = path.display();
+    if !folder_is_writable(folder) {
+        return io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!(
+                "{error} at {subject}: ranger could not create a test file in {} either, so this \
+                 program is not allowed to write in that folder. A security program, a folder \
+                 policy, or a sandbox around the process all look like this. VN_RANGER_DATA_DIR \
+                 points ranger at a folder it may write to.",
+                folder.display()
+            ),
+        );
+    }
+    io::Error::new(
+        io::ErrorKind::PermissionDenied,
+        format!(
+            "{error} at {subject}: other files in {} can be written, so the journal file itself \
+             is the problem — another program holding it open, or an attribute or permission \
+             ranger cannot change. Nothing is recorded until it can be moved.",
+            folder.display()
+        ),
+    )
+}
+
+/// Move an unopenable journal out of the way, so the next attempt starts a fresh one.
+///
+/// The old file is kept rather than deleted: it may be the only record of what happened
+/// before the refusal, and a person can read it later even if ranger could not.
+fn set_aside(path: &Path) -> Option<PathBuf> {
+    let at = std::time::SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs());
+    let kept = path.with_file_name(format!("journal.kept-{at}.ndjson"));
+    std::fs::rename(path, &kept).ok().map(|()| kept)
+}
+
+/// What an attempt to open the journal would find, as facts rather than as an error.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Diagnosis {
+    /// The journal file.
+    pub path: PathBuf,
+    /// The folder it lives in.
+    pub folder: PathBuf,
+    /// Whether the folder exists.
+    pub folder_exists: bool,
+    /// Whether this process can create a file in the folder.
+    pub folder_writable: bool,
+    /// Whether the journal file exists, and how large it is.
+    pub file: Option<u64>,
+    /// What opening it for append said, when it was tried.
+    pub opens: Option<String>,
+}
+
+impl Diagnosis {
+    /// One line per fact, for a person reading a terminal.
+    #[must_use]
+    pub fn lines(&self) -> Vec<String> {
+        let mut lines = Vec::new();
+        lines.push(format!("journal: {}", self.path.display()));
+        lines.push(format!(
+            "folder:  {} ({}, {})",
+            self.folder.display(),
+            if self.folder_exists { "exists" } else { "missing" },
+            if self.folder_writable {
+                "writable by this program"
+            } else {
+                "NOT writable by this program"
+            }
+        ));
+        match self.file {
+            Some(bytes) => lines.push(format!("file:    present, {bytes} bytes")),
+            None => lines.push("file:    not created yet".to_owned()),
+        }
+        if let Some(opens) = &self.opens {
+            lines.push(format!("open:    {opens}"));
+        }
+        lines
+    }
+}
+
+/// Look at the journal without changing it.
+///
+/// Opening an existing file for append opens a handle and writes nothing. When the file is
+/// not there, the append is asked for *without* `create`, so a diagnosis never brings a
+/// journal into existence — the answer "not created yet" is itself a fact worth having.
+#[must_use]
+pub fn diagnose_folder(path: &Path) -> Diagnosis {
+    let folder = path
+        .parent()
+        .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
+    let folder_exists = folder.is_dir();
+    let file = std::fs::metadata(path).ok().map(|metadata| metadata.len());
+    let opens = Some(match OpenOptions::new().append(true).open(path) {
+        Ok(_) => "opened for append".to_owned(),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            "not there, so nothing could be opened".to_owned()
+        }
+        Err(error) => format!("{error}"),
+    });
+    Diagnosis {
+        path: path.to_path_buf(),
+        folder: folder.clone(),
+        folder_exists,
+        folder_writable: folder_exists && folder_is_writable(&folder),
+        file,
+        opens,
     }
 }
 
@@ -390,6 +563,79 @@ mod tests {
         assert_eq!(journal.blocked(), Some("disk full"));
         let error = journal.record(Draft::event("x")).unwrap_err();
         assert!(error.to_string().contains("disk full"));
+    }
+
+    #[test]
+    fn a_refusal_says_whether_the_folder_or_the_file_is_the_problem() {
+        let dir = tempfile::tempdir().unwrap();
+        let denied = || io::Error::from_raw_os_error(5);
+        // A writable folder: the file is the problem, and the sentence says so.
+        let writable = diagnose(&dir.path().join("journal.ndjson"), denied()).to_string();
+        assert!(
+            writable.contains("the journal file itself is the problem"),
+            "{writable}"
+        );
+        assert!(writable.contains("Nothing is recorded"), "{writable}");
+        // A folder that is not there, so a test file cannot be made in it either.
+        let missing = dir.path().join("gone").join("journal.ndjson");
+        let refused = diagnose(&missing, denied()).to_string();
+        assert!(
+            refused.contains("not allowed to write in that folder"),
+            "{refused}"
+        );
+        assert!(refused.contains("VN_RANGER_DATA_DIR"), "{refused}");
+        // Anything that is not a permission refusal is passed through untouched. The
+        // assertion is about the error's identity, not its wording: `32` is a sharing
+        // violation on Windows and a broken pipe on Unix, so a test that spells one
+        // platform's sentence fails on the other two.
+        let other = diagnose(&missing, io::Error::from_raw_os_error(32));
+        assert_eq!(other.raw_os_error(), Some(32));
+        assert!(
+            !other.to_string().contains("not allowed to write in that folder"),
+            "a sharing failure is not a folder refusal"
+        );
+    }
+
+    #[test]
+    fn the_probe_leaves_no_file_behind() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(folder_is_writable(dir.path()));
+        let entries: Vec<_> = std::fs::read_dir(dir.path()).unwrap().flatten().collect();
+        assert!(entries.is_empty(), "the probe removed its own file");
+        assert!(!folder_is_writable(&dir.path().join("gone")));
+    }
+
+    #[test]
+    fn a_diagnosis_does_not_create_the_journal_it_looks_at() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("journal.ndjson");
+        let diagnosis = diagnose_folder(&path);
+        assert!(diagnosis.folder_exists);
+        assert!(diagnosis.folder_writable);
+        assert_eq!(diagnosis.file, None);
+        assert!(
+            !path.exists(),
+            "a diagnosis that created the journal would answer its own question"
+        );
+        let lines = diagnosis.lines().join("\n");
+        assert!(lines.contains("not created yet"), "{lines}");
+        assert!(lines.contains("writable by this program"), "{lines}");
+    }
+
+    #[test]
+    fn a_journal_that_cannot_be_opened_is_kept_aside_rather_than_lost() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("journal.ndjson");
+        std::fs::write(&path, b"{\"schema\":1}\n").unwrap();
+        let kept = set_aside(&path).expect("a writable folder can move a file");
+        assert_eq!(std::fs::read(&kept).unwrap(), b"{\"schema\":1}\n");
+        assert!(!path.exists(), "the file moved rather than copied");
+        assert!(
+            kept.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .contains("journal.kept-")
+        );
     }
 
     #[test]

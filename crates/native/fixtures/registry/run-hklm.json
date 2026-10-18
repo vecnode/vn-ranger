@@ -1,0 +1,8 @@
+{
+  "captured": "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run, 64-bit view, on the maintainer's machine",
+  "sanitised": "unrelated entries removed",
+  "values": [
+    { "name": "SecurityHealth", "data": "%windir%\\system32\\SecurityHealthSystray.exe" },
+    { "name": "Focusrite Notifier", "data": "\"C:\\Program Files\\Focusrite\\Drivers\\Focusrite Notifier.exe\"" }
+  ]
+}

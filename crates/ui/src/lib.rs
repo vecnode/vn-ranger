@@ -18,7 +18,12 @@ mod world;
 
 mod act;
 
-pub use world::{Action, JournalRow, Live, QuarantineRow, ScanState, View, WatchReport, World};
+mod clean;
+
+pub use world::{
+    Action, AutostartState, CleanChoice, CleanItem, CleanReport, CleanSurface, ContentReport, ContentScan,
+    JournalRow, KeyRow, Live, PackRow, Packs, QuarantineRow, ScanState, TrayState, View, WatchReport, World,
+};
 
 use egui::{Align2, CornerRadius, FontId, Margin, RichText, Sense, vec2};
 
@@ -207,9 +212,14 @@ pub struct Ui {
     suppress_reason: String,
     /// Which quarantine entry is waiting for its word, and what has been typed.
     purge_ask: crate::act::PurgeAsk,
+    /// What the clean card has ticked, and against which dry run.
+    clean: crate::clean::CleanState,
     finding_severity: Option<vnr_core::Severity>,
     finding_query: String,
     finding_sort: FindingSort,
+    /// What a person has pasted into the trust form, and the fingerprint they typed.
+    pub(crate) pack_public: String,
+    pub(crate) pack_print: String,
     process_sort: SortKey,
     process_sort_desc: bool,
     process_filter: ProcessFilter,
@@ -222,6 +232,7 @@ pub struct Ui {
     watch_new: String,
     error_seen: Option<(String, u64)>,
     error_dismissed: Option<String>,
+    /// The application mark: the crystal on its ink tile, the same bytes the window icon uses.
     mark: egui::TextureHandle,
 }
 
@@ -240,14 +251,34 @@ enum PaletteHit {
     Action(Action),
 }
 
+/// Upload one of the embedded marks as a texture.
+///
+/// A mark that is the wrong size is a one-pixel transparent texture rather than a panic: an
+/// asset edited by hand should cost the picture, not the window.
+fn upload(ctx: &egui::Context, name: &str, rgba: &[u8]) -> egui::TextureHandle {
+    const SIDE: usize = 64;
+    let image = if rgba.len() == SIDE * SIDE * 4 {
+        egui::ColorImage::from_rgba_unmultiplied([SIDE, SIDE], rgba)
+    } else {
+        egui::ColorImage::from_rgba_unmultiplied([1, 1], &[0, 0, 0, 0])
+    };
+    ctx.load_texture(name, image, egui::TextureOptions::LINEAR)
+}
+
 impl Ui {
     /// Build the interface and upload the application mark once.
+    ///
+    /// One mark for both themes: the crystal on the suite's ink tile, which is what the
+    /// window icon is built from too. The tile reads on paper as well as on ink, so the top
+    /// bar does not have to swap artwork when the theme changes.
     #[must_use]
     pub fn new(ctx: &egui::Context) -> Self {
         fonts::install(ctx);
-        let pixels: &[u8] = include_bytes!("../../../assets/logo/vn-ranger-app.rgba");
-        let image = egui::ColorImage::from_rgba_unmultiplied([64, 64], pixels);
-        let mark = ctx.load_texture("vn-ranger-mark", image, egui::TextureOptions::LINEAR);
+        let mark = upload(
+            ctx,
+            "vn-ranger-mark",
+            include_bytes!("../../../assets/logo/vn-ranger-app.rgba"),
+        );
         Self {
             view: View::Overview,
             last_view: View::Overview,
@@ -256,7 +287,9 @@ impl Ui {
             selected_autorun: None,
             only_public: false,
             confirm_elevate: false,
-            dark: true,
+            // Paper is what a new installation opens on. Dark is one click away in the top
+            // bar, and the choice is remembered once it is made.
+            dark: false,
             open_path: None,
             led_flash: None,
             project_open: false,
@@ -264,9 +297,12 @@ impl Ui {
             suppress_target: None,
             suppress_reason: String::new(),
             purge_ask: crate::act::PurgeAsk::default(),
+            clean: crate::clean::CleanState::default(),
             finding_severity: None,
             finding_query: String::new(),
             finding_sort: FindingSort::Severity,
+            pack_public: String::new(),
+            pack_print: String::new(),
             process_sort: SortKey::Name,
             process_sort_desc: false,
             process_filter: ProcessFilter::All,
@@ -386,11 +422,12 @@ impl Ui {
         match view {
             View::Overview => self.overview(ui, world, actions),
             View::Findings => self.findings(ui, world, actions),
+            View::Packs => self.packs(ui, world, actions),
             View::Processes => self.processes(ui, world),
             View::Startup => self.startup(ui, world, actions),
             View::Listeners => self.listeners(ui, world),
             View::Changes => self.changes(ui, world, actions),
-            View::Actions => act::view(ui, world, &mut self.purge_ask, actions),
+            View::Actions => act::view(ui, world, &mut self.purge_ask, &mut self.clean, actions),
             View::Report => self.report(ui, world, actions),
             View::Settings => self.settings(ui, world, actions),
         }
@@ -462,19 +499,6 @@ impl Ui {
                                 }
                             }
                             ScanState::Idle => {
-                                if let Some(snapshot) = world.snapshot() {
-                                    ui.label(
-                                        RichText::new(format!(
-                                            "Scanned {}",
-                                            vnr_core::time::describe_age(
-                                                world.now_unix,
-                                                snapshot.taken_at_unix
-                                            )
-                                        ))
-                                        .size(11.5)
-                                        .color(theme::muted(ui)),
-                                    );
-                                }
                                 if world.snapshot().is_some_and(|snapshot| snapshot.elevated) {
                                     widgets::badge(ui, "ADMIN", theme::ATTENTION);
                                 }
@@ -558,6 +582,10 @@ impl Ui {
     }
 
     fn page_header(&mut self, ui: &mut egui::Ui, world: &World) {
+        // The age of the scan belongs in the overview, beside the counts it produced, and
+        // not in the window chrome or the page subtitle, where it would follow a person
+        // into every other view and answer a question they did not ask.
+        let subtitle = self.view.subtitle().to_owned();
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 ui.label(
@@ -565,20 +593,11 @@ impl Ui {
                         .size(21.0)
                         .family(theme::semibold()),
                 );
-                ui.label(
-                    RichText::new(self.view.subtitle())
-                        .size(11.5)
-                        .color(theme::muted(ui)),
-                );
+                ui.label(RichText::new(subtitle).size(11.5).color(theme::muted(ui)));
             });
             if matches!(self.view, View::Processes | View::Startup | View::Listeners) {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.add_sized(
-                        vec2(240.0, 26.0),
-                        egui::TextEdit::singleline(&mut self.search)
-                            .hint_text("Filter…")
-                            .margin(Margin::symmetric(8, 6)),
-                    );
+                    widgets::filter_field(ui, &mut self.search, "Filter…");
                 });
             }
         });
@@ -592,45 +611,37 @@ impl Ui {
         if !self.confirm_elevate {
             return;
         }
-        let mut open = true;
-        egui::Window::new("Administrator scan")
-            .collapsible(false)
-            .resizable(false)
-            .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0))
-            .open(&mut open)
-            .show(ctx, |ui| {
-                ui.set_max_width(440.0);
-                ui.label(
-                    RichText::new(
-                        "Windows will ask for consent before the elevated copy starts. The copy reads the machine, writes one snapshot, and exits.",
+        let (_, open) = widgets::dialog(ctx, "Administrator scan", 440.0, |ui| {
+            ui.label(
+                RichText::new(
+                    "Windows will ask for consent before the elevated copy starts. The copy reads the machine, writes one snapshot, and exits.",
+                )
+                .size(11.5),
+            );
+            widgets::dot_line(ui, theme::OK, "No deletion, quarantine or configuration change.");
+            widgets::dot_line(ui, theme::OK, "No service and no standing administrator process.");
+            widgets::dot_line(
+                ui,
+                theme::ATTENTION,
+                "The elevated copy can read data the standard window cannot.",
+            );
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                if ui.button("Cancel").clicked() {
+                    self.confirm_elevate = false;
+                }
+                if ui
+                    .add(
+                        egui::Button::new(RichText::new("Continue").color(theme::ON_EMBER))
+                            .fill(theme::EMBER),
                     )
-                    .size(12.0),
-                );
-                ui.add_space(6.0);
-                widgets::dot_line(ui, theme::OK, "No deletion, quarantine or configuration change.");
-                widgets::dot_line(ui, theme::OK, "No service and no standing administrator process.");
-                widgets::dot_line(
-                    ui,
-                    theme::ATTENTION,
-                    "The elevated copy can read data the standard window cannot.",
-                );
-                ui.add_space(8.0);
-                ui.horizontal(|ui| {
-                    if ui.button("Cancel").clicked() {
-                        self.confirm_elevate = false;
-                    }
-                    if ui
-                        .add(
-                            egui::Button::new(RichText::new("Continue").color(theme::ON_EMBER))
-                                .fill(theme::EMBER),
-                        )
-                        .clicked()
-                    {
-                        self.confirm_elevate = false;
-                        actions.push(Action::ScanElevated);
-                    }
-                });
+                    .clicked()
+                {
+                    self.confirm_elevate = false;
+                    actions.push(Action::ScanElevated);
+                }
             });
+        });
         if !open {
             self.confirm_elevate = false;
         }
@@ -640,62 +651,47 @@ impl Ui {
         if !self.project_open {
             return;
         }
-        let mut open = true;
-        egui::Window::new("About vn-ranger")
-            .collapsible(false)
-            .resizable(false)
-            .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0))
-            .open(&mut open)
-            .show(ctx, |ui| {
-                ui.set_max_width(420.0);
-                ui.horizontal(|ui| {
-                    ui.add(egui::Image::new(egui::load::SizedTexture::new(
-                        self.mark.id(),
-                        vec2(56.0, 56.0),
-                    )));
-                    ui.add_space(8.0);
-                    ui.vertical(|ui| {
-                        ui.label(
-                            RichText::new("vn-ranger")
-                                .size(16.0)
-                                .family(theme::semibold()),
-                        );
-                        ui.label(
-                            RichText::new("A quiet ranger for your machine.")
-                                .size(11.5)
-                                .color(theme::muted(ui)),
-                        );
-                    });
+        let mark = self.mark.clone();
+        let (_, open) = widgets::dialog(ctx, "About vn-ranger", 420.0, |ui| {
+            ui.horizontal(|ui| {
+                ui.add(egui::Image::new(egui::load::SizedTexture::new(
+                    mark.id(),
+                    vec2(56.0, 56.0),
+                )));
+                ui.add_space(8.0);
+                ui.vertical(|ui| {
+                    ui.label(RichText::new("vn-ranger").size(16.0).family(theme::semibold()));
+                    ui.label(
+                        RichText::new("A quiet ranger for your machine.")
+                            .size(11.5)
+                            .color(theme::muted(ui)),
+                    );
                 });
-                ui.add_space(12.0);
-                ui.label(
-                    RichText::new("Project page")
-                        .size(10.5)
-                        .color(theme::muted(ui)),
-                );
-                ui.add(
-                    egui::Label::new(
-                        RichText::new(PROJECT_URL)
-                            .size(12.5)
-                            .monospace()
-                            .color(ui.visuals().strong_text_color()),
-                    )
-                    .wrap()
-                    .selectable(true),
-                );
-                ui.add_space(6.0);
-                ui.label(
-                    RichText::new(
-                        "Select the address to copy it. Ranger does not open a browser and makes no request of its own.",
-                    )
-                    .size(10.5)
-                    .color(theme::muted(ui)),
-                );
-                ui.add_space(10.0);
-                if ui.button("Close").clicked() {
-                    self.project_open = false;
-                }
             });
+            ui.add_space(6.0);
+            ui.label(RichText::new("Project page").size(10.5).color(theme::muted(ui)));
+            ui.add(
+                egui::Label::new(
+                    RichText::new(PROJECT_URL)
+                        .size(12.5)
+                        .monospace()
+                        .color(ui.visuals().strong_text_color()),
+                )
+                .wrap()
+                .selectable(true),
+            );
+            ui.label(
+                RichText::new(
+                    "Select the address to copy it. Ranger does not open a browser and makes no request of its own.",
+                )
+                .size(10.5)
+                .color(theme::muted(ui)),
+            );
+            ui.add_space(2.0);
+            if ui.button("Close").clicked() {
+                self.project_open = false;
+            }
+        });
         if !open {
             self.project_open = false;
         }
@@ -910,59 +906,45 @@ impl Ui {
         let Some(finding) = self.suppress_target.clone() else {
             return;
         };
-        let mut open = true;
-        egui::Window::new("Suppress a finding")
-            .collapsible(false)
-            .resizable(false)
-            .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0))
-            .open(&mut open)
-            .show(ctx, |ui| {
-                ui.set_max_width(440.0);
-                ui.label(
-                    RichText::new(finding.title)
-                        .size(12.5)
-                        .family(theme::semibold()),
-                );
-                ui.label(
-                    RichText::new(finding.subject_label.as_str())
-                        .size(10.5)
-                        .color(theme::muted(ui)),
-                );
-                ui.add_space(6.0);
-                ui.label(
-                    RichText::new(
-                        "This hides one rule for one subject until it expires. It carries your reason, expires after 30 days, and hides nothing else.",
-                    )
-                    .size(11.0)
+        let (_, open) = widgets::dialog(ctx, "Suppress a finding", 440.0, |ui| {
+            ui.label(RichText::new(finding.title).size(12.5).family(theme::semibold()));
+            ui.label(
+                RichText::new(finding.subject_label.as_str())
+                    .size(10.5)
                     .color(theme::muted(ui)),
-                );
-                ui.add_space(6.0);
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.suppress_reason)
-                        .hint_text("Why is this expected?")
-                        .margin(Margin::symmetric(8, 6)),
-                );
-                ui.add_space(6.0);
-                let valid = self.suppress_reason.trim().len() >= 4;
-                ui.horizontal(|ui| {
-                    if ui
-                        .add_enabled(valid, egui::Button::new("Suppress for 30 days"))
-                        .clicked()
-                    {
-                        actions.push(Action::SuppressFinding {
-                            rule_id: finding.rule_id.to_owned(),
-                            subject: finding.subject.clone(),
-                            reason: self.suppress_reason.trim().to_owned(),
-                        });
-                        self.suppress_target = None;
-                        self.suppress_reason.clear();
-                    }
-                    if ui.button("Cancel").clicked() {
-                        self.suppress_target = None;
-                        self.suppress_reason.clear();
-                    }
-                });
+            );
+            ui.label(
+                RichText::new(
+                    "This hides one rule for one subject until it expires. It carries your reason, expires after 30 days, and hides nothing else.",
+                )
+                .size(11.0)
+                .color(theme::muted(ui)),
+            );
+            ui.add(
+                egui::TextEdit::singleline(&mut self.suppress_reason)
+                    .hint_text("Why is this expected?")
+                    .margin(Margin::symmetric(8, 6)),
+            );
+            let valid = self.suppress_reason.trim().len() >= 4;
+            ui.horizontal(|ui| {
+                if ui
+                    .add_enabled(valid, egui::Button::new("Suppress for 30 days"))
+                    .clicked()
+                {
+                    actions.push(Action::SuppressFinding {
+                        rule_id: finding.rule_id.to_owned(),
+                        subject: finding.subject.clone(),
+                        reason: self.suppress_reason.trim().to_owned(),
+                    });
+                    self.suppress_target = None;
+                    self.suppress_reason.clear();
+                }
+                if ui.button("Cancel").clicked() {
+                    self.suppress_target = None;
+                    self.suppress_reason.clear();
+                }
             });
+        });
         if !open {
             self.suppress_target = None;
             self.suppress_reason.clear();
@@ -1032,6 +1014,7 @@ fn view_icon(view: View) -> icons::Icon {
     match view {
         View::Overview => icons::Icon::Overview,
         View::Findings => icons::Icon::Shield,
+        View::Packs => icons::Icon::Report,
         View::Processes => icons::Icon::Processes,
         View::Startup => icons::Icon::Startup,
         View::Listeners => icons::Icon::Listeners,
@@ -1090,6 +1073,11 @@ mod tests {
             poll_enabled: true,
             poll_led: true,
             watch: WatchReport::default(),
+            tray: TrayState::Present,
+            paused: false,
+            close_to_tray: false,
+            autostart: AutostartState::Off,
+            skip_on_battery: false,
             baseline,
             baseline_error: None,
             changes,
@@ -1098,8 +1086,52 @@ mod tests {
             suppressions: Vec::new(),
             watch_extra: Vec::new(),
             quarantine: Vec::new(),
+            clean: None,
+            clean_running: false,
             journal: Vec::new(),
             journal_damaged: false,
+            packs: Packs::default(),
+            content: crate::ContentScan::default(),
+        }
+    }
+
+    fn clean_report() -> CleanReport {
+        CleanReport {
+            run: 7,
+            surfaces: vec![
+                CleanSurface {
+                    id: "win.temp".to_owned(),
+                    label: "Temporary files".to_owned(),
+                    roots: 2,
+                    opt_in: false,
+                    items: vec![
+                        CleanItem {
+                            path: "C:\\Temp\\a.tmp".to_owned(),
+                            bytes: 4_096,
+                            is_dir: false,
+                        },
+                        CleanItem {
+                            path: "C:\\Temp\\empty".to_owned(),
+                            bytes: 0,
+                            is_dir: true,
+                        },
+                    ],
+                    ..CleanSurface::default()
+                },
+                CleanSurface {
+                    id: "mac.logs".to_owned(),
+                    label: "User logs".to_owned(),
+                    roots: 1,
+                    opt_in: true,
+                    items: vec![CleanItem {
+                        path: "C:\\Logs\\old.log".to_owned(),
+                        bytes: 9_000,
+                        is_dir: false,
+                    }],
+                    ..CleanSurface::default()
+                },
+            ],
+            cancelled: false,
         }
     }
 
@@ -1110,6 +1142,64 @@ mod tests {
             ui.view = view;
             let _ = ui.show(root, world);
         });
+    }
+
+    #[test]
+    fn the_clean_card_draws_its_list() {
+        let mut world = base_world(None, None);
+        let report = clean_report();
+        world.clean = Some(report.clone());
+        egui::__run_test_ui(|root| {
+            let ctx = root.ctx().clone();
+            let mut ui = Ui::new(&ctx);
+            ui.view = View::Actions;
+            ui.clean.begin(&report);
+            ui.clean.toggle_open("win.temp");
+            let actions = ui.show(root, &world);
+            assert!(actions.is_empty(), "drawing a list asks for nothing on its own");
+        });
+    }
+
+    #[test]
+    fn the_clean_confirmation_draws_and_dispatches_nothing_until_clicked() {
+        let mut world = base_world(None, None);
+        let report = clean_report();
+        world.clean = Some(report.clone());
+        egui::__run_test_ui(|root| {
+            let ctx = root.ctx().clone();
+            let mut ui = Ui::new(&ctx);
+            ui.view = View::Actions;
+            ui.clean.begin(&report);
+            ui.clean.ask();
+            let actions = ui.show(root, &world);
+            assert!(actions.is_empty(), "a confirmation is a question, not an act");
+        });
+    }
+
+    #[test]
+    fn a_close_hides_only_when_it_can_be_undone() {
+        let mut world = base_world(None, None);
+        assert!(
+            !world.hide_on_close(false),
+            "off by default: a close button closes"
+        );
+
+        world.close_to_tray = true;
+        assert!(world.hide_on_close(false), "on, with a tray to come back from");
+
+        assert!(
+            !world.hide_on_close(true),
+            "a quit is a quit, even with close-to-tray on"
+        );
+
+        world.tray = TrayState::Absent("no status area".to_owned());
+        assert!(
+            !world.hide_on_close(false),
+            "a window hidden with no tray is a process nobody can reach"
+        );
+
+        world.tray = TrayState::Unknown;
+        assert!(!world.hide_on_close(false), "an unknown tray is not a tray");
     }
 
     #[test]
@@ -1146,16 +1236,18 @@ mod tests {
             error: None,
         };
         world.findings.push(vnr_core::Finding {
-            rule_id: "startup.temp-path",
-            title: "A startup item runs from a temporary folder",
+            rule_id: "startup.temp-path".to_owned(),
+            title: "A startup item runs from a temporary folder".to_owned(),
             severity: vnr_core::Severity::Attention,
             confidence: vnr_core::Confidence::Observed,
+            technique: Some("T1547.001".to_owned()),
             subject: "autorun:run:user:Agent".to_owned(),
             subject_label: "Agent (Run key)".to_owned(),
             evidence: vec!["Executable: C:\\Temp\\agent.exe".to_owned()],
-            why: "Temporary folders are cleaned by the system.",
-            benign: "An installer registered a helper.",
-            remediation: "Check the file's publisher.",
+            why: "Temporary folders are cleaned by the system.".to_owned(),
+            benign: "An installer registered a helper.".to_owned(),
+            remediation: "Check the file's publisher.".to_owned(),
+            pack: Some("ranger.core 2026.11.1".to_owned()),
         });
         world.suppressions.push(vnr_core::Suppression {
             rule_id: "startup.temp-path".to_owned(),

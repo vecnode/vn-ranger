@@ -76,7 +76,33 @@ pub fn scan(progress: &dyn Fn(ScanProgress), cancelled: &dyn Fn() -> bool) -> Op
         return None;
     }
 
-    snapshot.collectors = vec![process_status, autorun_status, listener_status, package_status];
+    // Scheduled tasks are their own collector because their access is their own question: a
+    // standard account cannot list the task folder, and that refusal belongs on the status
+    // rather than being folded into the startup items' reasons.
+    #[cfg(windows)]
+    let task_status = {
+        let (tasks, status) =
+            collect::tasks::collect(&mut hasher).into_parts(collect::tasks::ID, collect::tasks::LABEL);
+        snapshot.autoruns.extend(tasks);
+        status
+    };
+
+    snapshot.autoruns.sort_by(|a, b| {
+        a.scope
+            .label()
+            .cmp(b.scope.label())
+            .then_with(|| a.kind.label().cmp(b.kind.label()))
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+    let (agents, agent_status) =
+        collect::agentstack::collect().into_parts(collect::agentstack::ID, collect::agentstack::LABEL);
+    snapshot.agents = agents;
+
+    snapshot.collectors = vec![process_status, autorun_status];
+    snapshot.collectors.push(agent_status);
+    #[cfg(windows)]
+    snapshot.collectors.push(task_status);
+    snapshot.collectors.extend([listener_status, package_status]);
 
     let mut matches = Vec::new();
     for autorun in &snapshot.autoruns {

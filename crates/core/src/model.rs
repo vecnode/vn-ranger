@@ -60,13 +60,62 @@ pub enum AutorunKind {
     SystemdUnit,
     /// A cron entry.
     Cron,
+    /// A scheduled task.
+    ScheduledTask,
     /// An XDG autostart desktop entry.
     XdgAutostart,
+    /// A netsh helper DLL, loaded by every `netsh` invocation.
+    NetshHelper,
+    /// A print monitor DLL, loaded by the spooler.
+    PrintMonitor,
+    /// A time provider DLL, loaded by the time service.
+    TimeProvider,
+    /// A screensaver, which runs whenever the session is idle.
+    Screensaver,
+    /// A COM object registered for the shell, such as a context-menu handler.
+    ShellExtension,
+    /// A debugger that replaces the program it is registered for.
+    Debugger,
+    /// A library the dynamic loader maps into every process.
+    Preload,
+    /// A shell startup file, which runs on every login.
+    ShellStartup,
+    /// A kernel module whose load is replaced by a command.
+    KernelModule,
+    /// A udev rule that runs a program on a device event.
+    UdevRule,
     /// A kind this build does not understand yet.
     Other,
 }
 
 impl AutorunKind {
+    /// The stable name a pack rule writes. Interfaces use [`Self::label`].
+    #[must_use]
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::RunKey => "run_key",
+            Self::StartupFolder => "startup_folder",
+            Self::Service => "service",
+            Self::LaunchAgent => "launch_agent",
+            Self::LaunchDaemon => "launch_daemon",
+            Self::SystemdUnit => "systemd_unit",
+            Self::Cron => "cron",
+            Self::ScheduledTask => "scheduled_task",
+            Self::XdgAutostart => "xdg_autostart",
+            Self::Debugger => "debugger",
+            Self::Preload => "preload",
+            Self::ShellStartup => "shell_startup",
+            Self::KernelModule => "kernel_module",
+            Self::UdevRule => "udev_rule",
+            Self::NetshHelper => "netsh_helper",
+            Self::PrintMonitor => "print_monitor",
+            Self::TimeProvider => "time_provider",
+            Self::Screensaver => "screensaver",
+            Self::ShellExtension => "shell_extension",
+            Self::Other => "other",
+        }
+    }
+
     /// A short label for interfaces and reports.
     #[must_use]
     pub fn label(self) -> &'static str {
@@ -78,7 +127,18 @@ impl AutorunKind {
             Self::LaunchDaemon => "Launch daemon",
             Self::SystemdUnit => "systemd unit",
             Self::Cron => "Cron",
+            Self::ScheduledTask => "Scheduled task",
             Self::XdgAutostart => "XDG autostart",
+            Self::Debugger => "Debugger",
+            Self::Preload => "Preloaded library",
+            Self::ShellStartup => "Shell startup",
+            Self::KernelModule => "Kernel module",
+            Self::UdevRule => "udev rule",
+            Self::NetshHelper => "netsh helper",
+            Self::PrintMonitor => "Print monitor",
+            Self::TimeProvider => "Time provider",
+            Self::Screensaver => "Screensaver",
+            Self::ShellExtension => "Shell extension",
             Self::Other => "Other",
         }
     }
@@ -95,6 +155,15 @@ pub enum AutorunScope {
 }
 
 impl AutorunScope {
+    /// The stable name a pack rule writes. Interfaces use [`Self::label`].
+    #[must_use]
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::User => "user",
+            Self::System => "system",
+        }
+    }
+
     /// A short label for interfaces and reports.
     #[must_use]
     pub fn label(self) -> &'static str {
@@ -123,6 +192,18 @@ pub enum SignatureStatus {
 }
 
 impl SignatureStatus {
+    /// The stable name a pack rule writes. Interfaces use [`Self::label`].
+    #[must_use]
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::NotChecked => "not_checked",
+            Self::Valid => "valid",
+            Self::Invalid => "invalid",
+            Self::Unsigned => "unsigned",
+            Self::Unknown => "unknown",
+        }
+    }
+
     /// A short label for interfaces and reports.
     #[must_use]
     pub fn label(self) -> &'static str {
@@ -153,6 +234,12 @@ pub struct AutorunFact {
     pub scope: AutorunScope,
     /// Whether the source says it is enabled.
     pub enabled: bool,
+    /// Whether the source hides it from its own list.
+    ///
+    /// A scheduled task carries a `Hidden` setting that removes it from Task Scheduler's own
+    /// view while leaving it scheduled. A registry value has no such thing, and says false.
+    #[serde(default)]
+    pub hidden: bool,
     /// The executable this entry reaches, when it could be resolved.
     pub exe: Option<String>,
     /// SHA-256 of the executable, when it was small enough to hash.
@@ -199,6 +286,26 @@ pub struct ListenerFact {
     pub state: String,
     /// Whether the socket is bound to more than the loopback interface.
     pub public: bool,
+}
+
+/// One configuration that can run something on a person's behalf.
+///
+/// An editor's task, an agent client's server list and an SSH key with a forced command are
+/// the same fact in different clothes: a file the person trusts names a program, and the
+/// program runs without a click. The fact says what the file is, where it is, and what it
+/// would run — not whether that is a good idea.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AgentFact {
+    /// A stable identity, such as `mcp:claude-desktop:filesystem`.
+    pub id: String,
+    /// Which kind of tool the configuration belongs to: `ssh` or `mcp`.
+    pub tool: String,
+    /// The name the configuration gives the thing it would run.
+    pub name: String,
+    /// The configuration file that names it.
+    pub path: String,
+    /// The command it would run, when the configuration names one.
+    pub command: Option<String>,
 }
 
 /// One installed package or application.
@@ -342,6 +449,9 @@ pub struct Snapshot {
     pub listeners: Vec<ListenerFact>,
     /// Installed packages and applications.
     pub packages: Vec<PackageFact>,
+    /// Configurations that can run something on the person's behalf.
+    #[serde(default)]
+    pub agents: Vec<AgentFact>,
     /// Per-collector outcomes, including the ones that could not run.
     pub collectors: Vec<CollectorStatus>,
     /// Signature database state and matches.
@@ -375,6 +485,7 @@ impl Snapshot {
             autoruns: Vec::new(),
             listeners: Vec::new(),
             packages: Vec::new(),
+            agents: Vec::new(),
             collectors: Vec::new(),
             signatures: SignatureReport::default(),
         }
@@ -438,6 +549,12 @@ impl Snapshot {
                 .then_with(|| a.address.cmp(&b.address))
         });
         self.packages.sort_by_key(|package| package.name.to_lowercase());
+        self.agents.sort_by(|a, b| {
+            a.tool
+                .cmp(&b.tool)
+                .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+                .then_with(|| a.path.cmp(&b.path))
+        });
         self.collectors.sort_by(|a, b| a.id.cmp(&b.id));
         self.signatures
             .matches

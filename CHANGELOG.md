@@ -4,7 +4,7 @@ All notable changes to vn-ranger are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.6] - 2026-10-18
 
 ### Added
 
@@ -37,8 +37,72 @@ All notable changes to vn-ranger are recorded here. The format follows
 - A resident schedule: six hours ±10 % from a seeded jitter, and a scan when the machine
   wakes from sleep.
 
+### Added — rule packs
+
+- **A pack now fires.** `vnr_core::pack::evaluate` takes a rule and a fact view and returns a
+  `Finding`: `all` and `any`, text compared case-insensitively, an absent field matching
+  nothing, `glob` as a two-pointer walk instead of a regular expression, and evidence that
+  names the value the fact actually had. Before this, a pack could be proved valid and could
+  never say anything.
+- **The field vocabulary is typed.** Every field of every subject is text, a number or
+  true/false, and the validator refuses an operator that cannot hold for it (`gt` on a path,
+  `prefix` on a port) at load time, with the operators that would work in the refusal.
+- **Places instead of paths.** A rule may name `{TEMP}`, `{HOME}`, `{DOWNLOADS}`,
+  `{DESKTOP}`, `{APPDATA}`, `{LOCALAPPDATA}`, `{PROGRAMDATA}` or `{STARTUP}`; the core resolves
+  none of them, so the caller hands the paths in and a build on a machine that cannot name a
+  place does not guess at one.
+- **Activation and rollback.** `packs/active.json` names the pack, its digest and the key that
+  signed it; the pair of writes is journalled with an intent before and a result after, and
+  `previous.json` is written first so a crash leaves a way back. Rolling back swaps the two
+  records and touches nothing else.
+- **The first-party pack is compiled in** with `include_str!`, so the catalogue travels with
+  the build rather than with a file a person could swap.
+- **The Rule packs page**: what is loaded and who signed it, every pack in the folder with
+  what verification says about it, keys added only when the typed fingerprint is the key's
+  own, and a key removed by fingerprint — which unloads the packs it signed, because the
+  record is verified again every time it is read.
+- **The Sigma importer** (`--sigma rule.yml`): a restricted YAML reader that refuses anchors,
+  aliases, tags and multi-document files by line; `Image`, `CommandLine` and `User` map with
+  three modifiers; everything else is counted with a reason that names the field or the
+  condition. The output is a pack that still has to be signed.
+- **The optional content scan** (`--features content-scan`): `yara-x`, behind a flag, off in
+  the default build, with the walk bounded by files, depth and size, no link followed, and
+  nothing but a rule name and a path kept. `cargo xtask ci` proves the default build contains
+  no YARA-X with `cargo tree`.
+
+### Changed — the interface
+
+- The overview opens with a line of counts rather than four tiles, and says how long the last
+  scan ago was, how long it took and how many collectors answered, where a person reads about
+  the scan.
+- "No network. No telemetry." moved from the overview to Settings, with the data folder beside
+  it, because it is a statement about the program rather than a fact about the machine.
+- Dialogs have one header size and one padding: a dialog titled at a page's size reads as a
+  page in a box, and the margin now comes from the theme rather than from each dialog.
+- The controls above every table are chips and a 24-pixel search field, sized with the table
+  header, instead of links at body size.
+- The journal's failure sentence now names the folder and the two things that cause it —
+  a security program, or a policy — and the variable that moves it.
+
 ### Fixed
 
+- A journal that could not be opened said `Access is denied` and nothing a person could act
+  on. It now says which of the three problems it is: this program may not write in the folder
+  (a security program, a folder policy or a sandbox all look like this, and
+  `VN_RANGER_DATA_DIR` moves the folder), the journal file itself cannot be opened (it is
+  moved aside as `journal.kept-<time>.ndjson` and a new one starts, so the session is recorded
+  after all), or something else, reported as it came.
+- `--diagnose` prints the folder, whether this program can write in it, whether the journal
+  opens, which pack is loaded and how many keys are trusted — facts that were checked at that
+  moment, so a refusal can be quoted rather than described.
+- **The clean dry run no longer freezes the window.** The walk moved to its own thread: the
+  button reads "Counting…", a spinner turns beside it, and the rest of the window keeps
+  drawing while a cache with ten thousand files in it is counted. A second click while a
+  walk is running is ignored rather than queued.
+- **The clean list says what would go, more precisely**: each surface row now reads "1,204
+  files · 3.2 GB in 4 folders · 6 empty folders · Kept 40 too new, 3 links", with the
+  Show/Hide control beside the name it opens instead of floating to the right, and the
+  "off by default" badge on the right where a badge belongs.
 - The live indicator toggled once per poll, which reads as a metronome and keeps looking
   alive after the thread that feeds it has stopped. It now flashes for 220 ms as each
   poll arrives, stays quietly lit in between, and turns amber after three missed beats.
@@ -60,6 +124,193 @@ All notable changes to vn-ranger are recorded here. The format follows
   before the tag, and `AGENTS.md` carries the deletion and pack contracts those waves
   have to obey.
 
+### Added — coverage, the first half of wave 5
+
+- **The Windows registry is a table now.** Nineteen persistence surfaces — `Run`, `RunOnce`
+  and the legacy `RunServices` in both registry views, Winlogon `Shell`, `Userinit` and
+  `Notify`, `AppInit_DLLs`, the IFEO `Debugger`, Active Setup's `StubPath`, a service's
+  `ServiceDll`, print monitors, both LSA package lists, netsh helpers, the screensaver and
+  time-provider DLLs — are rows read through one `KeyReader` trait and parsed by one
+  function, so a fixture for each runs on a machine that has never seen Windows. A key that
+  is not there is an absence rather than an error, and the fixtures that capture an absence
+  say so. A `REG_MULTI_SZ` is a list, so each string in it is its own entry.
+- **A service in a user-writable folder is a finding**: `startup.service-dll-user-writable`
+  fires on a `ServiceDll` under `ProgramData`, `LocalAppData`, `AppData` or a temporary
+  folder, with a positive and a negative case against the shipped pack itself.
+- A scan now reads 429 startup entries on the maintainer's machine where it read 132, and the
+  collector's status line names the techniques the table covers rather than only the count.
+- **Scheduled tasks**: every task file is parsed by a pure, fixture-tested reader (URI, action,
+  account, enabled, hidden, triggers), read with `quick-xml`, which the plist reader already
+  brought in. The task folder needs administrative rights to list, so a standard scan reports
+  the collector as unavailable with that reason instead of reporting no tasks.
+- **`hidden` is a fact**, so "a hidden scheduled task runs a program from a folder a user can
+  write" is a shipped rule with a positive and a negative case.
+- **The agent stack**: the collector reads four configuration surfaces — `authorized_keys`
+  lines with a forced command or a supplied environment, `~/.ssh/rc`, `ProxyCommand` and
+  `LocalCommand` in `~/.ssh/config`, and an MCP client's `mcpServers` — and says what each
+  would run. A private key, a known-hosts file and every browser profile are never read, and
+  the status line names which files were read and which were not there.
+- **The content scan has a consent screen.** Settings says whether this build has one, names
+  the folders, the file and depth limits and what is kept, and runs it on a thread of its own
+  so the window keeps drawing. The default build says it was not compiled with one, which is
+  a state rather than an error. The journal records the counts, never the content.
+- **Two more detections**: `startup.accessibility-swap` fires on a debugger registered for a
+  program Windows starts before sign-in (`sethc.exe`, `utilman.exe` and the rest), and
+  `service.unquoted-path` is a built-in rule for a service image path with a space and no
+  quotes, which Windows resolves one folder at a time.
+- **The Linux loader surfaces**: `/etc/ld.so.preload`, `modprobe.d` `install` lines, `udev`
+  rules with `RUN+=`/`PROGRAM=`, and login scripts, each parsed by a pure reader and each
+  tested against a file **captured inside Ubuntu on WSL2** — including the absences, which are
+  the ordinary case: no `ld.so.preload`, no `install` line, an empty `/etc/udev/rules.d`.
+  `crates/native/fixtures/README.md` records where every capture came from.
+- **The coverage table is generated** from the pack by `cargo xtask coverage`, and `ci` fails
+  when a rule exists and the table does not mention it.
+- **A cross-target check in CI**: the Windows runner type-checks the whole workspace for
+  `x86_64-unknown-linux-gnu`. It found two real bugs on its first run — a path that only
+  resolved on Unix, and a helper only Windows called — which is the failure mode `AGENTS.md`
+  §5 describes.
+- **A rule about a subject nothing collects is now a load error.** `agent` and `file-event`
+  are in the vocabulary and not in a collector, so the one rule that named `agent` was
+  removed rather than left in the catalogue looking like coverage.
+
+### Fixed — the binary no longer contains the antivirus test file
+
+- The EICAR test string was a byte literal in the product, so **`vn-ranger.exe` contained a
+  complete antivirus test file** — Defender refused to execute this project's own test build
+  with `ERROR_VIRUS_INFECTED`, which is what a browser would do to a download. The bytes are
+  stored masked and decoded at run time, with `black_box` holding the optimiser off.
+- Measured rather than assumed: a byte search finds **no complete test file** in either
+  profile, and the release binary runs. A *prefix* of it can survive the optimiser in an
+  optimised build, which is not a whole file and is not what an engine matches.
+- `cargo xtask signature` reads whichever binaries are built and **fails the build** if a
+  complete test file ever comes back, so the claim is checked rather than remembered.
+### Changed — the interface
+
+- The overview opens with a line of counts rather than four tiles, and says how long the last
+  scan ago was, how long it took and how many collectors answered, where a person reads about
+  the scan.
+- "No network. No telemetry." moved from the overview to Settings, with the data folder beside
+  it, because it is a statement about the program rather than a fact about the machine.
+- Dialogs have one header size and one padding: a dialog titled at a page's size reads as a
+  page in a box, and the margin now comes from the theme rather than from each dialog.
+- The controls above every table are chips and a 24-pixel search field, sized with the table
+  header, instead of links at body size.
+- The journal's failure sentence now names the folder and the two things that cause it —
+  a security program, or a policy — and the variable that moves it.
+
+### Fixed
+
+- A journal that could not be opened said `Access is denied` and nothing a person could act
+  on. It now says which of the three problems it is: this program may not write in the folder
+  (a security program, a folder policy or a sandbox all look like this, and
+  `VN_RANGER_DATA_DIR` moves the folder), the journal file itself cannot be opened (it is
+  moved aside as `journal.kept-<time>.ndjson` and a new one starts, so the session is recorded
+  after all), or something else, reported as it came.
+- `--diagnose` prints the folder, whether this program can write in it, whether the journal
+  opens, which pack is loaded and how many keys are trusted — facts that were checked at that
+  moment, so a refusal can be quoted rather than described.
+- **The clean dry run no longer freezes the window.** The walk moved to its own thread: the
+  button reads "Counting…", a spinner turns beside it, and the rest of the window keeps
+  drawing while a cache with ten thousand files in it is counted. A second click while a
+  walk is running is ignored rather than queued.
+- **The clean list says what would go, more precisely**: each surface row now reads "1,204
+  files · 3.2 GB in 4 folders · 6 empty folders · Kept 40 too new, 3 links", with the
+  Show/Hide control beside the name it opens instead of floating to the right, and the
+  "off by default" badge on the right where a badge belongs.
+- The live indicator toggled once per poll, which reads as a metronome and keeps looking
+  alive after the thread that feeds it has stopped. It now flashes for 220 ms as each
+  poll arrives, stays quietly lit in between, and turns amber after three missed beats.
+- A quoted startup command with spaces was tokenised into `C:\Program`, so a duplicated
+  startup group was labelled "program". The tokeniser honours the closing quote, and an
+  ambiguous command is labelled with its entry name.
+
+### Changed
+
+- The roadmap compresses the act, resident and rule-pack milestones into a single
+  **v0.1.6**, built in five waves with one gate and cut through release candidates.
+  `0.2.0` is distribution and signing; `1.0.0` is the audited release.
+- `docs/PLAN.md` now specifies the action path — the journal protocol, the typed action
+  API, the four refusals, the cleanup allowlist table and crash recovery — the rule-pack
+  format (one signed JSON file, a closed vocabulary, no code, no file content, an
+  optional and separately consented content scan), and the resident shell (tray, opt-in
+  autostart, scheduler, close-to-tray off by default).
+- `docs/BENCHMARKS.md` carries the 0.1.6 budgets and the 24-hour soak that must hold
+  before the tag, and `AGENTS.md` carries the deletion and pack contracts those waves
+  have to obey.
+
+### Added — coverage, the first half of wave 5
+
+- **The Windows registry is a table now.** Nineteen persistence surfaces — `Run`, `RunOnce`
+  and the legacy `RunServices` in both registry views, Winlogon `Shell`, `Userinit` and
+  `Notify`, `AppInit_DLLs`, the IFEO `Debugger`, Active Setup's `StubPath`, a service's
+  `ServiceDll`, print monitors, both LSA package lists, netsh helpers, the screensaver and
+  time-provider DLLs — are rows read through one `KeyReader` trait and parsed by one
+  function, so a fixture for each runs on a machine that has never seen Windows. A key that
+  is not there is an absence rather than an error, and the fixtures that capture an absence
+  say so. A `REG_MULTI_SZ` is a list, so each string in it is its own entry.
+- **A service in a user-writable folder is a finding**: `startup.service-dll-user-writable`
+  fires on a `ServiceDll` under `ProgramData`, `LocalAppData`, `AppData` or a temporary
+  folder, with a positive and a negative case against the shipped pack itself.
+- A scan now reads 429 startup entries on the maintainer's machine where it read 132, and the
+  collector's status line names the techniques the table covers rather than only the count.
+- **Scheduled tasks**: every task file is parsed by a pure, fixture-tested reader (URI, action,
+  account, enabled, hidden, triggers), read with `quick-xml`, which the plist reader already
+  brought in. The task folder needs administrative rights to list, so a standard scan reports
+  the collector as unavailable with that reason instead of reporting no tasks.
+- **`hidden` is a fact**, so "a hidden scheduled task runs a program from a folder a user can
+  write" is a shipped rule with a positive and a negative case.
+- **The agent stack**: the collector reads four configuration surfaces — `authorized_keys`
+  lines with a forced command or a supplied environment, `~/.ssh/rc`, `ProxyCommand` and
+  `LocalCommand` in `~/.ssh/config`, and an MCP client's `mcpServers` — and says what each
+  would run. A private key, a known-hosts file and every browser profile are never read, and
+  the status line names which files were read and which were not there.
+- **The content scan has a consent screen.** Settings says whether this build has one, names
+  the folders, the file and depth limits and what is kept, and runs it on a thread of its own
+  so the window keeps drawing. The default build says it was not compiled with one, which is
+  a state rather than an error. The journal records the counts, never the content.
+- **Two more detections**: `startup.accessibility-swap` fires on a debugger registered for a
+  program Windows starts before sign-in (`sethc.exe`, `utilman.exe` and the rest), and
+  `service.unquoted-path` is a built-in rule for a service image path with a space and no
+  quotes, which Windows resolves one folder at a time.
+- **The Linux loader surfaces**: `/etc/ld.so.preload`, `modprobe.d` `install` lines, `udev`
+  rules with `RUN+=`/`PROGRAM=`, and login scripts, each parsed by a pure reader and each
+  tested against a file **captured inside Ubuntu on WSL2** — including the absences, which are
+  the ordinary case: no `ld.so.preload`, no `install` line, an empty `/etc/udev/rules.d`.
+  `crates/native/fixtures/README.md` records where every capture came from.
+- **The coverage table is generated** from the pack by `cargo xtask coverage`, and `ci` fails
+  when a rule exists and the table does not mention it.
+- **A cross-target check in CI**: the Windows runner type-checks the whole workspace for
+  `x86_64-unknown-linux-gnu`. It found two real bugs on its first run — a path that only
+  resolved on Unix, and a helper only Windows called — which is the failure mode `AGENTS.md`
+  §5 describes.
+- **A rule about a subject nothing collects is now a load error.** `agent` and `file-event`
+  are in the vocabulary and not in a collector, so the one rule that named `agent` was
+  removed rather than left in the catalogue looking like coverage.
+
+### Fixed — the binary no longer contains a virus signature
+
+- The EICAR test string was a byte literal in the product, so **every antivirus engine
+  quarantines `vn-ranger.exe`** — Defender refused to execute this project's own test build
+  with `ERROR_VIRUS_INFECTED`. The bytes are stored encoded and decoded at run time — shorter
+  literals do not help, because they sit back to back in the read-only section and the
+  signature survives the joins. The self-test still writes a real EICAR file, which is what it
+  is for, and the binary no longer looks like the thing it hunts.
+
+### Not in this release
+
+- **WMI subscriptions.** The owner dropped the row: it needs COM and administrator rights to
+  read `root\subscription`, and it could not be tested on the machine this release was built
+  on. An untested collector that reports facts about someone's machine is worse than a named
+  gap, so it is carried into 0.1.7 (`docs/PLAN.md` §14.2, M6 row 1).
+- **Captured macOS fixtures.** The macOS collectors — `periodic`, the system crontab,
+  `ScriptingAdditions`, Folder Actions and the launchd plists — are written and are
+  **compile-checked for `x86_64-apple-darwin` in `ci`**, but no Mac was available to capture
+  against, so their tests assert the documented shapes rather than a machine. The collector's
+  status says so on a Mac, and the Linux ones are genuine captures from Ubuntu on WSL2.
+- **The macOS and Linux user-level sources that need elevation**: user `crontab` tabs, `at`
+  jobs. The collector reports the gap rather than an empty list.
+- The 24-hour soak on the candidate binary and the manual matrix in `docs/PLAN.md` §12 are
+  process rows and are still owed; so are the two reviewers on the deletion paths.
 ## [0.1.5] - 2026-10-17
 
 ### Added

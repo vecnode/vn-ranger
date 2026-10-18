@@ -29,12 +29,15 @@ crates/
   core      vnr-core     pure and IO-free: facts, snapshots, timelines, diffs, rules,
                          findings, hash signatures, reports, time arithmetic,
                          journal records, recovery verdicts, pack schema and matcher,
-                         clean policy, schedule arithmetic, the Sigma converter
+                         the allowlist table and its refusals (`action.rs`), the field
+                         vocabulary and the pack schema (`fields.rs`, `pack/`),
+                         schedule arithmetic
   native    vnr-native   the only crate that touches the world:
                          collect/{processes,autoruns,listeners,packages,tasks,agentstack},
                          hash, signatures, elevation, paths, store, watch, scan,
-                         journal, action, quarantine, clean, pack, tray, autostart
-  ui        vnr-ui       egui: theme, fonts, icons, widgets, the views, World/Action
+                         journal, act, action, quarantine, clean, pack, tray, autostart
+  ui        vnr-ui       egui: theme, fonts, icons, widgets, the views, World/Action,
+                         and the clean card's selection state
 apps/
   vn-ranger              the eframe shell: owns the World, runs the worker,
                          scheduler and tray, carries out actions, and the headless
@@ -45,7 +48,7 @@ assets/
   fonts/                 Inter and JetBrains Mono, OFL texts, type notes
   screenshots/           the picture the README uses
 packs/                   the first-party rule pack, signed like any other (from 0.1.6)
-docs/                    PLAN, RELEASES, BENCHMARKS, and RULES (from 0.1.6)
+docs/                    PLAN, RELEASES, BENCHMARKS and RULES
 ```
 
 **Layering is a rule, not a suggestion.**
@@ -123,9 +126,11 @@ act on — never a panic.
   not a trade-off to be weighed; it is out of scope.
 - Rule packs and signature databases are local files. They cannot fetch, and rules are
   data, not code.
-- One local socket is allowed, and only this one: the Linux tray's status-item connection
-  to the session bus, in `native/src/tray/linux.rs`. `xtask` asserts that it is the only
-  socket use in the tree, so "local IPC" cannot quietly become something else.
+- One local socket exists anywhere near the product, and it belongs to the tray's Linux
+  backend: the status-item connection to the session bus, opened by `ksni` (pure-Rust
+  `zbus`), which is reached through `tray-icon`'s `ksni` feature. No file in this tree
+  opens a socket, `xtask` asserts that, and the dependency that does is the one named in
+  §8 — so "local IPC" cannot quietly become something else.
 
 ### Never hide
 
@@ -170,6 +175,9 @@ cargo xtask language  # the §5.5 language audit, as a check
 cargo run --release   # the ranger
 cargo run --release -- --report report.json   # scan without a window
 cargo run --release -- --soak soak.ndjson     # sample a 24-hour run (from 0.1.6)
+cargo run --release -- --diagnose             # where the files are, and whether this
+                                              # program may write them
+cargo run --release -- --sigma rule.yml       # import one Sigma rule as a pack to sign
 ```
 
 The first build is the slow one: egui, wgpu and winit are most of the tree. After that,
@@ -206,8 +214,11 @@ capability report.
 
 ## 5. Platform rules
 
-CI builds on three platforms, and two of them will disagree with your machine. An
-attribute on a **statement** deletes it on the other platforms, which can leave a
+CI builds on three platforms, and two of them will disagree with your machine. A push to
+`main` checks Linux only; a pull request, the Monday run and the release gate check all
+three. So a `#[cfg]` bug can live on `main` until the next Monday or until the cut, and
+the target check below is how you find it on the day you write it rather than the day you
+tag. An attribute on a **statement** deletes it on the other platforms, which can leave a
 binding unused, a variable unread or a branch unreachable:
 
 ```rust
@@ -291,11 +302,15 @@ Every new dependency is a licence, a supply chain and a size decision.
 - Not allowed: GPL, AGPL, LGPL without a written exception, CDLA, SSPL, BUSL, or
   anything whose licence text has to be guessed.
 - No network crate in v0.x: `reqwest`, `ureq`, `hyper`, `h2`, `curl`, `isahc`, `surf`,
-  `attohttpc`, `socket2` and raw socket code are banned. The one local socket the Linux
-  tray needs is named in §2 and asserted by `xtask`.
+  `attohttpc`, `socket2` and raw socket code are banned. The one local socket the tray
+  needs is named in §2 and asserted by `xtask`.
 - No C or C++ build dependency in the default build. A crate that needs one has to
   justify it; `netstat2` is Windows-only here for exactly that reason, and the Linux tray
-  uses `ksni` rather than `tray-icon` precisely to avoid GTK3 and `libappindicator`.
+  takes `tray-icon` with `default-features = false, features = ["ksni"]` precisely so that
+  no GTK3 and no `libappindicator` is compiled in. Both halves of that are a decision:
+  `tray-icon` (MIT OR Apache-2.0) for one menu API on three platforms, and its `ksni`
+  backend, which speaks StatusNotifierItem through the pure-Rust `zbus` and needs no
+  toolkit installed on the user's machine.
 - OS access goes through a safe wrapper (`winreg`, `netstat2`, `is_elevated`, `runas`,
   `sysinfo`, `plist`, `cap-std`), never through a hand-written FFI block.
 - **The action path's dependency is `cap-std`**, and it is not negotiable for
@@ -346,10 +361,10 @@ A change is done when:
 | Rules and findings | `core/src/rules.rs` | A rule that cannot name a benign explanation is not ready; every finding carries the evidence it fired on and a stable subject for suppressions. |
 | The action path | `native/src/action.rs`, `quarantine.rs`, `clean.rs` | The only code that can destroy data. `cap-std`, four refusals, a journal line before every act, and a test seam for TOCTOU — never a race. |
 | The journal | `native/src/journal.rs`, `core/src/journal.rs` | Append-only, `sync_data`, a torn tail tolerated, a rotation that keeps seq monotone, and a recovery verdict for four on-disk states. |
-| The allowlist | `native/src/clean.rs`, `core/src/clean.rs` | A table, not a heuristic; the walk never follows a link or crosses a device, and a file changed since the preview is skipped. |
+| The allowlist | `native/src/clean.rs`, `core/src/action.rs` | A table, not a heuristic; the walk never follows a link or crosses a device, and a file changed since the preview is skipped. |
 | Packs | `core/src/pack/`, `native/src/pack/` | Verified before parsed; a closed vocabulary; an unknown field is an error; activation and rollback are journal entries. |
 | The Sigma reader | `core/src/sigma/` | YAML is user input: a restricted reader that refuses anchors, tags and multi-document files rather than guessing. |
-| The tray | `native/src/tray/` | `tray-icon` on Windows and macOS, `ksni` on Linux, an event loop per platform, and no icon is a supported state. |
+| The tray | `native/src/tray.rs` | One crate for three desktops, so the subtlety is not a per-platform module: it is that the icon must be created on the frame's thread, that a click arrives on a channel this process has to wake the interface for, and that "no status area" is a state rather than an error. |
 | Elevation | `native/src/elevation.rs`, `apps/vn-ranger/src/worker.rs` | The elevated copy is one-shot; the unelevated window must not hand it a path to act on. |
 | Listener ownership | `native/src/collect/listeners/` | The socket table and the fd table are read at different times; other users' sockets need privilege. |
 | Autorun parsing | `native/src/collect/autoruns/` | Registry views, 32/64-bit keys, quoted paths, binary plists, systemd user units, and a surface table read through one trait. |

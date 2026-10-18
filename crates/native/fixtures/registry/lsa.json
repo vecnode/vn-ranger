@@ -1,0 +1,8 @@
+{
+  "captured": "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Lsa on the maintainer's machine",
+  "sanitised": "only the two multi-string values the table reads are kept",
+  "values": [
+    { "name": "Notification Packages", "data": "scecli" },
+    { "name": "Authentication Packages", "data": "msv1_0" }
+  ]
+}

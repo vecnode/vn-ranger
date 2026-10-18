@@ -1,0 +1,10 @@
+{
+  "captured": "HKLM\\SOFTWARE\\Microsoft\\NetSh on the maintainer's machine",
+  "sanitised": "four of the helper values the enumeration returned",
+  "values": [
+    { "name": "2", "data": "ifmon.dll" },
+    { "name": "4", "data": "rasmontr.dll" },
+    { "name": "authfwcfg", "data": "authfwcfg.dll" },
+    { "name": "dhcpclient", "data": "dhcpcmonitor.dll" }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "captured": "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Print\\Monitors on the maintainer's machine",
+  "sanitised": "three monitors of the five the enumeration returned",
+  "subkeys": [
+    { "name": "Appmon", "values": [ { "name": "Driver", "data": "AppMon.dll" } ], "subkeys": [] },
+    { "name": "Local Port", "values": [ { "name": "Driver", "data": "localspl.dll" } ], "subkeys": [] },
+    { "name": "Standard TCP/IP Port", "values": [ { "name": "Driver", "data": "tcpmon.dll" } ], "subkeys": [] }
+  ]
+}

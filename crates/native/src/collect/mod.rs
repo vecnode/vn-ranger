@@ -4,11 +4,15 @@
 //! interface can explain, and an empty list is a claim ranger is not allowed to make
 //! on behalf of a permission it did not have.
 
+pub mod agentstack;
 pub mod autoruns;
 pub mod host;
 pub mod listeners;
 pub mod packages;
 pub mod processes;
+
+#[cfg(windows)]
+pub mod tasks;
 
 #[cfg(windows)]
 mod winutil;

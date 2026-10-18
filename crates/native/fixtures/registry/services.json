@@ -1,0 +1,9 @@
+{
+  "captured": "HKLM\\SYSTEM\\CurrentControlSet\\Services\\{wscsvc,mpssvc,.NET CLR Data} on the maintainer's machine",
+  "sanitised": "three services, one of which has no Parameters key, which is the ordinary case",
+  "subkeys": [
+    { "name": "wscsvc", "values": [ { "name": "ImagePath", "data": "%SystemRoot%\\System32\\svchost.exe -k LocalServiceNetworkRestricted -p" } ], "subkeys": [ { "name": "Parameters", "values": [ { "name": "ServiceDll", "data": "%SystemRoot%\\System32\\wscsvc.dll" } ] } ] },
+    { "name": "mpssvc", "values": [ { "name": "ImagePath", "data": "%SystemRoot%\\system32\\svchost.exe -k LocalServiceNoNetworkFirewall -p" } ], "subkeys": [ { "name": "Parameters", "values": [ { "name": "ServiceDll", "data": "%SystemRoot%\\system32\\mpssvc.dll" } ] } ] },
+    { "name": ".NET CLR Data", "values": [ { "name": "ImagePath", "data": "" } ], "subkeys": [] }
+  ]
+}

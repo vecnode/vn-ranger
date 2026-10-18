@@ -55,7 +55,7 @@ are no backports to older 0.x lines.
 
 | Promise | Enforcement |
 |---|---|
-| No telemetry, no account, no network in v0.x | No HTTP client in the dependency tree; `cargo xtask ci` bans network crates and greps the workspace for socket code, and asserts that the Linux tray's local session-bus socket is the only one |
+| No telemetry, no account, no network in v0.x | No HTTP client in the dependency tree; `cargo xtask ci` bans network crates and asserts that no file in this tree opens a socket. The tray's one local session-bus connection is inside the `ksni` crate (pure-Rust `zbus`) rather than in ranger's own code |
 | No standing elevation | The window is unelevated; an administrator scan is a separate one-shot copy that the OS asks you to approve, writes one report and exits; no service and no driver |
 | No silent deletion | Quarantine before delete; preview; the allowlist table; an action journal written before the act; a typed confirmation for a permanent delete; two-person review of deletion paths |
 | No path outside the allowlist is reachable | A destructive act is named by an id, never a path, and resolved through an open directory handle (`cap-std`); `..`, absolute, UNC, links and hard links are refused by construction |

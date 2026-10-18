@@ -12,16 +12,22 @@
 
 pub mod act;
 pub mod action;
+pub mod autostart;
 pub mod clean;
 pub mod collect;
+pub mod contentscan;
 pub mod elevation;
 pub mod hash;
 pub mod instance;
 pub mod journal;
+pub mod pack;
 pub mod paths;
+pub mod power;
 pub mod quarantine;
 pub mod signatures;
+pub mod soak;
 pub mod store;
+pub mod tray;
 pub mod watch;
 
 mod scan;
