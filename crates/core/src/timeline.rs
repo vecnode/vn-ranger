@@ -61,6 +61,24 @@ pub struct TimelineEvent {
 }
 
 impl TimelineEvent {
+    /// The event as one CSV row, with the header beside it when a whole file is wanted.
+    ///
+    /// UTC, one row per event, quoting only the fields that need it. `at` is both the epoch
+    /// second and the readable form, because the first is what a tool sorts and the second
+    /// is what a person reads at three in the morning.
+    #[must_use]
+    pub fn to_csv_row(&self) -> String {
+        [
+            self.at_unix.to_string(),
+            crate::time::format_utc(self.at_unix),
+            self.kind.label().to_owned(),
+            quote(&self.subject),
+            quote(&self.detail),
+            quote(&self.source),
+        ]
+        .join(",")
+    }
+
     /// Build an event.
     #[must_use]
     pub fn new(
@@ -78,6 +96,29 @@ impl TimelineEvent {
             source: source.into(),
         }
     }
+}
+
+/// Quote a CSV field when it holds a comma, a quote or a newline.
+fn quote(value: &str) -> String {
+    if value.contains([',', '"', '\n', '\r']) {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_owned()
+    }
+}
+
+/// The header a timeline file starts with.
+pub const CSV_HEADER: &str = "at,utc,kind,subject,detail,source";
+
+/// A whole timeline as CSV, newest last, with its header.
+#[must_use]
+pub fn to_csv(events: &[TimelineEvent]) -> String {
+    let mut out = String::from(CSV_HEADER);
+    for event in events {
+        out.push('\n');
+        out.push_str(&event.to_csv_row());
+    }
+    out
 }
 
 /// A bounded, in-memory list of events, oldest first.
@@ -201,5 +242,37 @@ mod tests {
         ] {
             assert!(!kind.label().is_empty());
         }
+    }
+
+    #[test]
+    fn a_csv_row_quotes_what_needs_quoting_and_says_nothing_else() {
+        let event = TimelineEvent::new(
+            1_700_000_000,
+            EventKind::FileAppeared,
+            "C:\\Temp\\a,b.exe",
+            "a \"quoted\" detail",
+            "watcher",
+        );
+        let row = event.to_csv_row();
+        assert!(row.contains("\"C:\\Temp\\a,b.exe\""), "{row}");
+        assert!(row.contains("\"a \"\"quoted\"\" detail\""), "{row}");
+        assert!(row.ends_with(",watcher"), "{row}");
+    }
+
+    #[test]
+    fn an_export_is_a_header_and_one_line_per_event() {
+        let events = vec![
+            TimelineEvent::new(1, EventKind::ProcessStarted, "one", "", "poll"),
+            TimelineEvent::new(2, EventKind::ProcessStopped, "two", "", "poll"),
+        ];
+        let text = to_csv(&events);
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines.len(), 3);
+        assert_eq!(lines[0], CSV_HEADER);
+        assert!(lines[1].starts_with("1,"));
+        assert!(
+            to_csv(&[]).lines().count() == 1,
+            "an empty export is still a file"
+        );
     }
 }

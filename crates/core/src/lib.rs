@@ -43,5 +43,5 @@ pub use rules::{
     evaluate, prune_suppressions, sort_findings,
 };
 pub use signature::{HashAlgorithm, HashSignature, SignatureSet};
-pub use timeline::{EventKind, Timeline, TimelineEvent};
+pub use timeline::{CSV_HEADER, EventKind, Timeline, TimelineEvent, to_csv};
 pub use watch::{Debounce, FileTouch};
