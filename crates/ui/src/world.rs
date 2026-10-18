@@ -602,6 +602,8 @@ impl World {
 pub enum Action {
     /// Run an ordinary scan.
     Scan,
+    /// Run a scan at the size the person chose.
+    ScanProfile(vnr_core::ScanProfile),
     /// Ask the running scan to stop between collectors.
     CancelScan,
     /// Ask the operating system for an administrator scan.

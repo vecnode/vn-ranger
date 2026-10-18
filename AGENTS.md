@@ -193,6 +193,7 @@ cargo run --release -- --report report.json   # scan without a window
 cargo run --release -- --soak soak.ndjson     # sample a 24-hour run (from 0.1.6)
 cargo run --release -- --diagnose             # where the files are, and whether this
                                               # program may write them
+cargo run --release -- --replace              # ask a running window to stop, then take over
 cargo run --release -- --sigma rule.yml       # import one Sigma rule as a pack to sign
 ```
 

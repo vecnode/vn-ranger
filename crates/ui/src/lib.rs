@@ -532,6 +532,25 @@ impl Ui {
                         if scan.clicked() {
                             actions.push(Action::Scan);
                         }
+                        // The two sizes beside the ordinary scan. A quick scan is what a
+                        // person reaches for while something is happening; a deep scan is
+                        // the one that reads bytes and takes a while, so it is named.
+                        ui.add_enabled_ui(!world.busy(), |ui| {
+                            ui.menu_button("Size", |ui| {
+                                for profile in vnr_core::ScanProfile::ALL {
+                                    if ui
+                                        .button(profile.label())
+                                        .on_hover_text(profile.one_line())
+                                        .clicked()
+                                    {
+                                        actions.push(Action::ScanProfile(profile));
+                                        ui.close();
+                                    }
+                                }
+                            })
+                            .response
+                            .on_hover_text("How much a scan reads");
+                        });
                         if world.poll_enabled && world.poll_led {
                             let now = ui.input(|input| input.time);
                             let state = led_state(

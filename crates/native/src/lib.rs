@@ -34,7 +34,7 @@ pub mod watch;
 
 mod scan;
 
-pub use scan::{ScanProgress, scan};
+pub use scan::{DEEP_MAX_BYTES, DEEP_MAX_FILES, ScanProgress, scan, scan_with};
 
 /// Seconds since the Unix epoch, or zero if the clock is before 1970.
 ///

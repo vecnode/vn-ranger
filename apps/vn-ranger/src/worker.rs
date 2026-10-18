@@ -38,10 +38,15 @@ pub enum ScanMessage {
 }
 
 /// Run an ordinary scan on a background thread.
-pub fn spawn_scan(ctx: egui::Context, cancelled: Arc<AtomicBool>) -> Receiver<ScanMessage> {
+pub fn spawn_scan(
+    ctx: egui::Context,
+    cancelled: Arc<AtomicBool>,
+    profile: vnr_core::ScanProfile,
+) -> Receiver<ScanMessage> {
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {
-        let snapshot = vnr_native::scan(
+        let snapshot = vnr_native::scan_with(
+            profile,
             &|progress| {
                 if let vnr_native::ScanProgress::Started(label) = progress {
                     send(&sender, ScanMessage::Progress(label));

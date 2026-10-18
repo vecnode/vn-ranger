@@ -564,6 +564,86 @@ pub struct SignatureReport {
     pub notes: Vec<String>,
 }
 
+/// How much a scan reads.
+///
+/// A profile is *which collectors run*, not a second code path: every collector already says
+/// what it could not reach, so choosing a profile changes the size of the answer rather than
+/// its honesty. The profile is recorded in the snapshot, because a saved scan that does not
+/// say how it was taken invites "nothing was found" to mean "nothing was looked at".
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ScanProfile {
+    /// What is running and what starts: processes, startup items, listeners, connections.
+    Quick,
+    /// Everything the read-only collectors can reach. The default, and what a launch does.
+    #[default]
+    Standard,
+    /// Everything, plus the bytes of the programs that start on their own.
+    Deep,
+}
+
+impl ScanProfile {
+    /// Every profile, in the order the interface offers them.
+    pub const ALL: [ScanProfile; 3] = [Self::Quick, Self::Standard, Self::Deep];
+
+    /// The stable name, used in a saved snapshot and in the journal.
+    #[must_use]
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Quick => "quick",
+            Self::Standard => "standard",
+            Self::Deep => "deep",
+        }
+    }
+
+    /// What the interface calls it.
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Quick => "Quick scan",
+            Self::Standard => "Standard scan",
+            Self::Deep => "Deep scan",
+        }
+    }
+
+    /// One sentence saying what it reads, for the button's tooltip and the report.
+    #[must_use]
+    pub fn one_line(self) -> &'static str {
+        match self {
+            Self::Quick => {
+                "What is running now and what starts on its own. No packages and no agent \
+                 configurations."
+            }
+            Self::Standard => {
+                "Everything the collectors can read without elevation: processes, startup items, \
+                 listeners, connections, packages and agent configurations."
+            }
+            Self::Deep => {
+                "A standard scan, and then the bytes of the programs that start on their own, \
+                 read against the local signature database."
+            }
+        }
+    }
+
+    /// Whether this profile reads the startup programs' bytes.
+    #[must_use]
+    pub fn reads_bodies(self) -> bool {
+        matches!(self, Self::Deep)
+    }
+
+    /// Whether this profile reads the slower inventories.
+    #[must_use]
+    pub fn reads_inventories(self) -> bool {
+        !matches!(self, Self::Quick)
+    }
+
+    /// The profile with this name, when there is one.
+    #[must_use]
+    pub fn from_id(id: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|profile| profile.id() == id)
+    }
+}
+
 /// Everything one scan produced.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Snapshot {
@@ -573,6 +653,12 @@ pub struct Snapshot {
     pub taken_at_unix: u64,
     /// How long collection took.
     pub duration_ms: u64,
+    /// How much this scan read.
+    ///
+    /// Defaulted so a snapshot written before profiles existed loads as a standard scan,
+    /// which is what it was.
+    #[serde(default)]
+    pub profile: ScanProfile,
     /// The host.
     pub host: Host,
     /// Whether this scan ran with elevated rights.
@@ -624,6 +710,7 @@ impl Snapshot {
             schema: SCHEMA_VERSION,
             taken_at_unix: 0,
             duration_ms: 0,
+            profile: ScanProfile::Standard,
             host,
             elevated,
             processes: Vec::new(),
@@ -754,6 +841,32 @@ mod tests {
         snapshot.sort();
         assert_eq!(snapshot.processes[0].name, "A");
         assert_eq!(snapshot.processes[0].pid, 1);
+    }
+
+    #[test]
+    fn a_profile_names_itself_and_says_how_much_it_reads() {
+        let mut seen = std::collections::HashSet::new();
+        for profile in ScanProfile::ALL {
+            assert!(seen.insert(profile.id()), "{} appears twice", profile.id());
+            assert_eq!(ScanProfile::from_id(profile.id()), Some(profile));
+            assert!(!profile.label().is_empty());
+            assert!(!profile.one_line().is_empty());
+        }
+        assert_eq!(ScanProfile::from_id("nope"), None);
+        // A quick scan is the only one that skips an inventory, and a deep scan is the only
+        // one that reads a file's bytes: the two questions are what the scan asks.
+        assert!(!ScanProfile::Quick.reads_inventories());
+        assert!(ScanProfile::Standard.reads_inventories());
+        assert!(ScanProfile::Deep.reads_inventories());
+        assert!(!ScanProfile::Quick.reads_bodies());
+        assert!(!ScanProfile::Standard.reads_bodies());
+        assert!(ScanProfile::Deep.reads_bodies());
+        assert_eq!(ScanProfile::default(), ScanProfile::Standard);
+        // A snapshot written before profiles existed is a standard scan, which is what it was.
+        assert_eq!(
+            serde_json::from_str::<ScanProfile>("\"standard\"").unwrap_or_default(),
+            ScanProfile::Standard
+        );
     }
 
     #[test]

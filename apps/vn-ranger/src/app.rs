@@ -353,6 +353,11 @@ impl App {
     }
 
     fn start_scan(&mut self, ctx: &egui::Context, elevated: bool) {
+        self.start_scan_with(ctx, elevated, vnr_core::ScanProfile::Standard);
+    }
+
+    /// Start a scan at the size the person chose, unless one is already running.
+    fn start_scan_with(&mut self, ctx: &egui::Context, elevated: bool, profile: vnr_core::ScanProfile) {
         if self.world.busy() {
             return;
         }
@@ -360,8 +365,10 @@ impl App {
         self.world.notice = None;
         self.world.scan = ScanState::Running(if elevated {
             "Waiting for Windows consent".to_owned()
-        } else {
+        } else if profile == vnr_core::ScanProfile::Standard {
             "Starting".to_owned()
+        } else {
+            format!("Starting a {}…", profile.label().to_lowercase())
         });
         self.cancel = None;
         self.receiver = Some(if elevated {
@@ -369,7 +376,7 @@ impl App {
         } else {
             let token = Arc::new(AtomicBool::new(false));
             self.cancel = Some(Arc::clone(&token));
-            worker::spawn_scan(ctx.clone(), token)
+            worker::spawn_scan(ctx.clone(), token, profile)
         });
     }
 
@@ -1241,6 +1248,7 @@ impl App {
     fn apply(&mut self, action: Action, ctx: &egui::Context) {
         match action {
             Action::Scan => self.start_scan(ctx, false),
+            Action::ScanProfile(profile) => self.start_scan_with(ctx, false, profile),
             Action::CancelScan => {
                 if let Some(token) = &self.cancel {
                     token.store(true, Ordering::Relaxed);

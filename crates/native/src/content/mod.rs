@@ -177,6 +177,61 @@ pub fn scan(
     state.report
 }
 
+/// Read a named list of files rather than a folder.
+///
+/// This is what a deep scan uses: the programs that start on their own, and nothing else. A
+/// link is refused for the same reason the walk refuses one, and the limits are the caller's
+/// so the scan can say how much it read.
+pub fn scan_files(
+    paths: &[PathBuf],
+    library: &Library,
+    hashes: &SignatureSet,
+    limits: &Limits,
+    cancel: &dyn Fn() -> bool,
+) -> Report {
+    let started = Instant::now();
+    let mut state = State {
+        report: Report {
+            roots: Vec::new(),
+            signatures: library.signatures().len(),
+            signature_refusals: library.refusals().len(),
+            ..Report::default()
+        },
+        library,
+        hashes,
+        limits: *limits,
+    };
+    for path in paths {
+        if cancel() {
+            state.report.cancelled = true;
+            break;
+        }
+        if state.report.truncated || state.report.files.len() >= limits.max_files {
+            state.report.truncated = true;
+            break;
+        }
+        match std::fs::symlink_metadata(path) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                state
+                    .report
+                    .refused
+                    .push(format!("{}: a link, not followed", path.display()));
+                continue;
+            }
+            Ok(metadata) if !metadata.is_file() => continue,
+            Ok(_) => {}
+            Err(error) => {
+                state.report.refused.push(format!("{}: {error}", path.display()));
+                continue;
+            }
+        }
+        state.report.seen = state.report.seen.saturating_add(1);
+        state.file(path);
+    }
+    state.report.elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+    state.report
+}
+
 /// The mutable half of a run, kept apart so the walk's signature stays readable.
 struct State<'a> {
     report: Report,

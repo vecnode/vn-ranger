@@ -162,6 +162,16 @@ old build answering. Fix it for development without weakening the lock:
 
 ### 5d. Scan profiles
 
+**Done.** `ScanProfile` is `Quick`, `Standard` or `Deep`, recorded in every snapshot (a
+snapshot written before profiles existed loads as a standard scan, which is what it was).
+`Quick` skips the package and agent-stack inventories and says so in the collector status
+rather than reporting an empty list; `Deep` adds `content::scan_files` over the programs that
+start on their own — 400 files and 256 MB of bounds — and its status says how many files were
+read against how many body signatures. `scan()` is `scan_with(Standard)`, so every existing
+caller means what it always did. The top bar's scan button gains a **Size** menu with the
+three profiles and their one-line description, and the progress line says *"Starting a quick
+scan…"* for the sizes that are not the default.
+
 | Step | File | What to do |
 |---|---|---|
 | 1 | `native/src/scan.rs` | A `Profile` parameter: `Quick` (processes, startup, listeners — the table and what runs), `Standard` (today's scan), `Deep` (adds packages, agent stack, and the content engine over the startup targets). Each collector already reports its own status, so a profile is which ones run, not a different code path. |
