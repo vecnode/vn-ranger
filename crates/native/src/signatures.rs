@@ -20,6 +20,10 @@ use vnr_core::{HashAlgorithm, SignatureReport, SignatureSet};
 /// the literals sit back to back in the read-only section, so the signature is there
 /// byte for byte across the joins. Each byte is stored XOR'd with [`EICAR_MASK`].
 ///
+/// The table is wrapped in `black_box` because the optimiser will otherwise fold the decode
+/// back into a constant and put the plain text in the binary — which is exactly what the
+/// first release build did, and what `cargo xtask signature` now checks for.
+///
 /// What the self-test writes is still a real EICAR file, which is the point of it: the file
 /// is the test, and an antivirus removing it is the expected result.
 #[must_use]

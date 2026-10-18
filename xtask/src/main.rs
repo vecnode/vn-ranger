@@ -19,13 +19,14 @@ fn main() {
         "language" => language(),
         "packs" => packs(),
         "coverage" => coverage(),
+        "signature" => signature(),
         "features" => features(),
         "version" => {
             println!("{}", env!("CARGO_PKG_VERSION"));
             Ok(())
         }
         other => Err(format!(
-            "unknown xtask `{other}`; try ci, fmt-fix, lint, test, check, no-network, language, packs, coverage, features or version"
+            "unknown xtask `{other}`; try ci, fmt-fix, lint, test, check, no-network, language, packs, coverage, signature, features or version"
         )),
     };
     if let Err(error) = result {
@@ -87,6 +88,7 @@ fn ci() -> Result<(), String> {
     language()?;
     packs()?;
     coverage_is_current()?;
+    signature()?;
     no_content_engine()?;
     lint()?;
     test()
@@ -211,6 +213,78 @@ fn write_between_markers(path: &Path, table: &str) -> Result<bool, String> {
     }
     std::fs::write(path, next).map_err(|error| format!("could not write {}: {error}", path.display()))?;
     Ok(true)
+}
+
+/// The shipped binary must not contain the antivirus test file.
+///
+/// The self-test writes a real EICAR file at run time, which is the point of it, but the
+/// *program* must not carry the file: a binary that contains it is quarantined on install,
+/// and one release of this project was. The bytes are decoded at run time and the optimiser
+/// is held off with `black_box`; this check is what makes that a fact rather than a hope.
+///
+/// It reads whichever binaries are built and says so when none is, because `ci` runs before
+/// anything is linked.
+fn signature() -> Result<(), String> {
+    let root = workspace_root()?;
+    let needle = antivirus_test_file();
+    let mut checked: u32 = 0;
+    for profile in ["release", "debug"] {
+        let path = root.join("target").join(profile).join(if cfg!(windows) {
+            "vn-ranger.exe"
+        } else {
+            "vn-ranger"
+        });
+        if !path.is_file() {
+            continue;
+        }
+        let bytes =
+            std::fs::read(&path).map_err(|error| format!("could not read {}: {error}", path.display()))?;
+        checked = checked.saturating_add(1);
+        if contains(&bytes, &needle) {
+            return Err(format!(
+                "{} contains the antivirus test file, which an antivirus will quarantine on \
+                 install. The decode in native/src/signatures.rs must not be folded by the \
+                 optimiser.",
+                path.display()
+            ));
+        }
+        // A prefix is what survives if the optimiser folds one chunk at a time: worth
+        // knowing about, and not on its own a reason to refuse a build.
+        if contains(&bytes, b"X5O!P%@AP[4") {
+            println!(
+                "signature: {} contains a prefix of the test file but not the file",
+                path.display()
+            );
+        }
+    }
+    if checked == 0 {
+        println!("signature: no built binary to check");
+    } else {
+        println!("signature: {checked} built binary/binaries carry no test file");
+    }
+    Ok(())
+}
+
+/// The 68 bytes of the EICAR test file, assembled here rather than stored.
+fn antivirus_test_file() -> Vec<u8> {
+    const PIECES: [&str; 8] = [
+        "X5O!P%@AP[4",
+        "\\PZX54(P^)7C",
+        "C)7}$EIC",
+        "AR-STANDA",
+        "RD-ANTIVI",
+        "RUS-TEST-",
+        "FILE!$H+H",
+        "*",
+    ];
+    PIECES.concat().into_bytes()
+}
+
+fn contains(haystack: &[u8], needle: &[u8]) -> bool {
+    if needle.is_empty() || haystack.len() < needle.len() {
+        return false;
+    }
+    haystack.windows(needle.len()).any(|window| window == needle)
 }
 
 /// The content scan is optional, and the default build must not contain its engine.

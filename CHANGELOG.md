@@ -156,6 +156,103 @@ All notable changes to vn-ranger are recorded here. The format follows
   are in the vocabulary and not in a collector, so the one rule that named `agent` was
   removed rather than left in the catalogue looking like coverage.
 
+### Fixed — the binary no longer contains the antivirus test file
+
+- The EICAR test string was a byte literal in the product, so **`vn-ranger.exe` contained a
+  complete antivirus test file** — Defender refused to execute this project's own test build
+  with `ERROR_VIRUS_INFECTED`, which is what a browser would do to a download. The bytes are
+  stored masked and decoded at run time, with `black_box` holding the optimiser off.
+- Measured rather than assumed: a byte search finds **no complete test file** in either
+  profile, and the release binary runs. A *prefix* of it can survive the optimiser in an
+  optimised build, which is not a whole file and is not what an engine matches.
+- `cargo xtask signature` reads whichever binaries are built and **fails the build** if a
+  complete test file ever comes back, so the claim is checked rather than remembered.
+### Changed — the interface
+
+- The overview opens with a line of counts rather than four tiles, and says how long the last
+  scan ago was, how long it took and how many collectors answered, where a person reads about
+  the scan.
+- "No network. No telemetry." moved from the overview to Settings, with the data folder beside
+  it, because it is a statement about the program rather than a fact about the machine.
+- Dialogs have one header size and one padding: a dialog titled at a page's size reads as a
+  page in a box, and the margin now comes from the theme rather than from each dialog.
+- The controls above every table are chips and a 24-pixel search field, sized with the table
+  header, instead of links at body size.
+- The journal's failure sentence now names the folder and the two things that cause it —
+  a security program, or a policy — and the variable that moves it.
+
+### Fixed
+
+- A journal that could not be opened said `Access is denied` and nothing a person could act
+  on. It now says which of the three problems it is: this program may not write in the folder
+  (a security program, a folder policy or a sandbox all look like this, and
+  `VN_RANGER_DATA_DIR` moves the folder), the journal file itself cannot be opened (it is
+  moved aside as `journal.kept-<time>.ndjson` and a new one starts, so the session is recorded
+  after all), or something else, reported as it came.
+- `--diagnose` prints the folder, whether this program can write in it, whether the journal
+  opens, which pack is loaded and how many keys are trusted — facts that were checked at that
+  moment, so a refusal can be quoted rather than described.
+- The live indicator toggled once per poll, which reads as a metronome and keeps looking
+  alive after the thread that feeds it has stopped. It now flashes for 220 ms as each
+  poll arrives, stays quietly lit in between, and turns amber after three missed beats.
+- A quoted startup command with spaces was tokenised into `C:\Program`, so a duplicated
+  startup group was labelled "program". The tokeniser honours the closing quote, and an
+  ambiguous command is labelled with its entry name.
+
+### Changed
+
+- The roadmap compresses the act, resident and rule-pack milestones into a single
+  **v0.1.6**, built in five waves with one gate and cut through release candidates.
+  `0.2.0` is distribution and signing; `1.0.0` is the audited release.
+- `docs/PLAN.md` now specifies the action path — the journal protocol, the typed action
+  API, the four refusals, the cleanup allowlist table and crash recovery — the rule-pack
+  format (one signed JSON file, a closed vocabulary, no code, no file content, an
+  optional and separately consented content scan), and the resident shell (tray, opt-in
+  autostart, scheduler, close-to-tray off by default).
+- `docs/BENCHMARKS.md` carries the 0.1.6 budgets and the 24-hour soak that must hold
+  before the tag, and `AGENTS.md` carries the deletion and pack contracts those waves
+  have to obey.
+
+### Added — coverage, the first half of wave 5
+
+- **The Windows registry is a table now.** Nineteen persistence surfaces — `Run`, `RunOnce`
+  and the legacy `RunServices` in both registry views, Winlogon `Shell`, `Userinit` and
+  `Notify`, `AppInit_DLLs`, the IFEO `Debugger`, Active Setup's `StubPath`, a service's
+  `ServiceDll`, print monitors, both LSA package lists, netsh helpers, the screensaver and
+  time-provider DLLs — are rows read through one `KeyReader` trait and parsed by one
+  function, so a fixture for each runs on a machine that has never seen Windows. A key that
+  is not there is an absence rather than an error, and the fixtures that capture an absence
+  say so. A `REG_MULTI_SZ` is a list, so each string in it is its own entry.
+- **A service in a user-writable folder is a finding**: `startup.service-dll-user-writable`
+  fires on a `ServiceDll` under `ProgramData`, `LocalAppData`, `AppData` or a temporary
+  folder, with a positive and a negative case against the shipped pack itself.
+- A scan now reads 429 startup entries on the maintainer's machine where it read 132, and the
+  collector's status line names the techniques the table covers rather than only the count.
+- **Scheduled tasks**: every task file is parsed by a pure, fixture-tested reader (URI, action,
+  account, enabled, hidden, triggers), read with `quick-xml`, which the plist reader already
+  brought in. The task folder needs administrative rights to list, so a standard scan reports
+  the collector as unavailable with that reason instead of reporting no tasks.
+- **`hidden` is a fact**, so "a hidden scheduled task runs a program from a folder a user can
+  write" is a shipped rule with a positive and a negative case.
+- **The agent stack**: the collector reads four configuration surfaces — `authorized_keys`
+  lines with a forced command or a supplied environment, `~/.ssh/rc`, `ProxyCommand` and
+  `LocalCommand` in `~/.ssh/config`, and an MCP client's `mcpServers` — and says what each
+  would run. A private key, a known-hosts file and every browser profile are never read, and
+  the status line names which files were read and which were not there.
+- **The content scan has a consent screen.** Settings says whether this build has one, names
+  the folders, the file and depth limits and what is kept, and runs it on a thread of its own
+  so the window keeps drawing. The default build says it was not compiled with one, which is
+  a state rather than an error. The journal records the counts, never the content.
+- **Two more detections**: `startup.accessibility-swap` fires on a debugger registered for a
+  program Windows starts before sign-in (`sethc.exe`, `utilman.exe` and the rest), and
+  `service.unquoted-path` is a built-in rule for a service image path with a space and no
+  quotes, which Windows resolves one folder at a time.
+- **The coverage table is generated** from the pack by `cargo xtask coverage`, and `ci` fails
+  when a rule exists and the table does not mention it.
+- **A rule about a subject nothing collects is now a load error.** `agent` and `file-event`
+  are in the vocabulary and not in a collector, so the one rule that named `agent` was
+  removed rather than left in the catalogue looking like coverage.
+
 ### Fixed — the binary no longer contains a virus signature
 
 - The EICAR test string was a byte literal in the product, so **every antivirus engine
