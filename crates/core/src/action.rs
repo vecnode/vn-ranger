@@ -7,6 +7,8 @@
 
 use std::fmt;
 
+use crate::model::{AutorunFact, AutorunKind, AutorunScope};
+
 /// An entry inside a root, named by sixteen hexadecimal characters.
 ///
 /// It is not a file name and not a path. The action layer builds every string it hands
@@ -234,6 +236,16 @@ pub enum Refusal {
     HashMismatch,
     /// The file is larger than the action path will hash, so it cannot be verified.
     TooLarge,
+    /// The entry starts for every account, and changing it needs an administrator.
+    MachineScope,
+    /// This build reads that kind of startup entry and does not change it.
+    UnsupportedSurface,
+    /// The name a startup entry would be written under is not one ranger will write.
+    NotAName,
+    /// The command is not something ranger will put in a startup entry.
+    NotACommand,
+    /// The scan and the screen do not agree about which entry is meant.
+    NotTheSameEntry,
 }
 
 impl Refusal {
@@ -261,6 +273,21 @@ impl Refusal {
             Self::TooLarge => {
                 "The file is larger than ranger will hash, so it could not be verified after the move."
             }
+            Self::MachineScope => {
+                "That entry starts for every account on this machine. Changing it needs an administrator, and ranger has no standing elevation."
+            }
+            Self::UnsupportedSurface => {
+                "This build reads that kind of startup entry and does not change it yet."
+            }
+            Self::NotAName => {
+                "A startup entry needs a name of one to 64 characters, with no control characters and no backslash."
+            }
+            Self::NotACommand => {
+                "A startup entry needs a command: one line, starting with a program path, optionally followed by arguments."
+            }
+            Self::NotTheSameEntry => {
+                "The scan and this screen do not agree about which entry that is, so nothing was done."
+            }
         }
     }
 
@@ -278,8 +305,269 @@ impl Refusal {
             Self::DestinationOccupied => "destination occupied",
             Self::HashMismatch => "hash mismatch",
             Self::TooLarge => "too large to verify",
+            Self::MachineScope => "needs an administrator",
+            Self::UnsupportedSurface => "not changed by this build",
+            Self::NotAName => "not a name",
+            Self::NotACommand => "not a command",
+            Self::NotTheSameEntry => "not the entry that was scanned",
         }
     }
+}
+
+/// A startup surface a change may be made in.
+///
+/// Deliberately not a [`Surface`]: that table describes folders whose files are cleaned,
+/// where a file is named by an [`EntryId`]. A startup entry is a registry value or a `.lnk`,
+/// identified by the [`AutorunFact`] a scan produced, and this is the row that governs it —
+/// which knows whether this build may write it, and why not when it may not.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum StartupSurface {
+    /// `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
+    WinUserRun,
+    /// `HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce`.
+    WinUserRunOnce,
+    /// The user's Startup folder, where one fact is one `.lnk`.
+    UserStartupFolder,
+    /// `HKLM`'s `Run` and `RunOnce`: machine scope, read and refused.
+    WinMachineRun,
+    /// The machine's Startup folder: read and refused.
+    MachineStartupFolder,
+    /// An XDG autostart entry in the user's home: read in this build.
+    LinuxXdgAutostart,
+    /// A user systemd unit: read in this build.
+    LinuxSystemdUser,
+    /// A cron entry: read in this build.
+    LinuxCron,
+    /// A launch agent in the user's home: read in this build.
+    MacLaunchAgent,
+    /// Anything else the scan reports, which this build does not change.
+    Other,
+}
+
+impl StartupSurface {
+    /// Every surface, for the interface and the tests.
+    pub const ALL: [StartupSurface; 10] = [
+        Self::WinUserRun,
+        Self::WinUserRunOnce,
+        Self::UserStartupFolder,
+        Self::WinMachineRun,
+        Self::MachineStartupFolder,
+        Self::LinuxXdgAutostart,
+        Self::LinuxSystemdUser,
+        Self::LinuxCron,
+        Self::MacLaunchAgent,
+        Self::Other,
+    ];
+
+    /// The stable name, used in the journal and in a settings file.
+    #[must_use]
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::WinUserRun => "win.user.run",
+            Self::WinUserRunOnce => "win.user.runonce",
+            Self::UserStartupFolder => "win.user.startupfolder",
+            Self::WinMachineRun => "win.machine.run",
+            Self::MachineStartupFolder => "win.machine.startupfolder",
+            Self::LinuxXdgAutostart => "linux.xdg.autostart",
+            Self::LinuxSystemdUser => "linux.systemd.user",
+            Self::LinuxCron => "linux.cron",
+            Self::MacLaunchAgent => "mac.launchagent",
+            Self::Other => "other",
+        }
+    }
+
+    /// What a person calls it.
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::WinUserRun => "This account's Run key",
+            Self::WinUserRunOnce => "This account's RunOnce key",
+            Self::UserStartupFolder => "This account's Startup folder",
+            Self::WinMachineRun => "The machine's Run keys",
+            Self::MachineStartupFolder => "The machine's Startup folder",
+            Self::LinuxXdgAutostart => "Autostart entries in your home folder",
+            Self::LinuxSystemdUser => "Your systemd user units",
+            Self::LinuxCron => "Your cron entries",
+            Self::MacLaunchAgent => "Launch agents in your home folder",
+            Self::Other => "A startup surface this build does not change",
+        }
+    }
+
+    /// Whether this build may write this surface.
+    ///
+    /// It is a table rather than a check at the call site: a surface is writable because a
+    /// row says so, and a new surface without a row cannot be acted on by accident.
+    #[must_use]
+    pub fn writable(self) -> bool {
+        self.refusal().is_none()
+    }
+
+    /// Why this build may not write it, when it may not.
+    #[must_use]
+    pub fn refusal(self) -> Option<Refusal> {
+        match self {
+            Self::WinUserRun | Self::WinUserRunOnce | Self::UserStartupFolder => None,
+            // A machine-wide entry is a two-hundred-millisecond UAC prompt away from being
+            // removable, and that is exactly the standing privilege this program refuses.
+            Self::WinMachineRun | Self::MachineStartupFolder => Some(Refusal::MachineScope),
+            // Read today, written later: saying "not yet" is the truth, and a refusal a
+            // person can read is worth more than a button that fails.
+            Self::LinuxXdgAutostart
+            | Self::LinuxSystemdUser
+            | Self::LinuxCron
+            | Self::MacLaunchAgent
+            | Self::Other => Some(Refusal::UnsupportedSurface),
+        }
+    }
+
+    /// The surface a scan's fact belongs to.
+    ///
+    /// `Run` and `RunOnce` share one [`AutorunKind`], so the location is what tells them
+    /// apart: a fact whose location names `RunOnce` is not the same key as one that does not.
+    #[must_use]
+    pub fn of(entry: &AutorunFact) -> Self {
+        let location = entry.location.to_lowercase();
+        match (entry.kind, entry.scope) {
+            (AutorunKind::RunKey, AutorunScope::User) if location.contains("runonce") => Self::WinUserRunOnce,
+            (AutorunKind::RunKey, AutorunScope::User) => Self::WinUserRun,
+            (AutorunKind::RunKey, AutorunScope::System) => Self::WinMachineRun,
+            (AutorunKind::StartupFolder, AutorunScope::User) => Self::UserStartupFolder,
+            (AutorunKind::StartupFolder, AutorunScope::System) => Self::MachineStartupFolder,
+            (AutorunKind::XdgAutostart, _) => Self::LinuxXdgAutostart,
+            (AutorunKind::SystemdUnit, _) => Self::LinuxSystemdUser,
+            (AutorunKind::Cron, _) => Self::LinuxCron,
+            (AutorunKind::LaunchAgent, _) => Self::MacLaunchAgent,
+            _ => Self::Other,
+        }
+    }
+}
+
+/// A change to one startup entry.
+///
+/// The unit is the entry a scan produced, never a path and never a key name a caller made up:
+/// `Remove` carries the fact, so the implementation can re-read that entry and refuse when it
+/// is no longer the entry a person was shown.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum StartupChange {
+    /// Put a command in this account's startup.
+    Add {
+        /// Where it goes.
+        surface: StartupSurface,
+        /// The name it is registered under.
+        name: String,
+        /// The command line, as a person typed it.
+        command: String,
+    },
+    /// Take one entry away, keeping what it said so it can be put back by hand.
+    Remove {
+        /// Where it lives.
+        surface: StartupSurface,
+        /// The entry as the scan reported it.
+        entry: AutorunFact,
+    },
+}
+
+impl StartupChange {
+    /// The surface this change happens in.
+    #[must_use]
+    pub fn surface(&self) -> StartupSurface {
+        match self {
+            Self::Add { surface, .. } | Self::Remove { surface, .. } => *surface,
+        }
+    }
+
+    /// Why this change may not be made, when it may not.
+    ///
+    /// Everything that can be decided without touching the machine is decided here, so the
+    /// implementation only has to re-read and compare.
+    pub fn check(&self) -> Result<(), Refusal> {
+        let surface = self.surface();
+        if let Some(refusal) = surface.refusal() {
+            return Err(refusal);
+        }
+        match self {
+            Self::Add { name, command, .. } => {
+                if !name_is_writable(name) {
+                    return Err(Refusal::NotAName);
+                }
+                if !command_is_writable(command) {
+                    return Err(Refusal::NotACommand);
+                }
+                Ok(())
+            }
+            Self::Remove { entry, .. } => {
+                if StartupSurface::of(entry) != surface {
+                    return Err(Refusal::NotTheSameEntry);
+                }
+                if entry.scope != AutorunScope::User {
+                    return Err(Refusal::MachineScope);
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+/// The longest name a startup entry may be given.
+pub const MAX_STARTUP_NAME: usize = 64;
+
+/// The longest command a startup entry may be given.
+pub const MAX_STARTUP_COMMAND: usize = 4096;
+
+/// Whether a name is one this program will write into a startup surface.
+///
+/// It is not a path, a key path or an escape: a backslash in a registry value name reads as
+/// a key beneath another key, and a control character reads as two entries in a file.
+#[must_use]
+pub fn name_is_writable(name: &str) -> bool {
+    let trimmed = name.trim();
+    if trimmed.is_empty()
+        || trimmed.len() > MAX_STARTUP_NAME
+        || trimmed != name
+        || trimmed == "."
+        || trimmed == ".."
+    {
+        return false;
+    }
+    !trimmed
+        .chars()
+        .any(|character| character == '\\' || character.is_control())
+}
+
+/// Whether a command is one this program will write into a startup surface.
+#[must_use]
+pub fn command_is_writable(command: &str) -> bool {
+    let trimmed = command.trim();
+    if trimmed.is_empty() || trimmed.len() > MAX_STARTUP_COMMAND || trimmed.contains(['\n', '\r', '\0']) {
+        return false;
+    }
+    // The first token is the program: quoted, so a path with spaces is one token, or bare.
+    let program = match trimmed.strip_prefix('"') {
+        Some(rest) => match rest.split_once('"') {
+            Some((program, tail)) => {
+                // A quoted path must be followed by nothing or by a space, or the quote did
+                // not close where it looked like it closed.
+                if !tail.is_empty() && !tail.starts_with(' ') {
+                    return false;
+                }
+                program
+            }
+            None => return false,
+        },
+        None => trimmed.split_whitespace().next().unwrap_or(""),
+    };
+    is_absolute_program(program)
+}
+
+/// Whether a program token names a program by its whole path.
+fn is_absolute_program(program: &str) -> bool {
+    let bytes = program.as_bytes();
+    program.starts_with('/')
+        || program.starts_with('\\')
+        || (bytes.len() >= 3
+            && bytes[0].is_ascii_alphabetic()
+            && bytes[1] == b':'
+            && (bytes[2] == b'\\' || bytes[2] == b'/'))
 }
 
 #[cfg(test)]
@@ -365,6 +653,11 @@ mod tests {
             Refusal::DestinationOccupied,
             Refusal::HashMismatch,
             Refusal::TooLarge,
+            Refusal::MachineScope,
+            Refusal::UnsupportedSurface,
+            Refusal::NotAName,
+            Refusal::NotACommand,
+            Refusal::NotTheSameEntry,
         ] {
             assert!(
                 refusal.sentence().ends_with('.'),
@@ -380,5 +673,185 @@ mod tests {
     fn a_root_names_itself_for_the_journal() {
         assert_eq!(RootId::Quarantine.id(), "quarantine");
         assert_eq!(RootId::Clean(Surface::LinuxCache).id(), "linux.cache");
+    }
+
+    fn entry(kind: AutorunKind, scope: AutorunScope, location: &str, command: &str) -> AutorunFact {
+        AutorunFact {
+            id: "autorun:test".to_owned(),
+            name: "Thing".to_owned(),
+            command: command.to_owned(),
+            location: location.to_owned(),
+            kind,
+            scope,
+            enabled: true,
+            hidden: false,
+            exe: None,
+            sha256: None,
+            signature: crate::model::SignatureStatus::NotChecked,
+        }
+    }
+
+    #[test]
+    fn a_user_surface_is_writable_and_a_machine_one_says_who_can_change_it() {
+        for surface in StartupSurface::ALL {
+            match surface {
+                StartupSurface::WinUserRun
+                | StartupSurface::WinUserRunOnce
+                | StartupSurface::UserStartupFolder => {
+                    assert!(surface.writable(), "{} must be writable", surface.id());
+                    assert_eq!(surface.refusal(), None);
+                }
+                StartupSurface::WinMachineRun | StartupSurface::MachineStartupFolder => {
+                    assert!(!surface.writable());
+                    assert_eq!(surface.refusal(), Some(Refusal::MachineScope));
+                }
+                _ => {
+                    assert!(!surface.writable(), "{} is not written here", surface.id());
+                    assert_eq!(surface.refusal(), Some(Refusal::UnsupportedSurface));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_run_once_entry_is_not_the_run_key() {
+        let run = entry(
+            AutorunKind::RunKey,
+            AutorunScope::User,
+            r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
+            r"C:\Program Files\A\a.exe",
+        );
+        let once = entry(
+            AutorunKind::RunKey,
+            AutorunScope::User,
+            r"HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce",
+            r"C:\Program Files\A\a.exe",
+        );
+        assert_eq!(StartupSurface::of(&run), StartupSurface::WinUserRun);
+        assert_eq!(StartupSurface::of(&once), StartupSurface::WinUserRunOnce);
+        let folder = entry(
+            AutorunKind::StartupFolder,
+            AutorunScope::User,
+            r"C:\Users\me\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\a.lnk",
+            "",
+        );
+        assert_eq!(StartupSurface::of(&folder), StartupSurface::UserStartupFolder);
+        let machine = entry(
+            AutorunKind::RunKey,
+            AutorunScope::System,
+            r"HKLM\Software\Microsoft\Windows\CurrentVersion\Run",
+            r"C:\Windows\a.exe",
+        );
+        assert_eq!(StartupSurface::of(&machine), StartupSurface::WinMachineRun);
+    }
+
+    #[test]
+    fn a_removal_that_is_not_the_entry_that_was_scanned_is_refused() {
+        let machine = entry(
+            AutorunKind::RunKey,
+            AutorunScope::System,
+            r"HKLM\Software\Microsoft\Windows\CurrentVersion\Run",
+            r"C:\Windows\a.exe",
+        );
+        let wrong_surface = StartupChange::Remove {
+            surface: StartupSurface::WinUserRun,
+            entry: machine,
+        };
+        assert_eq!(wrong_surface.check(), Err(Refusal::NotTheSameEntry));
+
+        let machine = entry(
+            AutorunKind::RunKey,
+            AutorunScope::System,
+            r"HKLM\Software\Microsoft\Windows\CurrentVersion\Run",
+            r"C:\Windows\a.exe",
+        );
+        let scope = StartupChange::Remove {
+            surface: StartupSurface::WinMachineRun,
+            entry: machine,
+        };
+        assert_eq!(scope.check(), Err(Refusal::MachineScope));
+
+        let user = entry(
+            AutorunKind::RunKey,
+            AutorunScope::User,
+            r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
+            r"C:\Program Files\A\a.exe",
+        );
+        let ok = StartupChange::Remove {
+            surface: StartupSurface::WinUserRun,
+            entry: user,
+        };
+        assert_eq!(ok.check(), Ok(()));
+    }
+
+    #[test]
+    fn a_name_that_could_be_a_key_path_is_not_a_name() {
+        for bad in ["", " ", " a", "a ", ".", "..", "a\\b", "line\nbreak", "tab\tkey"] {
+            assert!(!name_is_writable(bad), "{bad:?} must be refused");
+        }
+        for good in ["Acme Agent", "a", "A-1_2", "Ünïcode"] {
+            assert!(name_is_writable(good), "{good:?} must be accepted");
+        }
+        assert!(!name_is_writable(&"n".repeat(MAX_STARTUP_NAME + 1)));
+        assert!(name_is_writable(&"n".repeat(MAX_STARTUP_NAME)));
+    }
+
+    #[test]
+    fn a_command_that_is_not_a_program_is_not_written() {
+        for bad in [
+            "",
+            "updater.exe",
+            "start acme",
+            "C:\\a.exe\nb",
+            "\"C:\\Program Files\\A\\a.exe\"x",
+            "\"C:\\never closed",
+        ] {
+            assert!(!command_is_writable(bad), "{bad:?} must be refused");
+        }
+        for good in [
+            r"C:\Program Files\Acme\acme.exe",
+            "\"C:\\Program Files\\Acme\\acme.exe\" --quiet",
+            "/opt/acme/acme",
+            r"C:\a.exe",
+        ] {
+            assert!(command_is_writable(good), "{good:?} must be accepted");
+        }
+    }
+
+    #[test]
+    fn an_add_is_checked_before_anything_is_written() {
+        let ok = StartupChange::Add {
+            surface: StartupSurface::WinUserRun,
+            name: "Acme".to_owned(),
+            command: r"C:\Program Files\Acme\acme.exe".to_owned(),
+        };
+        assert_eq!(ok.check(), Ok(()));
+        let bad_name = StartupChange::Add {
+            surface: StartupSurface::WinUserRun,
+            name: "a\\b".to_owned(),
+            command: r"C:\a.exe".to_owned(),
+        };
+        assert_eq!(bad_name.check(), Err(Refusal::NotAName));
+        let bad_command = StartupChange::Add {
+            surface: StartupSurface::WinUserRun,
+            name: "Acme".to_owned(),
+            command: "acme.exe".to_owned(),
+        };
+        assert_eq!(bad_command.check(), Err(Refusal::NotACommand));
+        let machine = StartupChange::Add {
+            surface: StartupSurface::WinMachineRun,
+            name: "Acme".to_owned(),
+            command: r"C:\a.exe".to_owned(),
+        };
+        assert_eq!(machine.check(), Err(Refusal::MachineScope));
+    }
+
+    #[test]
+    fn every_startup_surface_names_itself_once() {
+        let mut seen = std::collections::HashSet::new();
+        for surface in StartupSurface::ALL {
+            assert!(seen.insert(surface.id()), "{} appears twice", surface.id());
+            assert!(!surface.label().is_empty());
+        }
     }
 }

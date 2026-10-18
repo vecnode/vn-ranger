@@ -93,6 +93,14 @@ This is the first new destructive verb since quarantine. `AGENTS.md` §2 applies
 two reviewers, the §12 matrix (traversal, links, hard links, TOCTOU, crash, restore), an
 allowlist row per surface, and a journal `intent` before the act and a `result` after.
 
+**Step 1 is done** in `core/src/action.rs`: `StartupSurface` is its own ten-row table
+(three writable user surfaces, two machine surfaces refused for want of elevation, five read
+and not yet written), `StartupChange::{Add, Remove}` carries the `AutorunFact` so an act can
+re-read the entry it is about to change, and five refusals — `MachineScope`,
+`UnsupportedSurface`, `NotAName`, `NotACommand`, `NotTheSameEntry` — each with a sentence a
+person can read. Name and command rules are pure functions with tests: a name cannot look
+like a key path, and a command must start with a program path, quoted or bare.
+
 | Step | File | What to do |
 |---|---|---|
 | 1 | `core/src/action.rs` | A new `Action::StartupChange` with `Add`/`Remove`, one `Surface` row per writable startup surface (HKCU Run, HKCU RunOnce, machine Run needs elevation and is refused, the user Startup folder), each with its own refusal tests. **No path is accepted**: the identity is `AutorunFact.id`, resolved from the surface's own root. |
