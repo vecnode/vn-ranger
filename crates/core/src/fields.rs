@@ -83,6 +83,8 @@ pub enum Subject {
     Process,
     /// A socket waiting for a connection.
     Listener,
+    /// A connection the machine is holding, and the process holding it.
+    Flow,
     /// An installed package.
     Package,
     /// A change under a watched folder.
@@ -130,6 +132,25 @@ const LISTENER: &[Field] = &[
     text("state"),
 ];
 
+/// The fields of a connection the machine is holding.
+///
+/// `process_path`, `from_temp` and `from_downloads` are joined from the scan's process table
+/// when the fact is built: a rule can ask "is the process talking to that address running
+/// from a temporary folder" without a language for joins (`docs/PLAN-0.1.7.md` §4.5).
+const FLOW: &[Field] = &[
+    number("bytes"),
+    boolean("from_downloads"),
+    boolean("from_temp"),
+    number("local_port"),
+    number("pid"),
+    text("process"),
+    text("process_path"),
+    text("protocol"),
+    text("remote_addr"),
+    number("remote_port"),
+    text("state"),
+];
+
 /// The fields of an installed package or application.
 const PACKAGE: &[Field] = &[text("name"), text("publisher"), text("source"), text("version")];
 
@@ -172,10 +193,11 @@ const FILE_MATCH: &[Field] = &[
 
 impl Subject {
     /// Every subject, in the order `docs/RULES.md` lists them.
-    pub const ALL: [Subject; 8] = [
+    pub const ALL: [Subject; 9] = [
         Subject::Startup,
         Subject::Process,
         Subject::Listener,
+        Subject::Flow,
         Subject::Package,
         Subject::FileEvent,
         Subject::Agent,
@@ -190,6 +212,7 @@ impl Subject {
             Self::Startup => "startup",
             Self::Process => "process",
             Self::Listener => "listener",
+            Self::Flow => "flow",
             Self::Package => "package",
             Self::FileEvent => "file-event",
             Self::Agent => "agent",
@@ -211,6 +234,7 @@ impl Subject {
             Self::Startup => STARTUP,
             Self::Process => PROCESS,
             Self::Listener => LISTENER,
+            Self::Flow => FLOW,
             Self::Package => PACKAGE,
             Self::FileEvent => FILE_EVENT,
             Self::Agent => AGENT,
@@ -251,6 +275,7 @@ impl Subject {
             Self::Startup
             | Self::Process
             | Self::Listener
+            | Self::Flow
             | Self::Package
             | Self::Agent
             | Self::File

@@ -6,6 +6,7 @@
 
 pub mod agentstack;
 pub mod autoruns;
+pub mod flows;
 pub mod host;
 pub mod listeners;
 pub mod packages;

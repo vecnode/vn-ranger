@@ -321,6 +321,7 @@ table instead of leaving a blank.
 | `T1611` | `listener.every-interface` | Notice | pack | A socket waiting for a connection on every interface |
 | `—` | `file.content-match` | Attention | built-in | A file holds the bytes a signature describes |
 | `—` | `file.hash-match` | Attention | built-in | A file matched a signature by hash |
+| `—` | `flow.temp-process-remote` | Notice | built-in | A program in a temporary folder is talking to another machine |
 | `—` | `listener.public-new-process` | Notice | built-in | A recently started process listens beyond loopback |
 | `—` | `listener.public-unknown-owner` | Info | built-in | A public socket has no visible owner |
 | `—` | `process.parent-exited` | Info | built-in | A process outlived the process that started it |
@@ -328,7 +329,7 @@ table instead of leaving a blank.
 | `—` | `startup.bare-command` | Notice | built-in | A startup command does not name a full path |
 | `—` | `startup.duplicate-command` | Info | built-in | One command is registered as several startup items |
 
-30 rules covering 14 technique(s): 18 built in and 12 from `packs/ranger.core.json`.
+31 rules covering 14 technique(s): 19 built in and 12 from `packs/ranger.core.json`.
 
 No technique, and why — a rule that cannot name one says so:
 
@@ -340,6 +341,7 @@ No technique, and why — a rule that cannot name one says so:
 - `startup.duplicate-command` — duplicates are a hygiene fact; no adversary needs two identical startup entries
 - `file.hash-match` — a hash names a file; which technique that file serves is the signature author's knowledge, and a rule cannot inherit it
 - `file.content-match` — the pattern is a fact; a technique is an interpretation of what the file does, which this rule does not observe
+- `flow.temp-process-remote` — a connection is a channel; which technique it serves depends on what is said over it, which this rule does not observe
 <!-- coverage:end -->
 
 ## Importing a Sigma rule

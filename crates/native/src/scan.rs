@@ -68,6 +68,13 @@ pub fn scan(progress: &dyn Fn(ScanProgress), cancelled: &dyn Fn() -> bool) -> Op
         return None;
     }
 
+    progress(ScanProgress::Started("Reading connections"));
+    let (flows, flow_status) = collect::flows::collect(&process_names).into_parts("flows", "Connections");
+    snapshot.flows = flows;
+    if cancelled() {
+        return None;
+    }
+
     progress(ScanProgress::Started("Reading installed packages"));
     let (packages, package_status) =
         collect::packages::collect().into_parts("packages", "Installed packages");
@@ -102,7 +109,9 @@ pub fn scan(progress: &dyn Fn(ScanProgress), cancelled: &dyn Fn() -> bool) -> Op
     snapshot.collectors.push(agent_status);
     #[cfg(windows)]
     snapshot.collectors.push(task_status);
-    snapshot.collectors.extend([listener_status, package_status]);
+    snapshot
+        .collectors
+        .extend([listener_status, flow_status, package_status]);
 
     let mut matches = Vec::new();
     for autorun in &snapshot.autoruns {

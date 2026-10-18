@@ -340,6 +340,52 @@ pub fn file_match_fact(file: &FileFact, hit: &crate::model::ContentMatch) -> Fac
     fact
 }
 
+/// A connection the machine is holding, as a rule sees it.
+///
+/// The process's path and whether it sits in a temporary or download folder are joined from
+/// the scan's process table here, in the fact builder, rather than by a rule language: a
+/// pack still matches one subject with a closed vocabulary, and the join is the caller's job.
+#[must_use]
+pub fn flow_fact(snapshot: &Snapshot, flow: &crate::model::FlowFact) -> Fact {
+    let remote = format!("{}:{}", flow.remote_addr, flow.remote_port);
+    let mut fact = Fact {
+        subject: format!(
+            "flow:{}:{}>{}:{}",
+            flow.process.as_deref().unwrap_or("unknown"),
+            flow.local_port,
+            flow.remote_addr,
+            flow.remote_port
+        ),
+        label: format!(
+            "{} → {remote}",
+            flow.process
+                .as_deref()
+                .unwrap_or("a process this account cannot see")
+        ),
+        fields: Vec::new(),
+    };
+    fact.push_text("protocol", Some(flow.protocol.label()));
+    fact.push_text("state", Some(&flow.state));
+    fact.push_text("remote_addr", Some(&flow.remote_addr));
+    fact.push_text("process", flow.process.as_deref());
+    fact.push_number("remote_port", Some(i64::from(flow.remote_port)));
+    fact.push_number("local_port", Some(i64::from(flow.local_port)));
+    fact.push_number("pid", flow.pid.map(i64::from));
+    fact.push_number("bytes", flow.bytes.and_then(|bytes| i64::try_from(bytes).ok()));
+    if let Some(pid) = flow.pid
+        && let Some(process) = snapshot.processes.iter().find(|process| process.pid == pid)
+        && let Some(exe) = process.exe.as_deref()
+    {
+        fact.push_text("process_path", Some(exe));
+        fact.push("from_temp", Value::Bool(under(exe, "temp")));
+        fact.push(
+            "from_downloads",
+            Value::Bool(under(exe, "downloads") || under(exe, "desktop")),
+        );
+    }
+    fact
+}
+
 /// Every fact in a snapshot that a rule could be about, as rule views.
 ///
 /// The order is the snapshot's own, so two scans of an unchanged machine produce the same
@@ -350,6 +396,11 @@ pub fn facts_of(snapshot: &Snapshot, subject: Subject) -> Vec<Fact> {
         Subject::Startup => snapshot.autoruns.iter().map(startup_fact).collect(),
         Subject::Process => snapshot.processes.iter().map(process_fact).collect(),
         Subject::Listener => snapshot.listeners.iter().map(listener_fact).collect(),
+        Subject::Flow => snapshot
+            .flows
+            .iter()
+            .map(|flow| flow_fact(snapshot, flow))
+            .collect(),
         Subject::Package => snapshot.packages.iter().map(package_fact).collect(),
         Subject::Agent => snapshot.agents.iter().map(agent_fact).collect(),
         // A watched change is a fact the scan does not carry: the watcher reports them as

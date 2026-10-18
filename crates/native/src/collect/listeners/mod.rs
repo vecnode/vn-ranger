@@ -4,7 +4,7 @@
 mod windows;
 
 #[cfg(all(unix, not(target_os = "macos")))]
-mod linux;
+pub(crate) mod linux;
 
 #[cfg(windows)]
 pub use windows::collect;

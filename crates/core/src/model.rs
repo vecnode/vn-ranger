@@ -370,6 +370,34 @@ pub struct ContentMatch {
     pub line: u32,
 }
 
+/// One network connection the machine holds right now.
+///
+/// A listener is a socket waiting for something; this is a socket talking to somewhere. The
+/// distinction matters because the second one names the other end, and "which process is
+/// talking to what" is the question a person actually asks about traffic.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FlowFact {
+    /// TCP or UDP.
+    pub protocol: Protocol,
+    /// The local address.
+    pub local_addr: String,
+    /// The local port.
+    pub local_port: u16,
+    /// The address at the other end.
+    pub remote_addr: String,
+    /// The port at the other end.
+    pub remote_port: u16,
+    /// The state the socket is in, in the platform's own words (`ESTABLISHED`, `SYN_SENT`).
+    pub state: String,
+    /// The process that holds it, when the platform names one.
+    pub pid: Option<u32>,
+    /// That process's name, when it is known.
+    pub process: Option<String>,
+    /// Bytes moved, when the platform reports it per socket. Most do not, and `None` is
+    /// printed as unknown rather than as zero: a zero is a measurement.
+    pub bytes: Option<u64>,
+}
+
 /// How a collector finished.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -496,6 +524,9 @@ pub struct Snapshot {
     pub autoruns: Vec<AutorunFact>,
     /// Listening sockets.
     pub listeners: Vec<ListenerFact>,
+    /// Connections the machine is holding, with the process that holds them.
+    #[serde(default)]
+    pub flows: Vec<FlowFact>,
     /// Installed packages and applications.
     pub packages: Vec<PackageFact>,
     /// Configurations that can run something on the person's behalf.
@@ -539,6 +570,7 @@ impl Snapshot {
             processes: Vec::new(),
             autoruns: Vec::new(),
             listeners: Vec::new(),
+            flows: Vec::new(),
             packages: Vec::new(),
             agents: Vec::new(),
             files: Vec::new(),

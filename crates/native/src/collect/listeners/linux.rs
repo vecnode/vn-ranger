@@ -85,7 +85,7 @@ pub fn collect(process_names: &HashMap<u32, String>) -> Outcome<ListenerFact> {
     Outcome::Items(items)
 }
 
-fn parse_address(hex: &str, ipv6: bool) -> Option<IpAddr> {
+pub(crate) fn parse_address(hex: &str, ipv6: bool) -> Option<IpAddr> {
     if ipv6 {
         if hex.len() != 32 {
             return None;
@@ -105,7 +105,7 @@ fn parse_address(hex: &str, ipv6: bool) -> Option<IpAddr> {
     }
 }
 
-fn socket_owners() -> HashMap<u64, u32> {
+pub(crate) fn socket_owners() -> HashMap<u64, u32> {
     let mut owners = HashMap::new();
     let Ok(entries) = std::fs::read_dir("/proc") else {
         return owners;

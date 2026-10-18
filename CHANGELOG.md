@@ -30,6 +30,21 @@ vocabulary, one evidence ledger, and a size budget that pays for them.
   deep, 64 MB per file read, 2 GB per run — and a file over the cap is still hashed, because
   a digest is a fact and "not read" is not "clean". It never runs on its own, it is stoppable
   between files, and it stores no content.
+- **Connections** (`vnr_native::collect::flows`): the machine's TCP table with the process
+  that owns each socket — Windows through `netstat2`, Linux through `/proc/net/tcp{,6}` and
+  the same inode-to-pid reader the listener collector uses, macOS a named state rather than
+  an empty list. Deduplicated, ordered by process and remote end, capped at 2,000 with the
+  cap reported as a partial collector rather than a silent cut. No packet is captured and no
+  name is resolved.
+- **The `flow` subject for pack authors**, with the join done in the fact builder:
+  `process_path`, `from_temp` and `from_downloads` are looked up from the scan's process
+  table, so a rule can ask "is the program talking to that address running from a temporary
+  folder" without a join language.
+- **`flow.temp-process-remote`**, the rule that uses it: a connection held by a process
+  running from a temporary folder, with the path, the remote end and the state as evidence.
+- **A Zeek `conn.log` export** (`vnr_core::flows`): the real 21-column header, `-` where a
+  sample cannot fill a column, and the state mapped to Zeek's abbreviation only when the
+  mapping is known.
 - **A hash chain over the journal.** Every line now carries a digest over the previous
   line's digest and its own facts, computed before the line is written. Reading the record
   back verifies it, and the Actions view says one of three true things: the chain verifies,

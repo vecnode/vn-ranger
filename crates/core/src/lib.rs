@@ -13,6 +13,7 @@ pub mod action;
 pub mod content;
 pub mod diff;
 pub mod fields;
+pub mod flows;
 pub mod journal;
 pub mod model;
 pub mod pack;
@@ -27,13 +28,14 @@ pub mod timeline;
 pub mod watch;
 
 pub use diff::{Change, ChangeKind, diff_processes, diff_snapshots};
+pub use flows::{zeek, zeek_row};
 pub use journal::{
     Action, Confirmation, Draft, JournalEntry, Kind as JournalKind, Outcome, Read as JournalRead,
 };
 pub use model::{
     AgentFact, AutorunFact, AutorunKind, AutorunScope, CollectorState, CollectorStatus, ContentMatch, Counts,
-    FileFact, Host, ListenerFact, PackageFact, ProcessFact, Protocol, SignatureMatch, SignatureReport,
-    SignatureStatus, Snapshot,
+    FileFact, FlowFact, Host, ListenerFact, PackageFact, ProcessFact, Protocol, SignatureMatch,
+    SignatureReport, SignatureStatus, Snapshot,
 };
 pub use recovery::{Phase as RecoveryPhase, Verdict as RecoveryVerdict};
 pub use rules::{

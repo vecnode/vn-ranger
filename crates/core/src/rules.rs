@@ -196,7 +196,7 @@ pub struct Rule {
 /// rules with one id make it impossible to say which one a person meant. This is the list the
 /// pack validator is given, so it is the list a new built-in rule has to be added to — and a
 /// test below fails when a `Rule` constant's id is not in it.
-pub const RULE_IDS: [&str; 18] = [
+pub const RULE_IDS: [&str; 19] = [
     "startup.temp-path",
     "startup.downloads-path",
     "startup.script-extension",
@@ -215,6 +215,7 @@ pub const RULE_IDS: [&str; 18] = [
     "service.unquoted-path",
     "file.hash-match",
     "file.content-match",
+    "flow.temp-process-remote",
 ];
 
 /// The built-in rule ids, in the form a pack validator wants them.
@@ -482,12 +483,29 @@ const CONTENT_MATCH: Rule = Rule {
                     does, which this rule does not observe",
 };
 
+const TEMP_FLOW: Rule = Rule {
+    id: "flow.temp-process-remote",
+    title: "A program in a temporary folder is talking to another machine",
+    severity: Severity::Notice,
+    confidence: Confidence::Likely,
+    why: "The process holding this connection runs from a folder the system clears and ordinary \
+          programs can write to, and the other end is not this machine. A program that is not \
+          installed and is talking to a remote address is worth identifying.",
+    benign: "An installer, an updater or a development tool running from a build or download \
+             folder, talking to its own server.",
+    remediation: "Check the process, where it came from and what the remote address is. If you \
+                  did not start it, quarantine the file it runs from.",
+    technique: None,
+    technique_note: "a connection is a channel; which technique it serves depends on what is \
+                    said over it, which this rule does not observe",
+};
+
 /// Every built-in rule, in the order [`RULE_IDS`] publishes them.
 ///
 /// One table, read by the engine that fires the rules and by the command that writes the
 /// coverage table, so "what does ranger detect" has one answer in one place. A pack rule is
 /// the other half of the answer; the two are counted together by `cargo xtask coverage`.
-pub const BUILTIN_RULES: [Rule; 18] = [
+pub const BUILTIN_RULES: [Rule; 19] = [
     TEMP_PATH,
     DOWNLOADS_PATH,
     SCRIPT_EXTENSION,
@@ -506,6 +524,7 @@ pub const BUILTIN_RULES: [Rule; 18] = [
     UNQUOTED_SERVICE_PATH,
     HASH_MATCH,
     CONTENT_MATCH,
+    TEMP_FLOW,
 ];
 
 /// The built-in rules, as a slice.
@@ -533,9 +552,58 @@ pub fn evaluate(snapshot: &Snapshot, baseline: Option<&Snapshot>) -> Vec<Finding
     duplicate_commands(snapshot, &mut findings);
     unquoted_service_paths(snapshot, &mut findings);
     content_matches(snapshot, &mut findings);
+    remote_flows(snapshot, &mut findings);
 
     sort_findings(&mut findings);
     findings
+}
+
+/// A connection held by a program that is not installed anywhere.
+///
+/// The join is the fact: the process table has a path, and the socket table has a pid.
+/// Neither table alone says "the thing in the temporary folder is talking to another
+/// machine", which is the sentence a person needs.
+fn remote_flows(snapshot: &Snapshot, findings: &mut Vec<Finding>) {
+    for flow in &snapshot.flows {
+        let Some(pid) = flow.pid else {
+            continue;
+        };
+        let Some(process) = snapshot.processes.iter().find(|process| process.pid == pid) else {
+            continue;
+        };
+        let Some(exe) = process.exe.as_deref() else {
+            continue;
+        };
+        if !under(exe, "temp") || flow.remote_port == 0 || flow.remote_addr.is_empty() {
+            continue;
+        }
+        let mut evidence = vec![
+            format!("Process: {} (pid {pid})", process.name),
+            format!("Runs from: {exe}"),
+            format!(
+                "Connection: {} → {}:{} ({})",
+                flow.protocol.label(),
+                flow.remote_addr,
+                flow.remote_port,
+                flow.state
+            ),
+        ];
+        if let Some(bytes) = flow.bytes {
+            evidence.push(format!("Bytes: {bytes}"));
+        }
+        findings.push(make(
+            &TEMP_FLOW,
+            format!(
+                "flow:{}:{}>{}:{}",
+                flow.process.as_deref().unwrap_or("unknown"),
+                flow.local_port,
+                flow.remote_addr,
+                flow.remote_port
+            ),
+            format!("{} → {}:{}", process.name, flow.remote_addr, flow.remote_port),
+            evidence,
+        ));
+    }
 }
 
 /// What the content engine found in the files it read.
