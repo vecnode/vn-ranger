@@ -15,6 +15,13 @@ use serde::{Deserialize, Serialize};
 /// The file's name, inside the packs directory.
 pub const FILE: &str = "active.json";
 
+/// The record of the pack that was active before this one.
+///
+/// Rollback swaps the two files and touches nothing else, so returning to the previous pack
+/// is one rename rather than a second copy of its rules. It is written before `active.json`
+/// is replaced, so a crash in between leaves the old record readable.
+pub const PREVIOUS: &str = "previous.json";
+
 /// Which pack is loaded, and the bytes it was loaded from.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Active {
@@ -25,7 +32,11 @@ pub struct Active {
     /// SHA-256 of the exact bytes that were validated and loaded, lowercase hexadecimal.
     pub sha256: String,
     /// The fingerprint of the key that signed those bytes, as the interface shows it.
-    pub fingerprint: String,
+    ///
+    /// `None` is the pack compiled into this build. There is no key on the machine to name:
+    /// the build is the trust anchor, and the digest above is what ties the record to the
+    /// bytes that came with it.
+    pub fingerprint: Option<String>,
     /// Seconds since the Unix epoch, when it was activated.
     pub activated_at_unix: u64,
 }
@@ -70,10 +81,11 @@ impl Active {
                 self.sha256
             ));
         }
-        if !valid_fingerprint(&self.fingerprint) {
+        if let Some(fingerprint) = &self.fingerprint
+            && !valid_fingerprint(fingerprint)
+        {
             return Err(format!(
-                "{FILE} has a key fingerprint ranger does not write: {:?}",
-                self.fingerprint
+                "{FILE} has a key fingerprint ranger does not write: {fingerprint:?}"
             ));
         }
         Ok(())
@@ -111,7 +123,7 @@ mod tests {
             id: "ranger.core".to_owned(),
             version: "2026.11.1".to_owned(),
             sha256: "ab".repeat(32),
-            fingerprint: "0123 4567 89AB CDEF".to_owned(),
+            fingerprint: Some("0123 4567 89AB CDEF".to_owned()),
             activated_at_unix: 1_700_000_000,
         }
     }
@@ -152,7 +164,7 @@ mod tests {
             "012g 4567 89AB CDEF",
         ] {
             let mut record = record();
-            record.fingerprint = bad.to_owned();
+            record.fingerprint = Some(bad.to_owned());
             assert!(
                 Active::parse(&record.to_line().unwrap()).is_err(),
                 "{bad:?} is not a fingerprint"
