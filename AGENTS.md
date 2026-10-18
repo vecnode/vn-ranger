@@ -5,18 +5,26 @@ machine, explains what is unusual, remembers a baseline, and — later, and care
 quarantines and cleans. It is written in **Rust only**: a native egui/eframe
 application, with **no Tauri, Electron, webview or JavaScript build step**.
 
-**Status:** v0.1.5 is released; 0.1.6 is the next line, and it is one large release: act,
-resident and rule packs, in five waves with a single gate (`docs/PLAN.md` §9). The
-read-only inventory, the local hash signature engine, the one-shot administrator scan,
+**Status:** v0.1.6 is code-complete and its release candidate is published; v0.1.7 is the
+next line, and its plan is [`docs/PLAN-0.1.7.md`](docs/PLAN-0.1.7.md), which supersedes the
+M6 milestone in `docs/PLAN.md` §9. The read-only inventory, the local hash signature
+engine, the one-shot administrator scan,
 the two-second process poll, the file watchers, the accepted baseline, fifteen rules, the
 Findings view, the command palette and keyboard navigation work, with preferences saved
 and one window per data directory.
 
-What 0.1.6 adds, and what this file is now the contract for: the journal and the typed
+What 0.1.6 adds, and what this file is the contract for: the journal and the typed
 action API, quarantine and allowlisted cleaning, the tray with opt-in autostart and a
 scheduler, and signed rule packs with an optional content scan. Quarantine is the
 project's first destructive capability, so §2 "Never delete" is written as an
 architecture rather than as a promise.
+
+**0.1.7 adds four evidence domains and no new privilege:** the bytes of a file (extended
+body signatures, containers, structural and signature facts), the record of an event (the
+operating system's own logs, read as files), the flow of a connection (the connection
+table with process ownership, never a packet), and the configuration of an autonomous
+agent (a capability matrix and provenance). It adds no network call, no kernel component
+and no score, and every new destructive verb still goes through the one typed action path.
 
 `docs/PLAN.md` explains the research, the scope and the architecture.
 `docs/RELEASES.md` is the distribution contract. `SECURITY.md` is the promise to the
@@ -48,7 +56,7 @@ assets/
   fonts/                 Inter and JetBrains Mono, OFL texts, type notes
   screenshots/           the picture the README uses
 packs/                   the first-party rule pack, signed like any other (from 0.1.6)
-docs/                    PLAN, RELEASES, BENCHMARKS and RULES
+docs/                    PLAN, PLAN-0.1.7, RELEASES, BENCHMARKS and RULES
 ```
 
 **Layering is a rule, not a suggestion.**

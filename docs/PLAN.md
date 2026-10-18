@@ -1,17 +1,17 @@
 # The plan — vn-ranger
 
-**Status:** v0.1.5 ships the interface layer on top of the rules: a command palette with
-global search, keyboard navigation, filters and sorting, saved preferences, a
-single-instance guard, watch roots and cancellation between collectors. The process poll, file
-watchers and accepted baseline arrived in 0.1.2/0.1.3; the read-only inventory, the local
-hash-signature engine and the one-shot administrator scan remain in the repository.
+**Status:** v0.1.6 is code-complete and its release candidate is published: the journal and
+the typed action API, quarantine and allowlisted cleaning, the tray with opt-in autostart, a
+scheduler, and signed first-party rule packs with an optional content scan. **v0.1.7 is the
+next line**, and its plan is a separate document — [`PLAN-0.1.7.md`](PLAN-0.1.7.md) — because
+it adds four evidence domains rather than finishing a wave, and because the reasoning behind
+them is longer than a milestone row.
 
-**v0.1.6 is one large release, not three small ones.** The owner compressed the act,
-resident and rule-pack milestones into it, so it is the release that stops being
-read-only: the journal and the typed action API, quarantine and allowlisted cleaning,
-the tray and opt-in autostart, the scheduler, and signed first-party rule packs. It is
-built in five waves inside one gate, and the sections below describe what each wave
-must prove before the next one starts.
+**v0.1.6 was one large release, not three small ones.** The owner compressed the act,
+resident and rule-pack milestones into it, so it is the release that stopped being
+read-only. It was built in five waves inside one gate, and the sections below describe what
+each wave had to prove before the next one started — kept as written, because the waves are
+the record of how the release was made.
 **Audience:** the maintainer, future contributors, and anyone deciding whether to
 trust this program with a machine.
 **What this document is:** the research behind ranger, the scope it will and will not
@@ -1226,30 +1226,37 @@ in the §6.10 table, deleting a file the running system holds mapped, automatic 
 quarantine, macOS login items (needs a new Objective-C wrapper), a network lookup, a
 model, and self-update.
 
-### M6 — v0.1.7, Coverage completed (patch)
+### M6 — v0.1.7, *Inside*
 
-The release that finishes what wave 5 could not: the rows that need a machine this project
-does not have, and the row the owner dropped from 0.1.6.
+The milestone that stops treating a file, a log, a connection and an agent as opaque. The
+full plan is [`PLAN-0.1.7.md`](PLAN-0.1.7.md): the audit, the reconciliation, the research
+and six waves with one gate. This section is the milestone in the roadmap and a pointer to
+the reasoning, not a second copy of it.
 
-**What 0.1.6 already carries toward it**, so this is an increment and not a rewrite: the
-Windows registry table (21 surfaces, one `KeyReader`), scheduled tasks, the Linux collector
-with captured fixtures from a real Ubuntu, the four loader surfaces, the agent stack, the
-macOS loader parsers (compile-checked for `x86_64-apple-darwin` in `ci`), twelve pack rules
-over eleven techniques with a generated coverage table, the optional content scan behind its
-consent screen, and the one act-and-record path that everything destructive goes through.
+**What 0.1.7 adds, in one line each:** extended body signatures and container walking over
+file bytes; the operating system's own event logs, read as files; the connection table with
+process ownership and a beaconing function, never a packet; and a capability matrix with
+provenance for the autonomous agents, skills and MCP servers on the machine — plus a
+hash-chained journal, one timeline, one triage package and one sweep across all four.
 
-| # | Work | Where | Done when |
-|---|---|---|---|
-| 1 | **WMI subscriptions**, dropped from 0.1.6 by the owner (`§14.2`) | `native/src/collect/wmi/` | The `wmi` crate is a decision with a reason; a subscription is a fact with its consumer named; and the collector says **unavailable** without elevation rather than empty. It is not shipped until a machine can show it working |
-| 2 | **macOS captures**: `periodic`, the system crontab, `ScriptingAdditions`, Folder Actions, and the launchd plists already read | `crates/native/fixtures/macos/` | Every macOS parser has a **captured** fixture from a real Mac, the way the Linux ones came from Ubuntu on WSL2; until then the collector's status says the captures are owed |
-| 3 | The coverage table for the waves' rules, and a rule per surface where one is honest | `packs/ranger.core.json`, `docs/RULES.md` | Every shipped rule has a positive and a negative case and a technique id; the table stays generated |
-| 4 | The 24-hour soak on the released binary, published | `docs/BENCHMARKS.md` | The §11 budgets hold over a day with the configuration a person leaves open, and the numbers are in the file with the build they were taken on |
-| 5 | A second reviewer on every deletion path | process | The traversal table is written from §6.10 by the second reviewer, without reading the first's tests |
+**No new privilege, no network call, no model, no score.** Every destructive verb still goes
+through the one typed action path, and the four refusals are unchanged.
 
-**Exit for 0.1.7:** a Mac has captured the macOS fixtures, WMI is either shipped with a reason
-or still refused with one, the coverage table is generated from a pack that covers the
-surfaces in §7, and the soak numbers are published. If a row cannot be reached, it is named in
-the release notes and in §7, exactly as this release does.
+**The M6 this replaces was a coverage patch.** Its rows are carried into Wave 0 and are not
+dropped:
+
+| # | Carried row | Lands |
+|---|---|---|
+| 1 | **WMI subscriptions**, dropped from 0.1.6 by the owner (`§14.2`) | Wave 0 decides; it ships only when a machine can show it working, and says **unavailable** without elevation rather than empty |
+| 2 | **macOS captures** for the parsers already written | Wave 0, as an exit criterion: a parser without a capture ships without a rule |
+| 3 | The coverage table over every rule, not just the pack's | Wave 0, once built-ins and packs enumerate together (27 rules, not 12) |
+| 4 | The 24-hour soak on the release candidate, published | Wave 0 and again on the 0.1.7 candidate |
+| 5 | A second reviewer on every deletion path | Wave 0, and still the one thing code cannot provide |
+
+**Exit for 0.1.7** is `PLAN-0.1.7.md` §9. The short version: every new reader says what it
+could not see; every new rule has both fixtures and a benign explanation; the hash chain
+verifies; the content engine reads no byte without consent; the archive stays under 10 MB and
+the binary under 13 MB or the release notes carry the number and the reason.
 
 ### M7 — v0.2.0, Distribution (minor)
 

@@ -134,6 +134,23 @@ zero is a measurement and would be read as one. Linux reports descriptors; Windo
 macOS do not, because counting handles needs a call this workspace will not make without a
 safe wrapper, and that gap is stated here rather than filled with a placeholder.
 
+## The binary, measured again in the 0.1.6 tree
+
+Not a release measurement, and labelled as such: the build beside the working tree on
+2026-10-18, at `3353974`, on the development Windows 11 machine.
+
+| Measure | Result | Where it is written down |
+|---|---:|---|
+| Release binary, Windows x86_64 | **18,856,960 bytes (18.0 MB)** | `docs/PLAN-0.1.7.md` §2.2 and §10 |
+| Embedded typefaces | 1.09 MB (three faces, `include_bytes!`) | §10.2 of the same plan |
+| Embedded mark, RGBA | 16 KB (64 × 64 × 4, two files) | §10.2 |
+
+The 0.1.1 binary measured 15.64 MB and the repository description says *"~6–9 MB"*, which
+is closer to the archive than to the binary. The four budgets in `PLAN-0.1.7.md` §10.1
+exist so that a claim about size names which artifact it is about; the 18.0 MB figure is
+the one the 0.1.7 size programme has to move, and it is published here before the work
+rather than after it.
+
 ## What is not measured yet
 
 - Cold start. The window appears quickly, but "quickly" is not a number. A timestamped
