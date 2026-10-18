@@ -504,6 +504,13 @@ profile ACL. Nothing in it is secret, but paths contain usernames, so exports ca
 - **A second launch** touches one file, `wake`, in the data directory. The running
   instance sees it on its next tick and raises its window. A stale `wake` file is
   cleared at start, so a crash cannot make the window jump on the next launch.
+- **`--replace`** is the one exception, and it is a flag rather than the default: a launch
+  with it writes a `stop` file, waits up to five seconds for the instance lock, and takes
+  over. The window that stops records why in the journal and exits cleanly. An ordinary
+  second launch still only raises the window, because ending a program a person is reading
+  is not something a shortcut should do quietly. A stale `stop` file is cleared once the
+  replacement holds the lock, or a crash during a replacement would end the next window the
+  moment it opened.
 
 Autostart is opt-in and uses the least invasive mechanism per OS:
 

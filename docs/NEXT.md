@@ -143,6 +143,13 @@ not write the tests. This commit is one reviewer's work and says so.
 
 ### 5c. One window per data directory, without fighting development
 
+**Done.** `native/src/instance.rs` writes a `stop` file beside `wake`; the frame that answers
+a wake takes a stop request first and closes with a journalled reason; and `--replace` on the
+command line asks, waits up to five seconds for the lock, clears a stale request and takes
+over. A second launch without the flag is unchanged and still only raises the window. A test
+holds the two files apart, because one path for two meanings would make an ordinary launch
+end the window it was meant to raise.
+
 Today a second launch asks the running window to come forward and exits, which leaves an
 old build answering. Fix it for development without weakening the lock:
 

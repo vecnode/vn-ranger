@@ -116,6 +116,31 @@ pub fn clear_stale_wake() {
     let _ = std::fs::remove_file(crate::paths::wake_path());
 }
 
+/// Ask the running window to stop, so this build can take its place.
+///
+/// Only `--replace` writes this. An ordinary second launch raises the window instead, because
+/// ending a program a person is reading is not something a shortcut should do quietly.
+pub fn request_stop() -> Result<(), String> {
+    let path = crate::paths::stop_path();
+    if let Some(parent) = path.parent() {
+        crate::paths::ensure_dir(parent)
+            .map_err(|error| format!("Could not prepare {}: {error}", parent.display()))?;
+    }
+    touch(&path).map_err(|error| format!("Could not write {}: {error}", path.display()))
+}
+
+/// Take a stop request, which is the same question as "quit cleanly now".
+#[must_use]
+pub fn take_stop() -> bool {
+    take_wake(&crate::paths::stop_path())
+}
+
+/// Clear a stop file left by a crash, so a launch that crashed while replacing does not end
+/// the next window the moment it opens.
+pub fn clear_stale_stop() {
+    let _ = std::fs::remove_file(crate::paths::stop_path());
+}
+
 fn touch(path: &std::path::Path) -> std::io::Result<()> {
     std::fs::write(path, b"1")
 }
@@ -152,6 +177,18 @@ mod tests {
             !take_wake(&path),
             "and the second frame does not, because the file is gone"
         );
+    }
+
+    #[test]
+    fn a_stop_request_is_not_a_wake_request() {
+        // Two files, two meanings: if these were ever the same path, an ordinary second
+        // launch would end the window it was supposed to raise.
+        let stop = crate::paths::stop_path();
+        let wake = crate::paths::wake_path();
+        assert_ne!(stop, wake);
+        assert_eq!(stop.parent(), wake.parent(), "both live in the data directory");
+        assert_eq!(stop.file_name().and_then(|name| name.to_str()), Some("stop"));
+        assert_eq!(wake.file_name().and_then(|name| name.to_str()), Some("wake"));
     }
 
     #[test]

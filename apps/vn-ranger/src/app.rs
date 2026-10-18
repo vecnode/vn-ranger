@@ -848,6 +848,16 @@ impl App {
     /// The file is taken rather than read: one launch is one raise, and a file that stays
     /// behind would raise the window on every frame.
     fn answer_wake(&mut self, ctx: &egui::Context) {
+        // A launch that asked this window to stop gets a clean exit: the journal records it,
+        // the guard removes the lock, and the build that asked can take over.
+        if vnr_native::instance::take_stop() {
+            self.note(
+                Draft::event("replaced")
+                    .with_reason("a newer launch asked this window to stop so it could take over"),
+            );
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            return;
+        }
         if !vnr_native::instance::take_wake(&vnr_native::paths::wake_path()) {
             return;
         }

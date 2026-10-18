@@ -60,9 +60,30 @@ fn main() -> eframe::Result<()> {
     }
 
     // One window per data directory. A second launch does not open a second window: it asks
-    // the running one to come forward and exits.
+    // the running one to come forward and exits. `--replace` is the exception, and it is a
+    // flag rather than the default: ending a window somebody is reading is not a shortcut.
+    let replace = std::env::args_os().any(|argument| argument.to_string_lossy() == "--replace");
     let instance = match vnr_native::instance::acquire() {
         Ok(guard) => Some(guard),
+        Err(vnr_native::instance::LockError::Running(message)) if replace => {
+            eprintln!("vn-ranger: {message}; asking it to stop");
+            match replace_running() {
+                Some(guard) => {
+                    // The window that stopped took its request with it. A request left
+                    // behind by a crash is cleared here, or the new window would quit the
+                    // moment it opened.
+                    vnr_native::instance::clear_stale_stop();
+                    Some(guard)
+                }
+                None => {
+                    eprintln!(
+                        "vn-ranger: the running window did not stop within five seconds. Close \
+                         it, then launch again."
+                    );
+                    return Ok(());
+                }
+            }
+        }
         Err(vnr_native::instance::LockError::Running(message)) => {
             eprintln!("vn-ranger: {message}");
             record_startup(&message);
@@ -295,6 +316,29 @@ fn write_headless_report(path: &Path, record: bool) {
     if let Err(error) = journal.record_synced(draft) {
         eprintln!("vn-ranger: the scan finished, but the journal could not be written: {error}");
     }
+}
+
+/// Ask the running window to stop, and wait up to five seconds for the instance lock.
+///
+/// The request is a file, so the window sees it on its next frame rather than in the middle
+/// of one. A window that is mid-scan finishes the collector it is in and then quits, which is
+/// why the wait is seconds rather than milliseconds.
+fn replace_running() -> Option<vnr_native::instance::InstanceGuard> {
+    if let Err(problem) = vnr_native::instance::request_stop() {
+        eprintln!("vn-ranger: {problem}");
+        return None;
+    }
+    for _ in 0..50 {
+        match vnr_native::instance::acquire() {
+            Ok(guard) => return Some(guard),
+            Err(vnr_native::instance::LockError::Running(_)) => {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            // Waiting does not make an unwritable data directory writable.
+            Err(vnr_native::instance::LockError::Unwritable(_)) => return None,
+        }
+    }
+    None
 }
 
 /// Leave a line where a person can find it when there is no window to say it in.

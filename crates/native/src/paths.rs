@@ -137,6 +137,16 @@ pub fn wake_path() -> PathBuf {
     data_dir().join("wake")
 }
 
+/// The file a launch writes to ask a running window to stop.
+///
+/// Beside the wake file and for the same reason: one file, one meaning, no protocol. It is
+/// only ever written by `--replace`, so an ordinary second launch still just raises the
+/// window that is there.
+#[must_use]
+pub fn stop_path() -> PathBuf {
+    data_dir().join("stop")
+}
+
 /// Where the last snapshot is kept, so a launch shows something before the scan ends.
 #[must_use]
 pub fn last_snapshot_path() -> PathBuf {
