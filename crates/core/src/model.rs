@@ -685,12 +685,6 @@ impl ScanProfile {
     pub fn reads_inventories(self) -> bool {
         !matches!(self, Self::Quick)
     }
-
-    /// The profile with this name, when there is one.
-    #[must_use]
-    pub fn from_id(id: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|profile| profile.id() == id)
-    }
 }
 
 /// Everything one scan produced.
@@ -897,11 +891,9 @@ mod tests {
         let mut seen = std::collections::HashSet::new();
         for profile in ScanProfile::ALL {
             assert!(seen.insert(profile.id()), "{} appears twice", profile.id());
-            assert_eq!(ScanProfile::from_id(profile.id()), Some(profile));
             assert!(!profile.label().is_empty());
             assert!(!profile.one_line().is_empty());
         }
-        assert_eq!(ScanProfile::from_id("nope"), None);
         // A quick scan is the only one that skips an inventory, and a deep scan is the only
         // one that reads a file's bytes: the two questions are what the scan asks.
         assert!(!ScanProfile::Quick.reads_inventories());

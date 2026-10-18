@@ -1044,7 +1044,8 @@ impl App {
                     // flows of this photograph are stamped with.
                     vnr_core::flows::stamp(&mut snapshot.flows, &self.beacons);
                     self.note(Draft::event("scan").with_reason(&format!(
-                        "{} processes · {} startup items · {} listeners · {} packages",
+                        "{} · {} processes · {} startup items · {} listeners · {} packages",
+                        snapshot.profile.id(),
                         snapshot.processes.len(),
                         snapshot.autoruns.len(),
                         snapshot.listeners.len(),

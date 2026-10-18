@@ -264,11 +264,6 @@ impl Sampler {
         self.series.is_empty()
     }
 
-    /// Forget one connection, when it has gone.
-    pub fn forget(&mut self, key: &str) {
-        self.series.remove(key);
-    }
-
     /// Forget everything, as a sampler that has just been started would.
     ///
     /// A poll that stops is not evidence that a rhythm continued, so the sampler that was fed
@@ -449,8 +444,6 @@ mod tests {
         assert_eq!(found.contacts, 8);
         assert!(sampler.beacon("another").is_none());
         assert_eq!(sampler.len(), 1);
-        sampler.forget("agent.exe>203.0.113.9:443");
-        assert!(sampler.is_empty());
         sampler.observe("agent.exe>203.0.113.9:443", 1_700_000_000);
         sampler.clear();
         assert!(sampler.is_empty(), "a stopped poll leaves no rhythm behind");

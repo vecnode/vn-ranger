@@ -24,15 +24,6 @@ use vnr_core::action::{Refusal, StartupChange, StartupSurface};
 
 use crate::action::{ActionError, Result};
 
-/// One value in a startup surface, as the machine holds it now.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Entry {
-    /// The name it is registered under.
-    pub name: String,
-    /// Its command line, as the surface holds it.
-    pub command: String,
-}
-
 /// What an act did, so the journal can say it afterwards.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Applied {
@@ -79,35 +70,10 @@ impl Applied {
 pub trait Key {
     /// The value under `name`, when the key holds one.
     fn value(&mut self, name: &str) -> Result<Option<String>>;
-    /// Every value name the key holds.
-    fn names(&mut self) -> Result<Vec<String>>;
     /// Write one value.
     fn write(&mut self, name: &str, command: &str) -> Result<()>;
     /// Remove one value.
     fn delete(&mut self, name: &str) -> Result<()>;
-}
-
-/// Read one surface's values, in name order.
-///
-/// A surface that is not there is empty rather than an error: an absent `RunOnce` key is the
-/// ordinary state of a machine that has never installed anything.
-pub fn read(surface: StartupSurface) -> Result<Vec<Entry>> {
-    match open_read(surface)? {
-        Some(mut key) => read_with(key.as_mut()),
-        None => Ok(Vec::new()),
-    }
-}
-
-/// Read a surface through a key the caller supplies.
-pub fn read_with(key: &mut dyn Key) -> Result<Vec<Entry>> {
-    let mut entries = Vec::new();
-    for name in key.names()? {
-        if let Some(command) = key.value(&name)? {
-            entries.push(Entry { name, command });
-        }
-    }
-    entries.sort_by_key(|a| a.name.to_lowercase());
-    Ok(entries)
 }
 
 /// Carry out one change, after checking everything the core can check.
@@ -160,23 +126,6 @@ pub fn remove_with(key: &mut dyn Key, surface: StartupSurface, entry: &AutorunFa
     })
 }
 
-/// Open the key a surface lives in, for reading. `None` is "this build does not read it as a
-/// registry value"; a missing key is also `None`, because a surface nobody has written is
-/// empty rather than broken.
-#[cfg(windows)]
-fn open_read(surface: StartupSurface) -> Result<Option<Box<dyn Key>>> {
-    match RegistryKey::open_read(surface) {
-        Ok(Some(key)) => Ok(Some(Box::new(key))),
-        Ok(None) => Ok(None),
-        Err(refusal) => Err(ActionError::Refused(refusal)),
-    }
-}
-
-#[cfg(not(windows))]
-fn open_read(_surface: StartupSurface) -> Result<Option<Box<dyn Key>>> {
-    Ok(None)
-}
-
 /// Open the key a surface lives in, for writing.
 #[cfg(windows)]
 fn open_write(surface: StartupSurface) -> Result<Option<Box<dyn Key>>> {
@@ -189,12 +138,6 @@ fn open_write(surface: StartupSurface) -> Result<Option<Box<dyn Key>>> {
 #[cfg(not(windows))]
 fn open_write(_surface: StartupSurface) -> Result<Option<Box<dyn Key>>> {
     Ok(None)
-}
-
-/// A surface this build cannot write, for a caller that has to say why.
-#[must_use]
-pub fn refusal_for(surface: StartupSurface) -> Option<Refusal> {
-    surface.refusal()
 }
 
 /// A key that is a `BTreeMap`, for tests on every host.
@@ -240,10 +183,6 @@ impl Key for Map {
         Ok(self.0.get(name).cloned())
     }
 
-    fn names(&mut self) -> Result<Vec<String>> {
-        Ok(self.0.keys().cloned().collect())
-    }
-
     fn write(&mut self, name: &str, command: &str) -> Result<()> {
         self.0.insert(name.to_owned(), command.to_owned());
         Ok(())
@@ -272,22 +211,6 @@ impl RegistryKey {
         }
     }
 
-    /// Open it for reading, refusing a surface this build does not write.
-    ///
-    /// A key that is not there is `Ok(None)`: reading an absent `RunOnce` is the ordinary
-    /// state of a machine, and creating the key to read it would be a change, not a read.
-    fn open_read(surface: StartupSurface) -> std::result::Result<Option<Self>, Refusal> {
-        use winreg::RegKey;
-        use winreg::enums::{HKEY_CURRENT_USER, KEY_READ};
-
-        let path = Self::path(surface)?;
-        match RegKey::predef(HKEY_CURRENT_USER).open_subkey_with_flags(path, KEY_READ) {
-            Ok(key) => Ok(Some(Self { key })),
-            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
-            Err(_) => Err(Refusal::UnsupportedSurface),
-        }
-    }
-
     /// Open it for writing, creating the key when the machine does not have one yet.
     fn open_write(surface: StartupSurface) -> std::result::Result<Self, Refusal> {
         use winreg::RegKey;
@@ -309,14 +232,6 @@ impl Key for RegistryKey {
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
             Err(error) => Err(ActionError::io("read the startup entry", error)),
         }
-    }
-
-    fn names(&mut self) -> Result<Vec<String>> {
-        Ok(self
-            .key
-            .enum_values()
-            .filter_map(|value| value.ok().map(|(name, _kind)| name))
-            .collect())
     }
 
     fn write(&mut self, name: &str, command: &str) -> Result<()> {
@@ -421,15 +336,6 @@ mod tests {
     }
 
     #[test]
-    fn reading_a_surface_sorts_it_and_skips_what_is_not_a_string() {
-        let mut key = Map::with(&[("zeta", r"C:\z.exe"), ("Alpha", r"C:\a.exe")]);
-        let entries = read_with(&mut key).expect("it reads");
-        assert_eq!(entries.len(), 2);
-        assert_eq!(entries[0].name, "Alpha");
-        assert_eq!(entries[1].name, "zeta");
-    }
-
-    #[test]
     fn a_surface_this_build_will_not_write_says_so_before_anything_is_opened() {
         let add = StartupChange::Add {
             surface: StartupSurface::WinMachineRun,
@@ -448,6 +354,5 @@ mod tests {
         // The folder is a file, not a registry value, and this module does not move files:
         // the row is writable in the table and refused here until the `.lnk` move lands.
         assert!(folder.check().is_ok());
-        assert!(refusal_for(StartupSurface::UserStartupFolder).is_none());
     }
 }
