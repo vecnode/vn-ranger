@@ -10,24 +10,18 @@ That document is the agreement; this one is ranger's instantiation of it. Where 
 two disagree, the launcher's document wins, because it is the code that has to read
 the result.
 
-## 0. Branches: main is a release, dev is the work
+## 0. Branches: `main` is a release, `dev` is the work
 
 | Branch | Holds | Moves |
 |---|---|---|
-| `main` | **Exactly the last cut release.** Its tip is the commit a `vX.Y.Z` tag points at. | Only when a version is cut: `dev` is merged in, the tag is placed on `main`, and nothing else lands there. |
+| `main` | **Exactly the last cut release.** Its tip is the commit the `vX.Y.Z` tag points at. | Only when a version is cut: `dev` is merged into it, the tag is placed on `main`, and nothing else lands there. |
 | `dev` | Every change in progress, however many waves it spans. | Every commit. This is where work happens and where `cargo xtask ci` has to be green. |
-| `release/X.Y.Z` | The line a release is being prepared from. | Fast-forwarded to `dev` at a cut, so the branch, the tag and the release notes name one commit. |
 | Tags | The releases themselves. | Never moved, never re-pointed (`AGENTS.md` §9). |
 
-So `main` is always shippable and always *shipped*: a person who clones this repository and
-checks out `main` gets the last release, not a half-finished wave. A release is cut by
-merging `dev` into `main`, tagging that commit, and fast-forwarding `release/X.Y.Z` to it —
-in that order, so the tag never names a commit that `main` does not have.
-
-A finished line's branch is deleted once its tag exists: the tag is the release, and a
-branch that only points at it is a second name for the same thing.
-
-
+There is no per-release branch. A release is cut by merging `dev` into `main`, tagging that
+commit, and pushing both -- in that order, so the tag never names a commit `main` does not
+have. `main` is therefore always shippable and always *shipped*: a person who clones this
+repository and checks out `main` gets the last release, not a half-finished wave.
 ## 1. The contract in one table
 
 | Question | Ranger's answer |
