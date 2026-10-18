@@ -18,9 +18,9 @@ desktop.ini
 # Scratch profiles for a local test run: the data directory a harness writes, and the
 # throwaway profile a report is written into. They hold this machine's facts - process
 # paths, listeners, packages - so they never belong in a commit.
-/.tmp-ci/
-/.tmp-probe/
-/.tmp-probe2/
+# `probe`, `bench` and any other scratch directory a test run invents start with this
+# prefix, so one rule covers what three did and the next one is covered before it exists.
+/.tmp-*/
 
 # A commit message written to a file, so a long one survives the shell
 /.git-commit-msg.txt
