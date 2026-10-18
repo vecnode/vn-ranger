@@ -73,16 +73,22 @@ impl Confidence {
 }
 
 /// What a rule says about the facts.
+///
+/// The text is owned rather than borrowed because a finding can come from a pack, and a
+/// pack's words exist at runtime. A built-in rule's words are copied into the finding, which
+/// costs one allocation per finding and buys one type for both engines.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct Finding {
     /// The stable rule id, never reused for a different meaning.
-    pub rule_id: &'static str,
+    pub rule_id: String,
     /// The rule's short title.
-    pub title: &'static str,
+    pub title: String,
     /// Consequence, not confidence.
     pub severity: Severity,
     /// How sure the interpretation is.
     pub confidence: Confidence,
+    /// The ATT&CK technique, where one applies.
+    pub technique: Option<String>,
     /// A stable identity for this finding, used by suppressions.
     pub subject: String,
     /// The thing a person recognises, in words.
@@ -90,11 +96,21 @@ pub struct Finding {
     /// What was observed, one fact per line.
     pub evidence: Vec<String>,
     /// Why those facts matter.
-    pub why: &'static str,
+    pub why: String,
     /// The most likely innocent explanation.
-    pub benign: &'static str,
+    pub benign: String,
     /// What a person can do about it.
-    pub remediation: &'static str,
+    pub remediation: String,
+    /// The pack a finding came from, as `id version`; `None` for a built-in rule.
+    pub pack: Option<String>,
+}
+
+impl Finding {
+    /// Whether this finding came from a pack rather than from a built-in rule.
+    #[must_use]
+    pub fn from_pack(&self) -> bool {
+        self.pack.is_some()
+    }
 }
 
 /// A person's decision to stop seeing one rule fire on one subject, until it expires.
@@ -153,6 +169,36 @@ struct Rule {
     why: &'static str,
     benign: &'static str,
     remediation: &'static str,
+}
+
+/// Every built-in rule id, in the order the table below declares them.
+///
+/// A pack may not shadow one of these: a suppression is scoped to `(rule, subject)`, and two
+/// rules with one id make it impossible to say which one a person meant. This is the list the
+/// pack validator is given, so it is the list a new built-in rule has to be added to — and a
+/// test below fails when a `Rule` constant's id is not in it.
+pub const RULE_IDS: [&str; 15] = [
+    "startup.temp-path",
+    "startup.downloads-path",
+    "startup.script-extension",
+    "startup.bare-command",
+    "startup.shell-interpreter",
+    "startup.user-writable-system",
+    "startup.hash-changed",
+    "startup.new-since-baseline",
+    "process.temp-path",
+    "process.downloads-path",
+    "process.parent-exited",
+    "listener.public-new-process",
+    "listener.public-unknown-owner",
+    "agent.persistent-listening",
+    "startup.duplicate-command",
+];
+
+/// The built-in rule ids, in the form a pack validator wants them.
+#[must_use]
+pub fn builtin_ids() -> &'static [&'static str] {
+    &RULE_IDS
 }
 
 const TEMP_PATH: Rule = Rule {
@@ -352,28 +398,39 @@ pub fn evaluate(snapshot: &Snapshot, baseline: Option<&Snapshot>) -> Vec<Finding
     persistent_listeners(snapshot, &mut findings);
     duplicate_commands(snapshot, &mut findings);
 
+    sort_findings(&mut findings);
+    findings
+}
+
+/// Put findings in the one order the interface and the report both read them in.
+///
+/// Severity first, then the rule, then the subject. Two engines produce findings — the
+/// built-in rules and the active pack — and they are merged before they are shown, so the
+/// order has to be a function of the findings rather than of which engine ran first.
+pub fn sort_findings(findings: &mut [Finding]) {
     findings.sort_by(|a, b| {
         b.severity
             .rank()
             .cmp(&a.severity.rank())
-            .then_with(|| a.rule_id.cmp(b.rule_id))
+            .then_with(|| a.rule_id.cmp(&b.rule_id))
             .then_with(|| a.subject.cmp(&b.subject))
     });
-    findings
 }
 
 fn make(rule: &Rule, subject: String, subject_label: String, evidence: Vec<String>) -> Finding {
     Finding {
-        rule_id: rule.id,
-        title: rule.title,
+        rule_id: rule.id.to_owned(),
+        title: rule.title.to_owned(),
         severity: rule.severity,
         confidence: rule.confidence,
+        technique: None,
         subject,
         subject_label,
         evidence,
-        why: rule.why,
-        benign: rule.benign,
-        remediation: rule.remediation,
+        why: rule.why.to_owned(),
+        benign: rule.benign.to_owned(),
+        remediation: rule.remediation.to_owned(),
+        pack: None,
     }
 }
 
@@ -1241,13 +1298,24 @@ mod tests {
             .push(process(12, Some(4242), "x", Some("C:\\Temp\\x.exe"), 999_000));
         let findings = evaluate(&snapshot, None);
         let mut sorted = findings.clone();
-        sorted.sort_by(|a, b| {
-            b.severity
-                .rank()
-                .cmp(&a.severity.rank())
-                .then_with(|| a.rule_id.cmp(b.rule_id))
-                .then_with(|| a.subject.cmp(&b.subject))
-        });
+        sort_findings(&mut sorted);
         assert_eq!(findings, sorted);
+    }
+
+    #[test]
+    fn the_published_rule_ids_are_the_ones_the_rules_carry() {
+        // The ids are declared twice — on each `Rule` constant and in the list the pack
+        // validator is given — so a rule that is not added to the list would let a pack
+        // shadow it. Reading this file's own source is the cheapest way to notice.
+        let source = include_str!("rules.rs");
+        let declared: Vec<&str> = source
+            .lines()
+            .filter_map(|line| line.trim().strip_prefix("id: \""))
+            .filter_map(|rest| rest.find('"').map(|end| &rest[..end]))
+            .collect();
+        assert_eq!(
+            declared, RULE_IDS,
+            "the rule table and the published ids are one list"
+        );
     }
 }

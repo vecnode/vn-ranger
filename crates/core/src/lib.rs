@@ -19,6 +19,7 @@ pub mod recovery;
 pub mod report;
 pub mod rules;
 pub mod schedule;
+pub mod sigma;
 pub mod signature;
 pub mod time;
 pub mod timeline;
@@ -35,6 +36,7 @@ pub use model::{
 pub use recovery::{Phase as RecoveryPhase, Verdict as RecoveryVerdict};
 pub use rules::{
     Confidence, Finding, Severity, Suppression, apply_suppressions, evaluate, prune_suppressions,
+    sort_findings,
 };
 pub use signature::{HashAlgorithm, HashSignature, SignatureSet};
 pub use timeline::{EventKind, Timeline, TimelineEvent};

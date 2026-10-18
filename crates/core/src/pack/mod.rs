@@ -14,12 +14,13 @@
 //! a trusted key is refused, and its bytes are never parsed.
 
 pub mod active;
+pub mod evaluate;
 
 use std::fmt;
 
 use serde::Deserialize;
 
-use crate::fields::Subject;
+use crate::fields::{FieldKind, Subject};
 use crate::rules::{Confidence, Severity};
 
 /// The only schema version this build understands.
@@ -108,6 +109,33 @@ impl Operator {
     #[must_use]
     pub fn takes_value(self) -> bool {
         !matches!(self, Self::Exists)
+    }
+
+    /// Whether this operator can hold for a field of this kind.
+    ///
+    /// `gt` on a path and `prefix` on a port are not style choices: neither can ever be
+    /// true, so a rule that writes one is a rule that never fires. The validator refuses
+    /// them the way it refuses an unknown field.
+    #[must_use]
+    pub fn applies_to(self, kind: FieldKind) -> bool {
+        match kind {
+            FieldKind::Text => !matches!(self, Self::Gt | Self::Lt),
+            FieldKind::Number => matches!(
+                self,
+                Self::Eq | Self::Ne | Self::Gt | Self::Lt | Self::In | Self::Exists
+            ),
+            FieldKind::Bool => matches!(self, Self::Eq | Self::Ne | Self::In | Self::Exists),
+        }
+    }
+
+    /// The operators a field of this kind accepts, for a refusal that says what to write.
+    #[must_use]
+    pub fn accepted_by(kind: FieldKind) -> Vec<&'static str> {
+        Self::ALL
+            .into_iter()
+            .filter(|operator| operator.applies_to(kind))
+            .map(Operator::id)
+            .collect()
     }
 }
 
@@ -553,15 +581,19 @@ fn validate_predicate(
         *ok = false;
         return None;
     }
-    if let Some(subject) = subject
-        && !subject.has_field(&field)
-    {
-        push(format!(
-            "`{field}` is not a field of `{subject}`; docs/RULES.md lists the ones that are"
-        ));
-        *ok = false;
-        return None;
-    }
+    let kind = match subject {
+        Some(subject) => match subject.kind_of(&field) {
+            Some(kind) => Some(kind),
+            None => {
+                push(format!(
+                    "`{field}` is not a field of `{subject}`; docs/RULES.md lists the ones that are"
+                ));
+                *ok = false;
+                return None;
+            }
+        },
+        None => None,
+    };
     let operator = match wire.op.as_deref().map(Operator::from_id) {
         Some(Some(operator)) => operator,
         Some(None) => {
@@ -578,6 +610,18 @@ fn validate_predicate(
             return None;
         }
     };
+    if let Some(kind) = kind
+        && !operator.applies_to(kind)
+    {
+        push(format!(
+            "`{}` cannot hold for `{field}`, which is {}: use {}",
+            operator.id(),
+            kind.label(),
+            Operator::accepted_by(kind).join(", ")
+        ));
+        *ok = false;
+        return None;
+    }
     if operator.takes_value() && wire.value.is_none() {
         push(format!("`{}` needs a value", operator.id()));
         *ok = false;
@@ -591,13 +635,10 @@ fn validate_predicate(
     // A string value is length-limited like every other string a pack carries; a number or a
     // list of them is bounded by the pack's own size.
     let value = wire.value;
-    if let Some(serde_json::Value::String(text)) = &value
-        && text.len() > MAX_STRING
+    if let Some(value) = &value
+        && let Err(problem) = value_fits(kind, operator, value)
     {
-        push(format!(
-            "a value is {} bytes, and the limit is {MAX_STRING}",
-            text.len()
-        ));
+        push(problem);
         *ok = false;
         return None;
     }
@@ -606,6 +647,69 @@ fn validate_predicate(
         operator,
         value,
     })
+}
+
+/// Whether a predicate's value is the kind its field holds, and says what to write instead.
+///
+/// `in` takes a non-empty list; every other operator that takes a value takes one value.
+/// This is checked at load because a predicate that can never be true is a rule that never
+/// fires, whatever its prose claims.
+fn value_fits(kind: Option<FieldKind>, operator: Operator, value: &serde_json::Value) -> Result<(), String> {
+    if let serde_json::Value::String(text) = value
+        && text.len() > MAX_STRING
+    {
+        return Err(format!(
+            "a value is {} bytes, and the limit is {MAX_STRING}",
+            text.len()
+        ));
+    }
+    if operator == Operator::In {
+        let serde_json::Value::Array(items) = value else {
+            return Err(format!(
+                "`in` takes a list of values, and this one is not a list: {value}"
+            ));
+        };
+        if items.is_empty() {
+            return Err("`in` takes a list, and this one is empty".to_owned());
+        }
+        for item in items {
+            single_fits(kind, item)?;
+        }
+        return Ok(());
+    }
+    single_fits(kind, value)
+}
+
+fn single_fits(kind: Option<FieldKind>, value: &serde_json::Value) -> Result<(), String> {
+    if let serde_json::Value::String(text) = value {
+        for name in evaluate::placeholders_in(text) {
+            if !evaluate::known_place(name) {
+                return Err(format!(
+                    "`{{{name}}}` is not a place ranger resolves; use {}",
+                    evaluate::PLACES
+                        .iter()
+                        .map(|place| format!("{{{place}}}"))
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                ));
+            }
+        }
+    }
+    let Some(kind) = kind else {
+        return Ok(());
+    };
+    let fits = match kind {
+        FieldKind::Text => value.is_string(),
+        FieldKind::Number => value.is_number(),
+        FieldKind::Bool => value.is_boolean(),
+    };
+    if fits {
+        return Ok(());
+    }
+    Err(format!(
+        "the value {value} is not {}, which is what this field holds",
+        kind.label()
+    ))
 }
 
 fn required(value: Option<String>, name: &str, push: &mut impl FnMut(String), ok: &mut bool) -> String {

@@ -67,6 +67,22 @@ pub enum AutorunKind {
 }
 
 impl AutorunKind {
+    /// The stable name a pack rule writes. Interfaces use [`Self::label`].
+    #[must_use]
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::RunKey => "run_key",
+            Self::StartupFolder => "startup_folder",
+            Self::Service => "service",
+            Self::LaunchAgent => "launch_agent",
+            Self::LaunchDaemon => "launch_daemon",
+            Self::SystemdUnit => "systemd_unit",
+            Self::Cron => "cron",
+            Self::XdgAutostart => "xdg_autostart",
+            Self::Other => "other",
+        }
+    }
+
     /// A short label for interfaces and reports.
     #[must_use]
     pub fn label(self) -> &'static str {
@@ -95,6 +111,15 @@ pub enum AutorunScope {
 }
 
 impl AutorunScope {
+    /// The stable name a pack rule writes. Interfaces use [`Self::label`].
+    #[must_use]
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::User => "user",
+            Self::System => "system",
+        }
+    }
+
     /// A short label for interfaces and reports.
     #[must_use]
     pub fn label(self) -> &'static str {
@@ -123,6 +148,18 @@ pub enum SignatureStatus {
 }
 
 impl SignatureStatus {
+    /// The stable name a pack rule writes. Interfaces use [`Self::label`].
+    #[must_use]
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::NotChecked => "not_checked",
+            Self::Valid => "valid",
+            Self::Invalid => "invalid",
+            Self::Unsigned => "unsigned",
+            Self::Unknown => "unknown",
+        }
+    }
+
     /// A short label for interfaces and reports.
     #[must_use]
     pub fn label(self) -> &'static str {

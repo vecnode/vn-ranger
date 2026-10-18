@@ -32,7 +32,7 @@
       "match": {
         "subject": "startup",
         "all": [
-          { "field": "signed", "op": "eq", "value": false },
+          { "field": "signed", "op": "eq", "value": "unsigned" },
           { "field": "scope", "op": "eq", "value": "user" }
         ]
       },
