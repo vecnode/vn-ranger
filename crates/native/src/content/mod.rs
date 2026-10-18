@@ -23,6 +23,8 @@ use sha2::Digest;
 use vnr_core::content::{self, Budget, FileKind, Layout, Library};
 use vnr_core::{ContentMatch, FileFact, HashSignature, SignatureSet, SignatureStatus};
 
+pub mod containers;
+
 /// How many files one deep check will look at.
 pub const MAX_FILES: usize = 20_000;
 
@@ -356,7 +358,7 @@ impl State<'_> {
             .map(str::to_ascii_lowercase);
         self.report.files.push(FileFact {
             path: path.display().to_string(),
-            name,
+            name: name.clone(),
             extension,
             size,
             digest: Some(digest),
@@ -368,6 +370,92 @@ impl State<'_> {
             matches,
             read_bytes,
         });
+
+        // What a container holds is read in memory, never unpacked: the members are scanned
+        // exactly like the file they came from, and the fact says which container they were
+        // in. An archive whose members were not read says so — an archive that looks empty is
+        // the one answer this program does not give.
+        if let Some(bytes) = bytes.as_deref()
+            && containers::is_container(&name)
+        {
+            self.expand_and_scan(&path.display().to_string(), &name, bytes, 1);
+        }
+    }
+
+    /// Read a container's members, scan each, and follow a container inside a container.
+    fn expand_and_scan(&mut self, outer_path: &str, name: &str, bytes: &[u8], depth: u32) {
+        if depth > containers::MAX_DEPTH {
+            return;
+        }
+        match containers::expand(name, bytes) {
+            Ok(expansion) => {
+                for note in expansion.notes {
+                    self.report.refused.push(note);
+                }
+                for member in expansion.members {
+                    if self.report.files.len() >= self.limits.max_files {
+                        self.report.truncated = true;
+                        return;
+                    }
+                    let mut held_by = vec![outer_path.to_owned()];
+                    if let Some(outer) = self
+                        .report
+                        .files
+                        .iter()
+                        .find(|file| file.path == outer_path)
+                        .map(|file| file.container.clone())
+                    {
+                        held_by = outer;
+                        held_by.push(outer_path.to_owned());
+                    }
+                    let member_path = format!("{outer_path}!{}", member.name);
+                    let digest = digest_bytes(&member.bytes);
+                    let kind = content::identify(&member.bytes);
+                    let hash_match = self.hash_match(&digest, member.size());
+                    let layout = Layout {
+                        target: kind.target(),
+                        entry_point: None,
+                        sections: Vec::new(),
+                    };
+                    let mut budget = Budget::new(STEPS_PER_FILE);
+                    let matches = self
+                        .library
+                        .scan(&member.bytes, Some(&layout), &mut budget)
+                        .hits
+                        .into_iter()
+                        .map(|hit| ContentMatch {
+                            name: hit.name,
+                            at: hit.at,
+                            line: hit.line,
+                        })
+                        .collect();
+                    let nested_name = member.name.clone();
+                    let nested_bytes = member.bytes.clone();
+                    let size = member.size();
+                    self.report.files.push(FileFact {
+                        path: member_path.clone(),
+                        name: nested_name.clone(),
+                        extension: std::path::Path::new(&nested_name)
+                            .extension()
+                            .and_then(|extension| extension.to_str())
+                            .map(str::to_ascii_lowercase),
+                        size,
+                        digest: Some(digest),
+                        kind: Some(kind.id().to_owned()),
+                        signature: SignatureStatus::NotChecked,
+                        signer: None,
+                        container: held_by,
+                        hash_match,
+                        matches,
+                        read_bytes: Some(size),
+                    });
+                    if containers::is_container(&nested_name) {
+                        self.expand_and_scan(&member_path, &nested_name, &nested_bytes, depth + 1);
+                    }
+                }
+            }
+            Err(reason) => self.report.refused.push(reason),
+        }
     }
 
     /// The name of a hash signature that matches this digest and size, if one does.
@@ -490,6 +578,55 @@ mod tests {
 
     fn library(body: &str) -> Library {
         Library::parse(body)
+    }
+
+    #[test]
+    fn a_zip_member_is_scanned_as_a_file_of_its_own() {
+        use std::io::Write as _;
+
+        const EICAR: &str = "X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
+        let dir = tempfile::tempdir().unwrap();
+        let mut writer = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        writer
+            .start_file("inside/payload.txt", zip::write::SimpleFileOptions::default())
+            .expect("a member");
+        writer.write_all(EICAR.as_bytes()).expect("its bytes");
+        let archive = writer.finish().expect("an archive").into_inner();
+        std::fs::write(dir.path().join("payload.zip"), &archive).expect("written");
+
+        // A body signature for the string inside the member: the engine must find it without
+        // the archive ever being unpacked. `.ndb`: name, target, offset, hex bytes, and
+        // 45494341522d5354414e44415244 is "EICAR-STANDARD".
+        let library = library("Eicar.Test:0:*:45494341522d5354414e44415244\n");
+        let report = scan(
+            &[dir.path().to_path_buf()],
+            &library,
+            &SignatureSet::default(),
+            &Limits::default(),
+            &|| false,
+        );
+        let outer = report
+            .files
+            .iter()
+            .find(|file| file.name == "payload.zip")
+            .expect("the archive itself is a fact");
+        assert!(outer.container.is_empty());
+        let member = report
+            .files
+            .iter()
+            .find(|file| file.path.contains("!inside/payload.txt"))
+            .expect("the member is a fact of its own");
+        assert_eq!(
+            member.container.len(),
+            1,
+            "the fact says which container it was in"
+        );
+        assert!(member.container[0].ends_with("payload.zip"));
+        assert!(
+            !member.matches.is_empty(),
+            "the signature inside the member matched: {:?}",
+            member.matches
+        );
     }
 
     fn write(dir: &Path, name: &str, bytes: &[u8]) -> PathBuf {

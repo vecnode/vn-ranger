@@ -62,6 +62,23 @@ missing was the collector that finds the skills and turns them into facts.
 
 ## 4. Wave 1 — containers, then structural facts
 
+**Containers are built.** `cargo add zip cfb` with `zip`'s default features off and only
+`deflate` on: two new crates in `Cargo.lock` and no C toolchain. `content/containers.rs`
+reads a zip-shaped container and an OLE (`cfb`) one **in memory**, and the content engine
+scans each member as a file of its own: the fact's path is `outer.zip!inside/payload.txt`, its
+`container` chain says where it came from, and a container inside a container is followed
+three deep. Nothing is ever extracted, so there is no folder to clean and no path an archive
+could write through.
+
+Everything is bounded because an archive is attacker-controlled: 32 members, 16 MB a member,
+64 MB a container, and a member that claims more than 200 bytes per byte it occupies is not
+read — that is what a decompression bomb looks like. What was skipped goes into the report's
+refused list with a reason, in words, rather than leaving an archive that looks empty.
+
+`goblin` vs `object` and the structural facts (sections and entropy, imports and imphash, the
+overlay, the signature blob, `authenticode`) are **not built**: they are the other half of
+this wave, and `object` is the candidate because it is already in the local registry cache.
+
 `cargo add zip flate2 cfb`. One walker with a ratio cap, 256 MB total, 3 layers, and the
 `.ndb` library run on what it extracts — never to disk. Then `goblin` **or** `object`
 (measure both, keep one): sections and entropy, imports and imphash, the overlay, the

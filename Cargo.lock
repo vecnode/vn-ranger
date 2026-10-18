@@ -843,6 +843,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "cfb"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f13298d9178622b7916ec5d01d470425c04273c8ed07e87b1c38b34c4f4612b"
+dependencies = [
+ "fnv",
+ "uuid",
+ "web-time",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5707,6 +5718,7 @@ name = "vnr-native"
 version = "0.1.7"
 dependencies = [
  "cap-std",
+ "cfb",
  "directories",
  "hex",
  "is_elevated",
@@ -5730,6 +5742,7 @@ dependencies = [
  "vnr-core",
  "winreg",
  "yara-x",
+ "zip 9.0.5",
 ]
 
 [[package]]
@@ -7080,7 +7093,7 @@ dependencies = [
  "yara-x-macros",
  "yara-x-parser",
  "yara-x-proto",
- "zip",
+ "zip 8.6.0",
 ]
 
 [[package]]
@@ -7346,6 +7359,21 @@ dependencies = [
  "flate2",
  "indexmap",
  "memchr",
+ "typed-path",
+ "zopfli",
+]
+
+[[package]]
+name = "zip"
+version = "9.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e04976da629d3b04204ba8105b396a193af8ad2583b2c79bfb3ab8af580a11e"
+dependencies = [
+ "crc32fast",
+ "flate2",
+ "indexmap",
+ "memchr",
+ "nix",
  "typed-path",
  "zopfli",
 ]
