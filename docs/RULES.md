@@ -355,6 +355,7 @@ table instead of leaving a blank.
 | `—` | `agent.skill-executes-networked` | Attention | built-in | A skill both runs commands and reaches the network |
 | `—` | `file.content-match` | Attention | built-in | A file holds the bytes a signature describes |
 | `—` | `file.hash-match` | Attention | built-in | A file matched a signature by hash |
+| `—` | `file.writable-executable-section` | Notice | built-in | An executable has a section that is writable and executable |
 | `—` | `flow.beaconing` | Notice | built-in | A program is contacting the same address on a steady rhythm |
 | `—` | `flow.temp-process-remote` | Notice | built-in | A program in a temporary folder is talking to another machine |
 | `—` | `listener.public-new-process` | Notice | built-in | A recently started process listens beyond loopback |
@@ -364,7 +365,7 @@ table instead of leaving a blank.
 | `—` | `startup.bare-command` | Notice | built-in | A startup command does not name a full path |
 | `—` | `startup.duplicate-command` | Info | built-in | One command is registered as several startup items |
 
-33 rules covering 14 technique(s): 21 built in and 12 from `packs/ranger.core.json`.
+34 rules covering 14 technique(s): 22 built in and 12 from `packs/ranger.core.json`.
 
 No technique, and why — a rule that cannot name one says so:
 
@@ -379,6 +380,7 @@ No technique, and why — a rule that cannot name one says so:
 - `flow.temp-process-remote` — a connection is a channel; which technique it serves depends on what is said over it, which this rule does not observe
 - `flow.beaconing` — a rhythm is a channel; what it carries is not observed
 - `agent.skill-executes-networked` — a capability matrix says what a package could do; which technique it serves is what its author intended, which this rule does not observe
+- `file.writable-executable-section` — a writable and executable section is a property of the header; which technique a program uses it for is not observable from the header
 <!-- coverage:end -->
 
 ## Importing a Sigma rule

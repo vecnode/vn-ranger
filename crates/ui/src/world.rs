@@ -619,6 +619,8 @@ pub enum Action {
     ExportMarkdown,
     /// Write the current findings as JSON.
     ExportFindingsJson,
+    /// Write one triage folder: the snapshot, the findings, the timeline and a manifest.
+    ExportTriage,
     /// Open ranger's data directory.
     OpenDataDir,
     /// Open the signatures directory.

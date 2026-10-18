@@ -1259,6 +1259,7 @@ impl App {
             Action::ExportJson => self.export_json(),
             Action::ExportMarkdown => self.export_markdown(),
             Action::ExportFindingsJson => self.export_findings_json(),
+            Action::ExportTriage => self.export_triage(),
             Action::SetDark(dark) => {
                 self.ui.set_dark(dark);
                 self.settings.dark = Some(dark);
@@ -1710,6 +1711,53 @@ impl App {
         self.settings.skip_on_battery = Some(self.world.skip_on_battery);
         if let Err(error) = vnr_native::store::save_ui_settings(&self.settings) {
             self.world.error = Some(format!("The interface preference could not be saved: {error}"));
+        }
+    }
+
+    /// Write one triage folder a person can hand to somebody else.
+    ///
+    /// The folder is journalled before it is written and its name after, so the record says
+    /// what left the program: the files stay on this machine, and the journal is what proves
+    /// which snapshot produced which folder.
+    fn export_triage(&mut self) {
+        let Some(snapshot) = self.world.snapshot.clone() else {
+            self.world.error = Some("Nothing has been scanned yet.".to_owned());
+            return;
+        };
+        let now = now_unix();
+        let mut journal_ok = true;
+        if let Err(error) = self.journal.record(
+            Draft::event("triage export")
+                .with_action(vnr_core::Action::Scan)
+                .with_reason("writing one folder with the snapshot, the findings and a manifest"),
+        ) {
+            self.report_journal(&error);
+            journal_ok = false;
+        }
+        let events: Vec<vnr_core::TimelineEvent> = self.world.timeline.iter().cloned().collect();
+        match vnr_native::export::write(
+            &vnr_native::paths::exports_dir(),
+            &snapshot,
+            &self.world.findings,
+            &vnr_core::to_csv(&events),
+            now,
+        ) {
+            Ok(package) => {
+                self.world.error = None;
+                self.world.notice = Some(format!(
+                    "{} file(s), {}, written to {}. The manifest names the hash of each one.",
+                    package.files.len(),
+                    vnr_ui::widgets::bytes(package.bytes()),
+                    package.folder.display()
+                ));
+                if journal_ok {
+                    self.note(
+                        Draft::event("triage package").with_path(&package.folder.display().to_string()),
+                    );
+                }
+                self.maintain_journal();
+            }
+            Err(error) => self.world.error = Some(format!("The triage folder could not be written: {error}")),
         }
     }
 

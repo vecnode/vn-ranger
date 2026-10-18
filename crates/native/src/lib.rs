@@ -18,6 +18,7 @@ pub mod collect;
 pub mod content;
 pub mod contentscan;
 pub mod elevation;
+pub mod export;
 pub mod hash;
 pub mod instance;
 pub mod journal;

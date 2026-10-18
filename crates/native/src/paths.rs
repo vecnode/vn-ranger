@@ -116,6 +116,12 @@ fn override_dir(value: Option<&OsStr>) -> Option<PathBuf> {
     }
 }
 
+/// Where triage exports are written: one folder per export, each with a manifest.
+#[must_use]
+pub fn exports_dir() -> PathBuf {
+    data_dir().join("exports")
+}
+
 /// Where exported reports are written.
 #[must_use]
 pub fn reports_dir() -> PathBuf {

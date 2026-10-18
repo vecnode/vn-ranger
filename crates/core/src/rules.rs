@@ -196,7 +196,7 @@ pub struct Rule {
 /// rules with one id make it impossible to say which one a person meant. This is the list the
 /// pack validator is given, so it is the list a new built-in rule has to be added to — and a
 /// test below fails when a `Rule` constant's id is not in it.
-pub const RULE_IDS: [&str; 21] = [
+pub const RULE_IDS: [&str; 22] = [
     "startup.temp-path",
     "startup.downloads-path",
     "startup.script-extension",
@@ -218,6 +218,7 @@ pub const RULE_IDS: [&str; 21] = [
     "flow.temp-process-remote",
     "flow.beaconing",
     "agent.skill-executes-networked",
+    "file.writable-executable-section",
 ];
 
 /// The built-in rule ids, in the form a pack validator wants them.
@@ -536,11 +537,29 @@ const NETWORKED_SKILL: Rule = Rule {
                     serves is what its author intended, which this rule does not observe",
 };
 
-/// Every built-in rule, in the order [`RULE_IDS`] publishes them.///
+const WRITABLE_EXECUTABLE: Rule = Rule {
+    id: "file.writable-executable-section",
+    title: "An executable has a section that is writable and executable",
+    severity: Severity::Notice,
+    confidence: Confidence::Likely,
+    why: "A section that the program can write to and also run is how a packer unpacks itself \
+          into memory, and it is how a just-in-time compiler emits code. The header says the \
+          section can do both; it does not say what is done with it.",
+    benign: "A just-in-time compiler, a self-extracting installer's stub, or a packed game \
+             launcher — all of them write code and then run it on purpose.",
+    remediation: "Check the publisher and the signature of the file. If it is unsigned and in a \
+                  folder you did not install to, quarantine it and look at where it came from.",
+    technique: None,
+    technique_note: "a writable and executable section is a property of the header; which \
+                    technique a program uses it for is not observable from the header",
+};
+
+/// Every built-in rule, in the order [`RULE_IDS`] publishes them.
+///
 /// One table, read by the engine that fires the rules and by the command that writes the
 /// coverage table, so "what does ranger detect" has one answer in one place. A pack rule is
 /// the other half of the answer; the two are counted together by `cargo xtask coverage`.
-pub const BUILTIN_RULES: [Rule; 21] = [
+pub const BUILTIN_RULES: [Rule; 22] = [
     TEMP_PATH,
     DOWNLOADS_PATH,
     SCRIPT_EXTENSION,
@@ -562,6 +581,7 @@ pub const BUILTIN_RULES: [Rule; 21] = [
     TEMP_FLOW,
     BEACONING_FLOW,
     NETWORKED_SKILL,
+    WRITABLE_EXECUTABLE,
 ];
 
 /// The built-in rules, as a slice.
@@ -592,6 +612,7 @@ pub fn evaluate(snapshot: &Snapshot, baseline: Option<&Snapshot>) -> Vec<Finding
     remote_flows(snapshot, &mut findings);
     beaconing_flows(snapshot, &mut findings);
     networked_skills(snapshot, &mut findings);
+    writable_executable_sections(snapshot, &mut findings);
 
     sort_findings(&mut findings);
     findings
@@ -748,6 +769,53 @@ fn capability<'a>(agent: &'a crate::model::AgentFact, kind: &str) -> Option<&'a 
         .iter()
         .find(|(found, _)| found == kind)
         .map(|(_, evidence)| evidence.as_str())
+}
+
+/// An executable whose header says a section can be written to and run.
+///
+/// The severity is a notice rather than attention because the shape is shared by every
+/// just-in-time compiler and every self-extracting installer, and because the finding can
+/// only say what the header allows. The numbers are the evidence: how many such sections,
+/// how many in total, and the highest entropy — a packed section is usually both writable and
+/// executable and close to eight bits per byte.
+fn writable_executable_sections(snapshot: &Snapshot, findings: &mut Vec<Finding>) {
+    for file in &snapshot.files {
+        let Some(structure) = file.structure.as_ref() else {
+            continue;
+        };
+        if structure.writable_executable == 0 {
+            continue;
+        }
+        let mut evidence = vec![
+            format!(
+                "{} section(s) of {}, {} writable and executable",
+                structure.sections, structure.format, structure.writable_executable
+            ),
+            format!(
+                "Highest section entropy: {:.2} bits per byte",
+                f64::from(structure.max_entropy_x100) / 100.0
+            ),
+            format!("Imports: {}", structure.imports),
+        ];
+        if let Some(machine) = structure.machine.as_deref() {
+            evidence.insert(0, format!("Machine: {machine}"));
+        }
+        if structure.overlay_bytes > 0 {
+            evidence.push(format!(
+                "Bytes after the last section: {}",
+                structure.overlay_bytes
+            ));
+        }
+        if let Some(imphash) = structure.imphash.as_deref() {
+            evidence.push(format!("Import hash: {imphash}"));
+        }
+        findings.push(make(
+            &WRITABLE_EXECUTABLE,
+            format!("file:{}", file.path),
+            file.path.clone(),
+            evidence,
+        ));
+    }
 }
 
 /// What the content engine found in the files it read.
@@ -1489,6 +1557,55 @@ mod tests {
                 .any(|finding| finding.rule_id == "agent.skill-executes-networked"),
             "an MCP configuration is not a skill"
         );
+    }
+
+    #[test]
+    fn an_executable_with_a_writable_executable_section_fires_and_one_without_does_not() {
+        let file = |path: &str, writable_executable: u32| crate::model::FileFact {
+            path: path.to_owned(),
+            name: path.rsplit('/').next().unwrap_or(path).to_owned(),
+            extension: Some("exe".to_owned()),
+            size: 1024,
+            digest: Some("ab".repeat(32)),
+            kind: Some("pe".to_owned()),
+            signature: crate::model::SignatureStatus::NotChecked,
+            signer: None,
+            container: Vec::new(),
+            hash_match: None,
+            matches: Vec::new(),
+            read_bytes: Some(1024),
+            structure: Some(crate::model::Structure {
+                format: "pe".to_owned(),
+                machine: Some("x86_64".to_owned()),
+                sections: 5,
+                writable_executable,
+                max_entropy_x100: 742,
+                imports: 42,
+                imphash: Some("cd".repeat(32)),
+                overlay_bytes: 4096,
+                signature_blob: false,
+            }),
+        };
+        let mut snapshot = snapshot();
+        snapshot.files.push(file("C:/Users/me/Downloads/setup.exe", 1));
+        snapshot.files.push(file("C:/Program Files/Acme/acme.exe", 0));
+        let findings = evaluate(&snapshot, None);
+        let firing: Vec<&Finding> = findings
+            .iter()
+            .filter(|finding| finding.rule_id == "file.writable-executable-section")
+            .collect();
+        assert_eq!(firing.len(), 1, "only the file with such a section");
+        let finding = firing[0];
+        assert_eq!(finding.severity, Severity::Notice);
+        assert_eq!(finding.subject, "file:C:/Users/me/Downloads/setup.exe");
+        for line in ["writable and executable", "7.42 bits", "Import hash"] {
+            assert!(
+                finding.evidence.iter().any(|entry| entry.contains(line)),
+                "{line} is missing from {:?}",
+                finding.evidence
+            );
+        }
+        assert!(finding.benign.contains("just-in-time"), "{}", finding.benign);
     }
 
     #[test]

@@ -1210,6 +1210,16 @@ impl Ui {
                 if ui.button("Export findings (JSON)").clicked() {
                     actions.push(Action::ExportFindingsJson);
                 }
+                if ui
+                    .button("Write a triage folder")
+                    .on_hover_text(
+                        "One folder with the snapshot, the findings, the timeline and a manifest \
+                         that names the hash of every file in it. Nothing leaves this machine.",
+                    )
+                    .clicked()
+                {
+                    actions.push(Action::ExportTriage);
+                }
                 if ui.button("Open data folder").clicked() {
                     actions.push(Action::OpenDataDir);
                 }

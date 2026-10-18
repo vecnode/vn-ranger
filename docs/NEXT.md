@@ -267,11 +267,40 @@ twice, and every limit visible in the status line.
 
 ## 7. Wave 5 — the payoff
 
+**The triage package is built.** `native/src/export.rs` writes one folder,
+`<data>/exports/triage-<utc>/`, with `snapshot.json`, `findings.md`, `timeline.csv`, a `README`
+that says what the folder is and is not, and a `manifest.txt` written **last** so it covers
+what is actually there: a SHA-256 and a size for every file. The README repeats every
+collector's own status, so *"the logs were not enabled"* and *"nothing matched"* cannot look
+alike; it says plainly that a clean result is a statement about a database, and that nothing
+in the folder was sent anywhere. A second export in the same minute is refused rather than
+merged, because two exports in one folder would make the manifest untrue. The Report view
+writes it, the journal records that it happened, and the folder stays on this machine.
+
+**Not built:** the sweep across the four domains (it needs the event domain, which is out of
+this release — see §8) and the `events-<channel>.jsonl` file, which has no events to write.
+
 - `core/src/journal.rs` is chained; the sweep reuses `content::scan` and the four fact
   domains, and offers quarantine through the existing typed path.
 - Triage package: `<data>/exports/triage-<time>/` with a hashed manifest, `snapshot.json`,
   `findings.md`, `timeline.csv` (the exporter exists), `events-<channel>.jsonl`.
 - `bodyfile` waits for filesystem timestamps — a bodyfile of events is not a bodyfile.
+
+## 8. Not in this release, and why
+
+Written down rather than left to be discovered. Each of these was in the plan; each has a
+reason and a size.
+
+| Not built | Why | What it would take |
+|---|---|---|
+| **Event records (§3)** | `evtx` with `--no-default-features` still resolves to **34 crates** — `error-chain` 0.12, five `encoding-*` crates from 2014, `skeptic`, and an `rkyv` + `sonic-rs` SIMD stack. That is a supply chain a 0.1.7 cannot absorb in the last round of a session, and the plan's "~200 KB" was wrong. | A dependency decision of its own, then `native/src/collect/events/{windows,linux,macos}.rs` and the `event` subject with its twelve rules. The refused alternative — `wevtutil qe /f:xml` behind a bounded child — is the cheaper path and needs one paragraph of the same decision. |
+| **The Authenticode digest** | Reading the signature blob is built (`signature_blob`); validating the digest needs a PKCS#7 parser and a trust decision. | `authenticode` over `object`'s certificate table, or the platform's own verifier through a safe wrapper. |
+| **The sweep (§7)** | It is a search across four domains, one of which (events) is not built; a sweep that searched two of four would have to say so in every result, and the honest version of that is worse than waiting. | The event domain first, then `native/src/sweep.rs` reusing `content::scan` and the existing typed quarantine path. |
+| **The Startup folder's `.lnk`** | The move into the quarantine needs the one decision this release did not make: whether a `.lnk` move may take the source path the scan reported, the way quarantine-from-a-finding does. | One paragraph in `PLAN.md` §6.10, `quarantine` reused, and the surface flipped back to writable with its refusal tests. |
+| **The action path's second reviewer** | `AGENTS.md` §2 requires two reviewers on a change to the action path. This session is one. | A review of `startup.rs`, `act::startup` and the Startup card against the specification, and the traversal table written by the reviewer who did not write the tests. |
+| **`yara-x`** | Deliberately absent: an optional feature, never a default dependency, and `ci` fails if a default build contains it. | `--features yara`, and a person who chooses to pay for the dependency. |
+| **`bodyfile`** | It waits for filesystem timestamps that the event domain would carry. | With §3. |
+
 
 ## What a session should verify before it stops
 
