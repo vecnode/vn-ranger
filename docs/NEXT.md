@@ -123,7 +123,52 @@ size it measured **when a person asks it to measure**, and no delete verb. Each 
 `Surface` row, so the same walk that powers the dry run powers this. It ships disabled
 until there is a removal verb scoped to a cleanable place and its own refusal tests.
 
-## 6. Wave 5 — the payoff
+## 6. The deep scan is a real anti-virus, and an honest one
+
+The owner's decision of 2026-10-20: **`Standard` stays an inventory, `Deep` must be a
+malware scan worth running instead of a consumer AV.** Offline, Rust only, no telemetry, no
+upsell, no automatic deletion — and it must beat the commercial products on the two things
+they are worst at: saying what was *not* checked, and never turning a guess into a verdict.
+
+### What makes it credible, in the order evidence is worth
+
+| Layer | What it means | Where |
+|---|---|---|
+| Signature match, whole file | A file whose bytes are a known sample: `.hdb`/`.hsb` (already), then `.ldb` logical signatures and the `flevel` they declare | `core/src/signature.rs`, `native/src/content/` |
+| Signature match, body | A byte pattern at an offset, with the signature's own name and line as evidence (already) | `native/src/content/` |
+| Container reach | The `.ndb` library run on what an archive or document holds, in memory, never to disk, with a ratio cap and a depth bound (item 4) | `native/src/content/containers.rs` |
+| Structure | PE/ELF/Mach-O facts: sections and entropy, imports, imphash, overlay, signature blob, and whether the digest is Authenticode-valid (item 4, `object` or `goblin`) | `core/src/structs.rs` |
+| Behaviour-adjacent statics | A section that is writable and executable, a PE with no imports, an overlay after a signed section, a script that decodes a blob and evaluates it — each one a **fact with evidence**, never a score | `core/src/structs.rs`, rules |
+| The database | The person points ranger at a ClamAV database directory and/or a YARA rule set they chose; ranger reads it, never fetches it, and says which database and which version matched | `native/src/signatures.rs` |
+
+**YARA-X stays optional** (`--features yara`, never default, and `ci` fails if the default
+build contains it). It is the one place where a rule can describe a family instead of a
+byte string, and it is also a large dependency: the person who wants it turns it on and
+pays for it.
+
+**What we will not claim.** Not "better detection than McAfee" — that is a claim nobody can
+measure from inside this repository. What we will claim, and test, is: offline by
+construction, no numeric score, no file ever deleted without the typed path, every finding
+carries the evidence and the benign case, and every scan prints what it skipped — the size
+cap, an unreadable file, a container dropped by the ratio cap, an extension it did not read.
+"Nothing matched the database" is the only clean result this program will ever print.
+
+### Done when
+
+| Step | File | What to do |
+|---|---|---|
+| 1 | `native/src/content/scan.rs` | A profile-aware walk: `Deep` reads executables, scripts, documents and archives by extension first, then everything a person selected; bounded by bytes and wall clock, cancellable between files. |
+| 2 | `native/src/content/cache.rs` | An incremental cache keyed by `(path, size, mtime)` → digest and verdict, so the second deep scan costs seconds, written under the data directory and pruned by age. |
+| 3 | `core/src/structs.rs` | The structural facts as pure parsers over a byte slice, with fixtures: a PE with an RWX section, a PE with no imports, an ELF with an executable stack, a Mach-O fat binary. |
+| 4 | `core/src/signature.rs` | `.ldb` parsing (logical signatures: sub-signatures, offsets, `flevel`), with a fixture of a real ClamAV line and a malformed one that is refused rather than guessed. |
+| 5 | `crates/ui` Sources card | One place that says which database is loaded, its version, its rule count, and the self-test result — the EICAR test that already exists becomes the visible proof the pipeline works. |
+| 6 | `docs/BENCHMARKS.md` | The deep scan measured on a synthetic 20 GB tree and on this repository: files/s, bytes/s, RSS, and the second-run (cached) numbers. |
+
+**Performance is part of the product:** a deep scan that makes a laptop unusable is a failed
+deep scan. One thread pool bounded to `cores - 1`, hashing and matching chunked, no file read
+twice, and every limit visible in the status line.
+
+## 7. Wave 5 — the payoff
 
 - `core/src/journal.rs` is chained; the sweep reuses `content::scan` and the four fact
   domains, and offers quarantine through the existing typed path.
