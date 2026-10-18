@@ -37,6 +37,8 @@ pub fn places() -> vnr_core::pack::evaluate::Places {
     places = add(places, "APPDATA", path_of("APPDATA"));
     places = add(places, "LOCALAPPDATA", path_of("LOCALAPPDATA"));
     places = add(places, "PROGRAMDATA", path_of("PROGRAMDATA"));
+    places = add(places, "SYSTEMDRIVE", path_of("SystemDrive"));
+    places = add(places, "SYSTEMROOT", path_of("SystemRoot"));
     if let Some(dirs) = directories::UserDirs::new() {
         places = add(places, "HOME", Some(dirs.home_dir().to_path_buf()));
         places = add(

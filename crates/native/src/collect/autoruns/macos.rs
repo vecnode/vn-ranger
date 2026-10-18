@@ -119,6 +119,7 @@ fn read_plist(path: &Path, scope: AutorunScope) -> Option<AutorunFact> {
             unixutil::executable_from_command(&candidate).map(|path| path.display().to_string())
         }),
         sha256: None,
+        hidden: false,
         signature: SignatureStatus::NotChecked,
     })
 }

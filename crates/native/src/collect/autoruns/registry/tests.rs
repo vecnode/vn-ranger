@@ -39,6 +39,7 @@ fn fixture_for(id: &str) -> &'static str {
         "netsh-helper" => "netsh",
         "screensaver" => "screensaver",
         "time-provider" => "time-providers",
+        "shell-extension" => "shell-extension",
         other => panic!("{other} has no captured fixture"),
     }
 }
@@ -279,4 +280,34 @@ fn a_multi_string_with_two_packages_is_two_entries_with_distinct_names() {
     assert_eq!(entries[0].command, "scecli");
     assert_eq!(entries[1].command, "acme");
     assert_ne!(entries[0].id, entries[1].id, "each package has its own id");
+}
+
+#[test]
+fn a_shell_extension_is_read_from_the_default_value_of_the_handler_subkey() {
+    let surface = surface("shell-extension").unwrap();
+    let entries = entries(surface, View::SixtyFour, &fixture("shell-extension"));
+    assert_eq!(
+        entries.len(),
+        3,
+        "a handler with no default value is not an entry"
+    );
+    assert_eq!(entries[0].name, "7-Zip");
+    assert!(entries[0].command.starts_with('{'), "{}", entries[0].command);
+    assert!(entries[0].location.contains("ContextMenuHandlers"));
+    assert!(entries[0].id.starts_with("shell-extension:"));
+    assert_eq!(surface.kind, AutorunKind::ShellExtension);
+}
+
+#[test]
+fn each_loader_surface_names_the_component_that_would_load_it() {
+    for (id, kind) in [
+        ("service-dll", AutorunKind::Service),
+        ("netsh-helper", AutorunKind::NetshHelper),
+        ("print-monitor", AutorunKind::PrintMonitor),
+        ("time-provider", AutorunKind::TimeProvider),
+        ("screensaver", AutorunKind::Screensaver),
+        ("shell-extension", AutorunKind::ShellExtension),
+    ] {
+        assert_eq!(surface(id).unwrap().kind, kind, "{id}");
+    }
 }

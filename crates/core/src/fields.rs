@@ -96,6 +96,7 @@ const STARTUP: &[Field] = &[
     text("command"),
     boolean("enabled"),
     text("hash"),
+    boolean("hidden"),
     text("kind"),
     text("location"),
     text("name"),

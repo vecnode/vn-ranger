@@ -106,6 +106,7 @@ fn collect_systemd(items: &mut Vec<AutorunFact>, enabled: &HashSet<String>) {
                 enabled: enabled.contains(&file_name),
                 exe,
                 sha256: None,
+                hidden: false,
                 signature: SignatureStatus::NotChecked,
             });
         }
@@ -181,6 +182,7 @@ fn collect_xdg(items: &mut Vec<AutorunFact>, reasons: &mut Vec<String>) {
                 enabled,
                 exe,
                 sha256: None,
+                hidden: false,
                 signature: SignatureStatus::NotChecked,
             });
         }
@@ -226,6 +228,7 @@ fn collect_cron(items: &mut Vec<AutorunFact>, reasons: &mut Vec<String>) {
                 enabled: true,
                 exe,
                 sha256: None,
+                hidden: false,
                 signature: SignatureStatus::NotChecked,
             });
             saw = true;

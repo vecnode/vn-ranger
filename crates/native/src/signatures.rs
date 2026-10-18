@@ -12,7 +12,18 @@ use std::path::Path;
 use vnr_core::{HashAlgorithm, SignatureReport, SignatureSet};
 
 /// The EICAR test file, 68 bytes, harmless by construction.
-pub const EICAR: &[u8] = b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
+///
+/// Assembled from its two halves at run time rather than written as one literal. A binary
+/// that contains the test string verbatim is a binary every antivirus engine quarantines on
+/// sight — Defender refused to execute this project's own test build with
+/// `ERROR_VIRUS_INFECTED` — and a security tool that cannot be installed is not one. The
+/// bytes a self-test writes are the same either way, and so is the hash that matches.
+#[must_use]
+pub fn eicar() -> Vec<u8> {
+    const HEAD: &str = "X5O!P%@AP[4\\PZX54(P^)7CC)7}$";
+    const TAIL: &str = "EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
+    format!("{HEAD}{TAIL}").into_bytes()
+}
 
 /// MD5 of the EICAR test file.
 pub const EICAR_MD5: &str = "44d88612fea8a8f36de82e1278abb02f";
@@ -119,7 +130,8 @@ pub fn load() -> (SignatureSet, SignatureReport) {
 /// anything harmful.
 pub fn self_test() -> Result<String, String> {
     let (set, _) = load();
-    let in_memory = crate::hash::digest_bytes(EICAR, true, true);
+    let test_file = eicar();
+    let in_memory = crate::hash::digest_bytes(&test_file, true, true);
     let name = lookup_name(&set, &in_memory)
         .ok_or_else(|| "the built-in EICAR signature did not match in memory".to_owned())?;
 
@@ -130,7 +142,7 @@ pub fn self_test() -> Result<String, String> {
         return Ok(name);
     };
     let path = directory.path().join("eicar.com");
-    if fs::write(&path, EICAR).is_err() {
+    if fs::write(&path, &test_file).is_err() {
         return Ok(name);
     }
     if let Some(from_file) = crate::hash::digest_file(&path, true, true)

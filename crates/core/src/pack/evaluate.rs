@@ -28,7 +28,7 @@ use crate::rules::Finding;
 /// fact about a machine, not about a technique. A rule writes a placeholder, the caller
 /// resolves it, and this list is the whole of what a pack may name. An unknown placeholder
 /// is a load error, the same as an unknown field.
-pub const PLACES: [&str; 8] = [
+pub const PLACES: [&str; 10] = [
     "TEMP",
     "HOME",
     "DOWNLOADS",
@@ -37,6 +37,8 @@ pub const PLACES: [&str; 8] = [
     "LOCALAPPDATA",
     "PROGRAMDATA",
     "STARTUP",
+    "SYSTEMROOT",
+    "SYSTEMDRIVE",
 ];
 
 /// Whether a placeholder is one a pack may write.
@@ -209,6 +211,7 @@ pub fn startup_fact(autorun: &AutorunFact) -> Fact {
     fact.push_text("scope", Some(autorun.scope.id()));
     fact.push_text("signed", Some(autorun.signature.id()));
     fact.push("enabled", Value::Bool(autorun.enabled));
+    fact.push("hidden", Value::Bool(autorun.hidden));
     fact
 }
 
@@ -579,6 +582,7 @@ mod tests {
             kind: AutorunKind::RunKey,
             scope: AutorunScope::User,
             enabled: true,
+            hidden: false,
             exe: exe.map(str::to_owned),
             sha256: Some("ab".repeat(32)),
             signature: SignatureStatus::Valid,

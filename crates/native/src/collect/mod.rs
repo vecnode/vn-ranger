@@ -11,6 +11,9 @@ pub mod packages;
 pub mod processes;
 
 #[cfg(windows)]
+pub mod tasks;
+
+#[cfg(windows)]
 mod winutil;
 
 #[cfg(unix)]

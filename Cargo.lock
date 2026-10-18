@@ -5718,6 +5718,7 @@ dependencies = [
  "nix",
  "notify",
  "plist",
+ "quick-xml 0.41.0",
  "runas",
  "serde",
  "serde_json",

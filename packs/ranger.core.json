@@ -92,6 +92,120 @@
       "remediation": "Open the folder and look at the DLL's publisher and its date. If nobody installed it deliberately, disable the service before touching the file."
     },
     {
+      "id": "startup.netsh-helper-user-writable",
+      "title": "A netsh helper DLL is named by a full path in a user-writable folder",
+      "severity": "attention",
+      "confidence": "likely",
+      "technique": "T1546.007",
+      "match": {
+        "subject": "startup",
+        "all": [
+          { "field": "kind", "op": "eq", "value": "netsh_helper" },
+          { "field": "path", "op": "exists" }
+        ],
+        "any": [
+          { "field": "path", "op": "under", "value": "{PROGRAMDATA}" },
+          { "field": "path", "op": "under", "value": "{LOCALAPPDATA}" },
+          { "field": "path", "op": "under", "value": "{APPDATA}" },
+          { "field": "path", "op": "under", "value": "{TEMP}" }
+        ]
+      },
+      "why": "Every netsh command loads its helpers into the netsh process, so a helper DLL is code that runs whenever anyone runs netsh. A helper named by a bare file name is resolved from the system folder; one named by a full path outside it can be replaced by whoever can write that path.",
+      "benign": "A vendor's own network tooling that installs a helper beside its application and registers it by full path.",
+      "remediation": "Look at the DLL's publisher and its date. If no network tool was installed deliberately, remove the value and the file."
+    },
+    {
+      "id": "startup.print-monitor-user-writable",
+      "title": "A print monitor DLL is named by a full path in a user-writable folder",
+      "severity": "attention",
+      "confidence": "likely",
+      "technique": "T1547.012",
+      "match": {
+        "subject": "startup",
+        "all": [
+          { "field": "kind", "op": "eq", "value": "print_monitor" },
+          { "field": "path", "op": "exists" }
+        ],
+        "any": [
+          { "field": "path", "op": "under", "value": "{PROGRAMDATA}" },
+          { "field": "path", "op": "under", "value": "{LOCALAPPDATA}" },
+          { "field": "path", "op": "under", "value": "{APPDATA}" },
+          { "field": "path", "op": "under", "value": "{TEMP}" }
+        ]
+      },
+      "why": "The print spooler runs as SYSTEM and loads monitor DLLs by name, so a monitor whose driver is a full path in a writable folder is code that runs with the spooler's rights.",
+      "benign": "A print vendor's port monitor installed with its driver package into ProgramData.",
+      "remediation": "Check the DLL's publisher. Remove the monitor's key only after stopping the spooler, or uninstall the print software that installed it."
+    },
+    {
+      "id": "startup.time-provider-user-writable",
+      "title": "A time provider DLL is in a user-writable folder",
+      "severity": "attention",
+      "confidence": "likely",
+      "technique": "T1547.003",
+      "match": {
+        "subject": "startup",
+        "all": [
+          { "field": "kind", "op": "eq", "value": "time_provider" },
+          { "field": "path", "op": "exists" }
+        ],
+        "any": [
+          { "field": "path", "op": "under", "value": "{PROGRAMDATA}" },
+          { "field": "path", "op": "under", "value": "{LOCALAPPDATA}" },
+          { "field": "path", "op": "under", "value": "{APPDATA}" },
+          { "field": "path", "op": "under", "value": "{TEMP}" }
+        ]
+      },
+      "why": "The Windows time service loads provider DLLs, and it runs as SYSTEM. A provider outside the system folder is a DLL loaded by a privileged service on every time sync.",
+      "benign": "A virtualisation guest agent that ships its own time provider and installs it beside itself.",
+      "remediation": "Check whether a hypervisor guest agent installed it. If not, remove the provider key and the DLL."
+    },
+    {
+      "id": "startup.screensaver-user-writable",
+      "title": "The screensaver runs a program from a user-writable folder",
+      "severity": "notice",
+      "confidence": "possible",
+      "technique": "T1546.002",
+      "match": {
+        "subject": "startup",
+        "all": [
+          { "field": "kind", "op": "eq", "value": "screensaver" },
+          { "field": "path", "op": "exists" }
+        ],
+        "any": [
+          { "field": "path", "op": "under", "value": "{PROGRAMDATA}" },
+          { "field": "path", "op": "under", "value": "{LOCALAPPDATA}" },
+          { "field": "path", "op": "under", "value": "{APPDATA}" },
+          { "field": "path", "op": "under", "value": "{TEMP}" }
+        ]
+      },
+      "why": "A screensaver is a program Windows starts by itself when the session is idle, which makes the setting a way to run something without a person clicking anything.",
+      "benign": "A screensaver a person downloaded and installed themselves, which is how most screensavers arrive.",
+      "remediation": "If you did not choose this screensaver, clear the setting in Windows' lock-screen options and remove the file."
+    },    {
+      "id": "task.hidden-user-writable",
+      "title": "A hidden scheduled task runs a program from a user-writable folder",
+      "severity": "attention",
+      "confidence": "likely",
+      "technique": "T1053.005",
+      "match": {
+        "subject": "startup",
+        "all": [
+          { "field": "kind", "op": "eq", "value": "scheduled_task" },
+          { "field": "hidden", "op": "eq", "value": true },
+          { "field": "path", "op": "exists" }
+        ],
+        "any": [
+          { "field": "path", "op": "under", "value": "{PROGRAMDATA}" },
+          { "field": "path", "op": "under", "value": "{LOCALAPPDATA}" },
+          { "field": "path", "op": "under", "value": "{APPDATA}" },
+          { "field": "path", "op": "under", "value": "{TEMP}" }
+        ]
+      },
+      "why": "Task Scheduler's Hidden setting takes a task out of its own list while leaving it scheduled, so a hidden task in a writable folder is both a thing that runs on a trigger and a thing its owner does not see.",
+      "benign": "Some updaters register a hidden maintenance task in ProgramData, and say so in their documentation.",
+      "remediation": "Open Task Scheduler as an administrator, find the task by the name in the finding, and read its action before disabling it."
+    },    {
       "id": "agent.hook-in-config",
       "title": "An editor or agent configuration that names a command to run",
       "severity": "notice",

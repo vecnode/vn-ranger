@@ -852,6 +852,7 @@ mod tests {
             kind: AutorunKind::RunKey,
             scope: AutorunScope::User,
             enabled: true,
+            hidden: false,
             exe: exe.map(str::to_owned),
             sha256: None,
             signature: crate::model::SignatureStatus::NotChecked,

@@ -60,8 +60,20 @@ pub enum AutorunKind {
     SystemdUnit,
     /// A cron entry.
     Cron,
+    /// A scheduled task.
+    ScheduledTask,
     /// An XDG autostart desktop entry.
     XdgAutostart,
+    /// A netsh helper DLL, loaded by every `netsh` invocation.
+    NetshHelper,
+    /// A print monitor DLL, loaded by the spooler.
+    PrintMonitor,
+    /// A time provider DLL, loaded by the time service.
+    TimeProvider,
+    /// A screensaver, which runs whenever the session is idle.
+    Screensaver,
+    /// A COM object registered for the shell, such as a context-menu handler.
+    ShellExtension,
     /// A kind this build does not understand yet.
     Other,
 }
@@ -78,7 +90,13 @@ impl AutorunKind {
             Self::LaunchDaemon => "launch_daemon",
             Self::SystemdUnit => "systemd_unit",
             Self::Cron => "cron",
+            Self::ScheduledTask => "scheduled_task",
             Self::XdgAutostart => "xdg_autostart",
+            Self::NetshHelper => "netsh_helper",
+            Self::PrintMonitor => "print_monitor",
+            Self::TimeProvider => "time_provider",
+            Self::Screensaver => "screensaver",
+            Self::ShellExtension => "shell_extension",
             Self::Other => "other",
         }
     }
@@ -94,7 +112,13 @@ impl AutorunKind {
             Self::LaunchDaemon => "Launch daemon",
             Self::SystemdUnit => "systemd unit",
             Self::Cron => "Cron",
+            Self::ScheduledTask => "Scheduled task",
             Self::XdgAutostart => "XDG autostart",
+            Self::NetshHelper => "netsh helper",
+            Self::PrintMonitor => "Print monitor",
+            Self::TimeProvider => "Time provider",
+            Self::Screensaver => "Screensaver",
+            Self::ShellExtension => "Shell extension",
             Self::Other => "Other",
         }
     }
@@ -190,6 +214,12 @@ pub struct AutorunFact {
     pub scope: AutorunScope,
     /// Whether the source says it is enabled.
     pub enabled: bool,
+    /// Whether the source hides it from its own list.
+    ///
+    /// A scheduled task carries a `Hidden` setting that removes it from Task Scheduler's own
+    /// view while leaving it scheduled. A registry value has no such thing, and says false.
+    #[serde(default)]
+    pub hidden: bool,
     /// The executable this entry reaches, when it could be resolved.
     pub exe: Option<String>,
     /// SHA-256 of the executable, when it was small enough to hash.

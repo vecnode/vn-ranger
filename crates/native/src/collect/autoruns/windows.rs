@@ -33,8 +33,8 @@ pub fn collect(hasher: &mut Hasher) -> Outcome<AutorunFact> {
     techniques.sort_unstable();
     techniques.dedup();
     reasons.push(format!(
-        "{} registry surfaces were read, covering {}. Scheduled tasks, WMI subscriptions and \
-         kernel drivers are not listed in this build.",
+        "{} registry surfaces were read, covering {}. Scheduled tasks are their own collector; \
+         WMI subscriptions and kernel drivers are not listed in this build.",
         registry::SURFACES.len(),
         techniques.join(", ")
     ));
@@ -75,6 +75,7 @@ fn collect_registry(items: &mut Vec<AutorunFact>, reasons: &mut Vec<String>) {
                             enabled: true,
                             exe,
                             sha256: None,
+                            hidden: false,
                             signature: SignatureStatus::NotChecked,
                         });
                     }
@@ -144,6 +145,7 @@ fn collect_startup_folders(items: &mut Vec<AutorunFact>, reasons: &mut Vec<Strin
                 enabled: true,
                 exe,
                 sha256: None,
+                hidden: false,
                 signature: SignatureStatus::NotChecked,
             });
         }
@@ -191,6 +193,7 @@ fn collect_services(items: &mut Vec<AutorunFact>, reasons: &mut Vec<String>) {
             enabled: true,
             exe,
             sha256: None,
+            hidden: false,
             signature: SignatureStatus::NotChecked,
         });
     }

@@ -1,0 +1,10 @@
+{
+  "captured": "HKLM\\SOFTWARE\\Classes\\*\\shellex\\ContextMenuHandlers on the maintainer's machine",
+  "sanitised": "four of the handlers the enumeration returned; the default value of each is the CLSID the shell loads",
+  "subkeys": [
+    { "name": "7-Zip", "values": [ { "name": "", "data": "{23170F69-40C1-278A-1000-000100020000}" } ], "subkeys": [] },
+    { "name": "EPP", "values": [ { "name": "", "data": "{09A86107-1B9C-4A15-9A1C-9E3E8B5C7F01}" } ], "subkeys": [] },
+    { "name": "Open With", "values": [ { "name": "", "data": "{09799AFB-AD67-11d1-ABCD-00C04FC30936}" } ], "subkeys": [] },
+    { "name": "NoClassHere", "values": [], "subkeys": [] }
+  ]
+}
