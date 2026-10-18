@@ -147,8 +147,10 @@ All notable changes to vn-ranger are recorded here. The format follows
 
 - The EICAR test string was a byte literal in the product, so **every antivirus engine
   quarantines `vn-ranger.exe`** — Defender refused to execute this project's own test build
-  with `ERROR_VIRUS_INFECTED`. The self-test now assembles the bytes at run time; the test is
-  the same test, and the binary no longer looks like the thing it hunts.
+  with `ERROR_VIRUS_INFECTED`. The bytes are stored encoded and decoded at run time — shorter
+  literals do not help, because they sit back to back in the read-only section and the
+  signature survives the joins. The self-test still writes a real EICAR file, which is what it
+  is for, and the binary no longer looks like the thing it hunts.
 
 ### Not in this release
 

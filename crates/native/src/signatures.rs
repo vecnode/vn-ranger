@@ -13,17 +13,28 @@ use vnr_core::{HashAlgorithm, SignatureReport, SignatureSet};
 
 /// The EICAR test file, 68 bytes, harmless by construction.
 ///
-/// Assembled from its two halves at run time rather than written as one literal. A binary
-/// that contains the test string verbatim is a binary every antivirus engine quarantines on
-/// sight — Defender refused to execute this project's own test build with
-/// `ERROR_VIRUS_INFECTED` — and a security tool that cannot be installed is not one. The
-/// bytes a self-test writes are the same either way, and so is the hash that matches.
+/// The bytes are stored encoded and decoded at run time, because a binary that carries the
+/// test signature verbatim is quarantined on sight: Defender refused to execute this
+/// project's own test build with `ERROR_VIRUS_INFECTED`, and a security tool an antivirus
+/// deletes on install is not one. Splitting the string into shorter literals does not work —
+/// the literals sit back to back in the read-only section, so the signature is there
+/// byte for byte across the joins. Each byte is stored XOR'd with [`EICAR_MASK`].
+///
+/// What the self-test writes is still a real EICAR file, which is the point of it: the file
+/// is the test, and an antivirus removing it is the expected result.
 #[must_use]
 pub fn eicar() -> Vec<u8> {
-    const HEAD: &str = "X5O!P%@AP[4\\PZX54(P^)7CC)7}$";
-    const TAIL: &str = "EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
-    format!("{HEAD}{TAIL}").into_bytes()
+    const ENCODED: [u8; 68] = [
+        0x02, 0x6F, 0x15, 0x7B, 0x0A, 0x7F, 0x1A, 0x1B, 0x0A, 0x01, 0x6E, 0x06, 0x0A, 0x00, 0x02, 0x6F, 0x6E,
+        0x72, 0x0A, 0x04, 0x73, 0x6D, 0x19, 0x19, 0x73, 0x6D, 0x27, 0x7E, 0x1F, 0x13, 0x19, 0x1B, 0x08, 0x77,
+        0x09, 0x0E, 0x1B, 0x14, 0x1E, 0x1B, 0x08, 0x1E, 0x77, 0x1B, 0x14, 0x0E, 0x13, 0x0C, 0x13, 0x08, 0x0F,
+        0x09, 0x77, 0x0E, 0x1F, 0x09, 0x0E, 0x77, 0x1C, 0x13, 0x16, 0x1F, 0x7B, 0x7E, 0x12, 0x71, 0x12, 0x70,
+    ];
+    ENCODED.iter().map(|byte| byte ^ EICAR_MASK).collect::<Vec<u8>>()
 }
+
+/// The byte the test file is stored with, so that it is not stored.
+const EICAR_MASK: u8 = 0x5A;
 
 /// MD5 of the EICAR test file.
 pub const EICAR_MD5: &str = "44d88612fea8a8f36de82e1278abb02f";
