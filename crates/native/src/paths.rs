@@ -23,15 +23,82 @@ pub const DATA_DIR_ENV: &str = "VN_RANGER_DATA_DIR";
 /// On Windows this is under `%APPDATA%`, on macOS under `Application Support`, and on
 /// Linux under `$XDG_DATA_HOME` or `~/.local/share`. `VN_RANGER_DATA_DIR`, when it holds
 /// an absolute path, replaces all three.
+///
+/// When the roaming folder cannot be written — a folder policy, a sandbox around the
+/// process, an antivirus rule — the local application folder is used instead, because a
+/// journal nobody can write is worse than a journal in the second-best place. Which one was
+/// used is never a guess: [`data_dir_note`] says so in words the window shows.
 #[must_use]
 pub fn data_dir() -> PathBuf {
+    static CHOSEN: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    CHOSEN.get_or_init(choose_data_dir).clone()
+}
+
+/// Why the data directory is the one it is, when it is not the usual one.
+#[must_use]
+pub fn data_dir_note() -> Option<String> {
+    let chosen = data_dir();
+    let usual = usual_data_dir();
+    if chosen == usual {
+        return None;
+    }
+    Some(format!(
+        "The usual folder ({}) cannot be written by this program, so this session records into {} instead. Everything is still local and still yours.",
+        usual.display(),
+        chosen.display()
+    ))
+}
+
+/// Pick the data directory once, at the first call.
+fn choose_data_dir() -> PathBuf {
     if let Some(directory) = override_dir(std::env::var_os(DATA_DIR_ENV).as_deref()) {
         return directory;
     }
+    let usual = usual_data_dir();
+    if writable(&usual) {
+        return usual;
+    }
+    let local = local_data_dir();
+    if local != usual && writable(&local) {
+        log::warn!(
+            "{} cannot be written, so the data directory is {}",
+            usual.display(),
+            local.display()
+        );
+        return local;
+    }
+    usual
+}
+
+/// The folder the platform's own convention names.
+fn usual_data_dir() -> PathBuf {
     ProjectDirs::from("com", "vecnode", "vn-ranger").map_or_else(
         || PathBuf::from(".vn-ranger"),
         |dirs| dirs.data_dir().to_path_buf(),
     )
+}
+
+/// The same folder under the local application data root.
+fn local_data_dir() -> PathBuf {
+    ProjectDirs::from("com", "vecnode", "vn-ranger").map_or_else(
+        || PathBuf::from(".vn-ranger"),
+        |dirs| dirs.data_local_dir().to_path_buf(),
+    )
+}
+
+/// Whether this program may create a file in `directory`, creating it if it is missing.
+///
+/// A probe rather than a permission query: the answer that matters is what happens when a
+/// file is written, and a folder that reports itself writable but refuses a create is
+/// exactly the case this is here to catch.
+fn writable(directory: &Path) -> bool {
+    let probe = directory.join(".write-probe");
+    let created = std::fs::create_dir_all(directory).is_ok();
+    let wrote = std::fs::write(&probe, b"").is_ok();
+    if wrote {
+        let _ = std::fs::remove_file(&probe);
+    }
+    created && wrote
 }
 
 /// The override, when it is one: absolute, and therefore not a function of the working
@@ -197,6 +264,19 @@ mod tests {
         assert_eq!(override_dir(Some(OsStr::new("data"))), None);
         assert_eq!(override_dir(Some(OsStr::new(""))), None);
         assert_eq!(override_dir(None), None);
+    }
+
+    #[test]
+    fn a_folder_that_holds_a_file_is_writable_and_a_file_in_the_way_is_not() {
+        let directory = tempfile::tempdir().unwrap();
+        assert!(writable(directory.path()));
+        let file = directory.path().join("a-file");
+        std::fs::write(&file, b"x").unwrap();
+        assert!(!writable(&file), "a file is not a folder to write into");
+        assert!(
+            !writable(&file.join("child")),
+            "a folder cannot be created under a file"
+        );
     }
 
     #[test]

@@ -206,6 +206,12 @@ impl App {
                 vnr_native::journal::Journal::unavailable(journal_path, &error.to_string())
             }
         };
+        // A folder this program cannot write is a fact about the machine, not a dead end:
+        // the session records into the local application folder instead, and says which one
+        // it is using rather than leaving a person to find out from a file listing.
+        if let Some(note) = vnr_native::paths::data_dir_note() {
+            world.notice = Some(note);
+        }
         if world.error.is_none() {
             let _ = journal.record(Draft::event("session started").with_reason(&format!(
                 "vn-ranger {} · journal schema {}",

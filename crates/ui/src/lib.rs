@@ -233,6 +233,10 @@ pub struct Ui {
     watch_new: String,
     error_seen: Option<(String, u64)>,
     error_dismissed: Option<String>,
+    /// The notice as it was first seen, and the second it appeared, so a status sentence
+    /// behaves like a message rather than like a line of the page.
+    notice_seen: Option<(String, u64)>,
+    notice_dismissed: Option<String>,
     /// The application mark: the crystal on its ink tile, the same bytes the window icon uses.
     mark: egui::TextureHandle,
 }
@@ -315,6 +319,8 @@ impl Ui {
             palette_index: 0,
             watch_new: String::new(),
             error_seen: None,
+            notice_seen: None,
+            notice_dismissed: None,
             error_dismissed: None,
             mark,
         }
@@ -386,7 +392,7 @@ impl Ui {
                     .inner_margin(Margin::symmetric(20, 14)),
             )
             .show(root, |ui| {
-                self.page_header(ui, world);
+                self.page_header(ui);
                 ui.add_space(10.0);
                 let view = self.view;
                 if matches!(
@@ -416,6 +422,7 @@ impl Ui {
         self.suppress_modal(&ctx, &mut actions);
         self.palette(&ctx, world, &mut actions);
         self.toast(&ctx, world);
+        self.notice(&ctx, world);
         actions
     }
 
@@ -582,7 +589,7 @@ impl Ui {
         }
     }
 
-    fn page_header(&mut self, ui: &mut egui::Ui, world: &World) {
+    fn page_header(&mut self, ui: &mut egui::Ui) {
         // The age of the scan belongs in the overview, beside the counts it produced, and
         // not in the window chrome or the page subtitle, where it would follow a person
         // into every other view and answer a question they did not ask.
@@ -602,10 +609,6 @@ impl Ui {
                 });
             }
         });
-        if let Some(notice) = &world.notice {
-            ui.add_space(4.0);
-            ui.label(RichText::new(notice).size(11.5).color(theme::OK));
-        }
     }
 
     fn modal(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
@@ -903,6 +906,59 @@ impl Ui {
         ctx.request_repaint_after(std::time::Duration::from_secs(1));
     }
 
+    /// Draw the current status sentence as a message, not as a line of the page.
+    ///
+    /// A sentence like "the quarantine and the journal were read again" answers a thing the
+    /// person just did. Left under the page header it becomes part of the page and stays
+    /// there for the rest of the session, which reads as a state rather than as an
+    /// acknowledgement — so it is a message in the corner that goes away by itself.
+    fn notice(&mut self, ctx: &egui::Context, world: &World) {
+        let Some(text) = world.notice.clone() else {
+            self.notice_seen = None;
+            self.notice_dismissed = None;
+            return;
+        };
+        let now = world.now_unix;
+        match &self.notice_seen {
+            Some((shown, at)) if *shown == text => {
+                if !notice_is_fresh(*at, now) {
+                    return;
+                }
+            }
+            _ => {
+                self.notice_seen = Some((text.clone(), now));
+                self.notice_dismissed = None;
+            }
+        }
+        if self.notice_dismissed.as_deref() == Some(text.as_str()) {
+            return;
+        }
+        let mut dismiss = false;
+        egui::Area::new(notice_id())
+            .anchor(Align2::RIGHT_BOTTOM, vec2(-16.0, -16.0))
+            .order(egui::Order::Foreground)
+            .show(ctx, |ui| {
+                egui::Frame::new()
+                    .fill(theme::panel(self.dark))
+                    .stroke(egui::Stroke::new(1.0, theme::OK))
+                    .corner_radius(egui::CornerRadius::same(8))
+                    .inner_margin(Margin::same(10))
+                    .show(ui, |ui| {
+                        ui.set_max_width(380.0);
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new(text.as_str()).size(11.5).color(theme::OK));
+                            if ui.small_button("✕").clicked() {
+                                dismiss = true;
+                            }
+                        });
+                    });
+            });
+        if dismiss {
+            self.notice_dismissed = Some(text);
+        }
+        ctx.request_repaint_after(std::time::Duration::from_secs(1));
+    }
+
     fn suppress_modal(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
         let Some(finding) = self.suppress_target.clone() else {
             return;
@@ -1034,6 +1090,23 @@ fn palette_input_id() -> egui::Id {
 #[allow(deprecated)]
 fn toast_id() -> egui::Id {
     egui::Id::new("error-toast")
+}
+
+#[allow(deprecated)]
+fn notice_id() -> egui::Id {
+    egui::Id::new("notice-message")
+}
+
+/// How long a status sentence stays on screen, in seconds.
+pub(crate) const NOTICE_SECONDS: u64 = 6;
+
+/// Whether a notice that appeared at `at` is still worth showing at `now`.
+///
+/// A clock that went backwards leaves the notice on screen rather than dropping it: a
+/// message that vanished because the system time changed would look like a bug in the
+/// program rather than in the clock.
+fn notice_is_fresh(at: u64, now: u64) -> bool {
+    now.saturating_sub(at) <= NOTICE_SECONDS || now < at
 }
 
 #[cfg(test)]
@@ -1333,6 +1406,35 @@ mod tests {
         assert_eq!(led_state(true, Some(100), 100, Some(0.2)), LedState::Flash);
         assert_eq!(led_state(true, Some(100), 100, Some(0.5)), LedState::Steady);
         assert_eq!(led_state(true, Some(100), 101, None), LedState::Steady);
+    }
+
+    #[test]
+    fn a_status_sentence_goes_away_and_a_backwards_clock_does_not_eat_it() {
+        assert!(notice_is_fresh(100, 100));
+        assert!(notice_is_fresh(100, 100 + NOTICE_SECONDS));
+        assert!(!notice_is_fresh(100, 101 + NOTICE_SECONDS), "it has expired");
+        assert!(notice_is_fresh(100, 40), "a clock that jumped back keeps it");
+    }
+
+    #[test]
+    fn a_status_sentence_is_drawn_as_a_message_rather_than_as_page_text() {
+        let ctx = egui::Context::default();
+        let mut ui = Ui::new(&ctx);
+        let mut world = base_world(None, None);
+        world.notice = Some("The quarantine and the journal were read again.".to_owned());
+        let _ = frame(&ctx, &mut ui, &world, screen_input(Vec::new()));
+        // The sentence is remembered as a message, which is what the corner popup draws and
+        // what expires; the page header no longer reads it at all.
+        assert!(
+            ui.notice_seen
+                .as_ref()
+                .is_some_and(|(text, _)| text.contains("read again")),
+            "{:?}",
+            ui.notice_seen
+        );
+        world.notice = None;
+        let _ = frame(&ctx, &mut ui, &world, screen_input(Vec::new()));
+        assert!(ui.notice_seen.is_none(), "a cleared notice is forgotten");
     }
 
     #[test]
