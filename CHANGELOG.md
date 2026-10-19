@@ -4,6 +4,25 @@ All notable changes to vn-ranger are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **The licence is AGPL-3.0-only, not MIT.** [`LICENSE`](LICENSE) is now the verbatim GNU
+  Affero General Public License version 3, and `Cargo.toml` says `license = "AGPL-3.0-only"`
+  so a crate built from this tree does not claim otherwise. The ranger is copyleft: it may
+  be run, studied, changed and shared, and a version distributed or offered over a network
+  has to carry its source under the same terms. A commercial exception remains available on
+  request, which is what the new contributor licence agreement in
+  [`CONTRIBUTING.md`](CONTRIBUTING.md) exists to keep possible.
+- **[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)** now names every one of the 561
+  crates `Cargo.lock` resolves, the licence each keeps, and the typefaces embedded in the
+  binary. No third-party term is relicensed by the AGPL, and the notices travel in the
+  release archive (`docs/RELEASES.md` §2).
+- `README.md` ends in **Security & license** rather than a one-line licence note: the
+  copyleft, the commercial exception, the security policy and the deep-dive document, in
+  the order a person deciding whether to trust the program wants them.
+
 ## [0.1.7] - 2026-10-20
 
 The release that stops treating a file, a log, a connection and an agent as opaque. Its

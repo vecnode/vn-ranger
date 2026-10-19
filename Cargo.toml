@@ -5,7 +5,7 @@ members = ["crates/*", "apps/*", "xtask"]
 [workspace.package]
 version = "0.1.7"
 edition = "2024"
-license = "MIT"
+license = "AGPL-3.0-only"
 rust-version = "1.95"
 repository = "https://github.com/vecnode/vn-ranger"
 homepage = "https://github.com/vecnode/vn-ranger"

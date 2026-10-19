@@ -116,5 +116,5 @@ enough to regenerate it exactly.
 
 ## Licence
 
-MIT, like the rest of the repository. The mark is original vecnode work and contains no
-third-party asset.
+AGPL-3.0-only, like the rest of the repository — see [`../../LICENSE`](../../LICENSE).
+The mark is original vecnode work and contains no third-party asset.

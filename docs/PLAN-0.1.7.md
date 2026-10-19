@@ -13,6 +13,12 @@ reconciliation that says what should be merged rather than added, the research b
 four new evidence domains, the feature catalogue with a verdict on every row, and the
 order in which the work gets built.
 
+**Licence, changed 2026-10-19:** the project is **AGPL-3.0-only** — see
+[`../LICENSE`](../LICENSE). Where this document says "an MIT project" or measures a
+licence decision against MIT, read AGPL-3.0-only and keep the reason: no code in this tree
+that the project cannot license, and no dependency whose terms would decide the product's
+terms.
+
 **What it is not:** a promise that all of it ships in one release. §9 names what a wave
 may leave behind, and the changelog will name it again.
 

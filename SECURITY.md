@@ -196,5 +196,15 @@ evidence for a person to read — not a verdict, and not an instruction to act.
 
 ## No warranty
 
-Ranger is MIT-licensed and provided as is. It is a tool for seeing a machine more
-clearly, not a guarantee that the machine is safe.
+Ranger is **AGPL-3.0-only** — see [LICENSE](LICENSE) — and provided as is, with the
+disclaimer of warranty and the limitation of liability in sections 15 and 16 of that
+licence. It is a tool for seeing a machine more clearly, not a guarantee that the machine
+is safe.
+
+The licence is also part of the promise in this document. A version distributed, or offered
+over a network, has to carry its source under the same terms, so a ranger that has been
+hardened, logged or narrowed cannot be offered as a closed product on somebody else's
+bench. A commercial exception is available on request; [CONTRIBUTING.md](CONTRIBUTING.md)
+says how the contributor licence agreement keeps that possible, and
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) names every third-party term that
+travels with a build.
