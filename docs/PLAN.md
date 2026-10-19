@@ -20,6 +20,14 @@ trust this program with a machine.
 **What this document is:** the research behind ranger, the scope it will and will not
 take, the architecture that keeps it honest, and the order in which it gets built.
 
+**Licence, changed 2026-10-19:** the project is **AGPL-3.0-only** — see
+[`../LICENSE`](../LICENSE) and [`../CONTRIBUTING.md`](../CONTRIBUTING.md). Where this
+document argues from MIT — §3's rejection of ClamAV's code, §4.2, §14.2 item 1 — read
+AGPL-3.0-only, and read the *reason* rather than the conclusion: the rule was never "stay
+permissive", it was "no code in this tree that the project cannot license, and no
+dependency whose terms would decide the product's terms". The decision as it was taken is
+kept as written, because a plan that is quietly edited is not a record of anything.
+
 The short version is §1. Everything after it exists to justify that version.
 
 **Contents:** [1. The short version](#1-the-short-version) ·

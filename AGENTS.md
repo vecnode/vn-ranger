@@ -312,6 +312,14 @@ one contract:
 
 Every new dependency is a licence, a supply chain and a size decision.
 
+**This section is about other people's crates, not about this repository's licence.** The
+project is AGPL-3.0-only (`LICENSE`), and a permissively licensed dependency is exactly
+what that licence expects: copyleft reaches the work, not its dependencies. What would
+break the arrangement is a dependency whose terms are stricter than the ones this tree
+offers, or one whose licence nobody can state —
+[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) is the page that says, for every crate
+the build resolves, which terms apply.
+
 - Allowed: MIT, Apache-2.0 (including the LLVM exception), BSD-2-Clause,
   BSD-3-Clause, ISC, Zlib, Unicode-3.0, MPL-2.0 (file-level, unmodified), and
   public-domain dedications for `notify` (CC0-1.0) and `ksni` (Unlicense) alone: no

@@ -36,7 +36,7 @@ repository and checks out `main` gets the last release, not a half-finished wave
 | `arch` | `x86_64`, `aarch64` |
 | `ext` | `zip` on Windows, `tar.gz` elsewhere |
 | Archive root | Exactly one directory: `vn-ranger-<version>/` |
-| Inside | `vn-ranger` (or `vn-ranger.exe`), `README.md`, `LICENSE` |
+| Inside | `vn-ranger` (or `vn-ranger.exe`), `README.md`, `LICENSE`, `THIRD-PARTY-NOTICES.md` |
 | Checksums | `SHA256SUMS.txt`, generated after every build finishes |
 | Trigger | `on: push: tags: ['v*']` |
 | Pre-release | `vn-ranger v0.1.6-rc.1`, published with the pre-release flag, for the soak |
@@ -108,11 +108,19 @@ vn-ranger-0.1.0/
   vn-ranger.exe        (or vn-ranger on Unix)
   README.md
   LICENSE
+  THIRD-PARTY-NOTICES.md
 ```
 
 No absolute paths, no `..`, no symlinks that escape the root. The launcher rejects
 those entries, but a rejected archive is a failed install, not a security incident
 avoided quietly.
+
+**The archive is licensed AGPL-3.0-only, and the licence travels with it.** `LICENSE` is
+the licence, `THIRD-PARTY-NOTICES.md` is the attribution for the crates and typefaces
+inside the binary, and the release notes carry the written offer that section 6 of the
+licence asks for: *the Corresponding Source for this build is this repository at tag
+`vX.Y.Z`*. A release whose tag is not in the repository is not shippable, because there
+would be no source to point at.
 
 ## 3. Checksums
 
@@ -197,7 +205,10 @@ rule packs already use, so it is exercised for a release before it protects one.
 - [ ] A clean VM runs the archived binary, and install through vn-launcher is verified
       as soon as the launcher's install path ships.
 - [ ] No new dependency brings a network client (`cargo xtask ci` checks it).
-- [ ] The release notes name the known limitations, including the ones in this file.
+- [ ] The release notes name the known limitations, including the ones in this file, and
+  the Corresponding Source for the build: this repository at the tag.
+- [ ] `THIRD-PARTY-NOTICES.md` matches `Cargo.lock`: no crate added, removed or upgraded
+  since it was regenerated, and the totals still add up.
 - [ ] From `v0.1.6`: every deletion path has two named reviewers, and the traversal
       table was written by the second one from the specification.
 - [ ] From `v0.1.6`: the 24-hour soak numbers are in `docs/BENCHMARKS.md`, with the build
@@ -211,5 +222,5 @@ rule packs already use, so it is exercised for a release before it protects one.
 - `.msi`, `.dmg`, `.deb`, `.rpm` or `.AppImage` installers. The launcher unpacks
   archives and never runs installers.
 - A build that was not produced from the tagged commit.
-- An archive without the licence and the README.
+- An archive without the licence, the third-party notices and the README.
 - A "portable" asset with a different stem, however convenient it looks today.
