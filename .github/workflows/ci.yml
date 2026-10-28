@@ -3,7 +3,7 @@ name: CI
 # Three operating systems, but not on every commit.
 #
 # A push to main runs one job, on the platform a Windows development machine cannot check
-# for itself. The full matrix runs on a pull request, on the Monday schedule, when asked,
+# for itself. The full matrix runs on a pull request, when asked,
 # and — through `workflow_call` — as the gate a release passes before it publishes
 # anything. That is the whole policy: the check that must never be skipped is the one at
 # the cut, and it is the cut that now pays for it.
@@ -21,11 +21,6 @@ on:
       - 'docs/**'
       - 'assets/logo/**'
       - 'assets/screenshots/**'
-  schedule:
-    # Monday, 04:17 UTC. Early enough in the week that a platform-only break has six days
-    # to be found before the next one, and off the hour so it does not join the queue of
-    # every other project's nightly.
-    - cron: '17 4 * * 1'
   workflow_dispatch:
   workflow_call:
 
